@@ -6,7 +6,8 @@ import Seccion from "./components/ui/Seccion";
 import Licencias from "./components/licencias/Licencias";
 import { supabase } from "./supabase";
 import { useRef } from "react";
-import { exportarPDF } from "./utils/exportPDF";
+import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
+
 
 
 function App() {
@@ -17,9 +18,16 @@ function App() {
 });
 
 const [tabPlanilla, setTabPlanilla] = useState("enfermeros");
+const [tabCalendario, setTabCalendario] = useState("enfermeros");
+
 const [fecha, setFecha] = useState(new Date());
 const timeoutRef = useRef(null);
 const [cargando, setCargando] = useState(true);
+
+const [dataPDFEnf, setDataPDFEnf] = useState([]);
+const [dataPDFLic, setDataPDFLic] = useState([]);
+
+//console.log("🔁 TAB ACTUAL:", tabCalendario);
 
 function crearEstructuraBase() {
   return {
@@ -66,6 +74,8 @@ const planillaLicenciados = mesData.planillas.licenciados;
 // 🔹 LICENCIAS
 
 const licenciasMes = mesData.licencias;
+
+const semanas = obtenerSemanasDelMes(mesActivo);
 
 const setPlanillaEnfermeros = (nueva) => {
   setEstadoPorMes(prev => {
@@ -130,7 +140,7 @@ useEffect(() => {
       );
 
     if (error) {
-      console.error("Error guardando:", error);
+      //console.error("Error guardando:", error);
     } else {
       console.log("Guardado OK");
     }
@@ -161,7 +171,31 @@ useEffect(() => {
   cargar();
 }, [mesActivo]);
 
+function obtenerSemanasDelMes(mesActivo) {
+  if (!mesActivo) return [];
 
+  const [year, month] = mesActivo.split("-").map(Number);
+
+  const primerDia = new Date(year, month - 1, 1);
+
+  const inicio = new Date(primerDia);
+  const dia = inicio.getDay();
+  inicio.setDate(inicio.getDate() - (dia === 0 ? 6 : dia - 1));
+
+  const semanas = [];
+
+  for (let i = 0; i < 5; i++) {
+    const desde = new Date(inicio);
+    desde.setDate(inicio.getDate() + i * 7);
+
+    const hasta = new Date(desde);
+    hasta.setDate(desde.getDate() + 6);
+
+    semanas.push({ desde, hasta });
+  }
+
+  return semanas;
+}
 
 const copiarMesAnterior = async () => {
   const [year, month] = mesActivo.split("-").map(Number);
@@ -204,6 +238,10 @@ if (cargando) {
 }
 
 
+
+/*console.log("PLANILLA LIC:", planillaLicenciados);
+console.log("SEMANA LIC:", planillaLicenciados?.semana1);
+console.log("🔁 TAB ACTUAL:", tabCalendario);*/
 return (
   <div className="min-h-screen bg-slate-100 p-4 md:p-6">
   <div className="max-w-6xl mx-auto space-y-6">
@@ -260,6 +298,18 @@ return (
 
 <Seccion titulo="📊 Planilla mensual">
 
+<button
+  onClick={() =>
+    exportarPlanillaPDF(
+      planillaEnfermeros,
+      planillaLicenciados,
+      semanas
+    )
+  }
+  className="mb-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
+>
+  📄 Exportar planilla PDF
+</button>
   {/* TABS */}
   <div className="flex gap-2 mb-4">
     
@@ -383,95 +433,145 @@ return (
       </Seccion>
 
       <div id="calendario-pdf">
-        <div className="max-h-[70vh] overflow-y-auto pr-2">
+        
         <Seccion titulo="📅 Calendario diario">
-          <CalendarioDiario
-  personal={personal}
-  planilla={planillaEnfermeros}
-  tipo="enfermero"
-  mesActivo={mesActivo}
-  licencias={licenciasMes}
-  calendario={mesData.calendario.enfermeros}
-  fecha={fecha}            // ✅
-  setFecha={setFecha}  
-  setCalendario={(update) => {
-  setEstadoPorMes(prev => {
-    const actual = prev[mesActivo] || getMesData(mesActivo);
+          
 
-    const calendarioActual = actual.calendario?.enfermeros || {};
+  <button
+  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
+  onClick={() => {
+    console.log("📦 DATA ENF PDF:", dataPDFEnf);
+    console.log("📦 DATA LIC PDF:", dataPDFLic);
 
-    const nuevoCalendario =
-      typeof update === "function"
-        ? update(calendarioActual)
-        : update;
-
-    return {
-      ...prev,
-      [mesActivo]: {
-        ...actual,
-        calendario: {
-          ...actual.calendario,
-          enfermeros: {
-            ...calendarioActual,
-            ...nuevoCalendario
-          }
-        }
-      }
-    };
-  });
+    exportarCalendarioPDF({
+      fecha,
+      enfermeros: dataPDFEnf,
+      licenciados: dataPDFLic
+    });
+  }}
+>
+  📄 Exportar calendario PDF
+</button>
+          {/* 🔹 TABS */}
+  <div className="flex gap-2 mb-4">
+    <button
+      onClick={() => {
+  console.log("🔥 CLICK ENFERMEROS");
+  setTabCalendario("enfermeros");
 }}
-/>
+      className={`px-4 py-2 rounded-lg text-sm transition ${
+        tabCalendario === "enfermeros"
+          ? "bg-blue-600 text-white"
+          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+      }`}
+    >
+      👨‍⚕️ Enfermeros
+    </button>
 
-          <CalendarioDiario
-  personal={personal}
-  planilla={planillaLicenciados}
-  tipo="licenciado"
-  mesActivo={mesActivo}
-  licencias={licenciasMes}
-  fecha={fecha}            // ✅
-  setFecha={setFecha}  
-  calendario={mesData.calendario.licenciados}
- setCalendario={(update) => {
-  setEstadoPorMes(prev => {
-    const actual = prev[mesActivo] || getMesData(mesActivo);
-
-    const calendarioActual = actual.calendario?.licenciados || {};
-
-    const nuevoCalendario =
-      typeof update === "function"
-        ? update(calendarioActual)
-        : update;
-
-    return {
-      ...prev,
-      [mesActivo]: {
-        ...actual,
-        calendario: {
-          ...actual.calendario,
-          licenciados: {
-            ...calendarioActual,
-            ...nuevoCalendario
-          }
-        }
-      }
-    };
-  });
+    <button
+      onClick={() => {
+  console.log("🔥 CLICK LICENCIADOS");
+  setTabCalendario("licenciados");
 }}
-/>
+      
+      className={`px-4 py-2 rounded-lg text-sm transition ${
+        tabCalendario === "licenciados"
+          ? "bg-blue-600 text-white"
+          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+      }`}
+    >
+      🧑‍⚕️ Licenciados
+    </button>
+  </div>
+
+{tabCalendario === "enfermeros" && (
+  <CalendarioDiario
+  key="enfermeros"
+    personal={personal}
+    planilla={planillaEnfermeros}
+    tipo="enfermero"
+    mesActivo={mesActivo}
+    licencias={licenciasMes}
+    calendario={mesData.calendario.enfermeros}
+     onDataReady={setDataPDFEnf}
+    fecha={fecha}
+    setFecha={setFecha}
+    setCalendario={(update) => {
+      setEstadoPorMes(prev => {
+        const actual = prev[mesActivo] || getMesData(mesActivo);
+        const calendarioActual = actual.calendario?.enfermeros || {};
+
+        const nuevoCalendario =
+          typeof update === "function"
+            ? update(calendarioActual)
+            : update;
+
+        return {
+          ...prev,
+          [mesActivo]: {
+            ...actual,
+            calendario: {
+              ...actual.calendario,
+              enfermeros: {
+                ...calendarioActual,
+                ...nuevoCalendario
+              }
+            }
+          }
+        };
+      });
+    }}
+  />
+)}
+
+{tabCalendario === "licenciados" && (
+  <CalendarioDiario
+  key="licenciados"
+    personal={personal}
+    planilla={planillaLicenciados}
+    tipo="licenciado"
+    mesActivo={mesActivo}
+    licencias={licenciasMes}
+    calendario={mesData.calendario.licenciados}
+    onDataReady={setDataPDFLic}
+    fecha={fecha}
+    setFecha={setFecha}
+    setCalendario={(update) => {
+      setEstadoPorMes(prev => {
+        const actual = prev[mesActivo] || getMesData(mesActivo);
+        const calendarioActual = actual.calendario?.licenciados || {};
+
+        const nuevoCalendario =
+          typeof update === "function"
+            ? update(calendarioActual)
+            : update;
+
+        return {
+          ...prev,
+          [mesActivo]: {
+            ...actual,
+            calendario: {
+              ...actual.calendario,
+              licenciados: {
+                ...calendarioActual,
+                ...nuevoCalendario
+              }
+            }
+          }
+        };
+      });
+    }}
+  />
+)}
 
         </Seccion>
         </div>
       </div>
 
-      <button
-  className="mt-6 flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl text-sm shadow-md transition"
-  onClick={() => exportarPDF("calendario-pdf", "calendario")}
->
-  📄 <span>Exportar PDF</span>
-</button>
+    
 
     </div>
-  </div>
+  
 );
 }
 

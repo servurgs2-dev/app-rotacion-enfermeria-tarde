@@ -145,13 +145,13 @@ return (
   Planilla Mensual
 </h2>
 <div className="overflow-x-auto">
-      <table className="min-w-full border border-slate-200 rounded-xl overflow-hidden text-sm">
+      <table className="min-w-[900px] border border-slate-200 rounded-xl overflow-hidden text-sm table-auto">
 <thead className="bg-slate-100 text-slate-700">
   <tr>
     <th className="px-4 py-3 text-left font-semibold">Sector</th>
 
     {semanas.map((s, i) => (
-      <th key={i} className="px-4 py-3 text-left font-semibold">
+      <th key={i} className="px-4 py-3 text-left font-semibold min-w-[140px] whitespace-nowrap">
         {`${s.desde.getDate()}/${s.desde.getMonth() + 1} - ${s.hasta.getDate()}/${s.hasta.getMonth() + 1}`}
       </th>
     ))}
@@ -161,14 +161,14 @@ return (
         <tbody className="divide-y divide-slate-100">
           {filas.map((sector) => (
             <tr key={sector} className="hover:bg-slate-50 transition">
-              <td className="px-4 py-3 font-medium text-slate-700 bg-slate-50">
+              <td className="px-4 py-3 font-medium text-slate-700 bg-slate-50 min-w-[180px] whitespace-nowrap">
   {sector}
 </td>
 
               {/* SEMANA 1 editable */}
-              <td className="px-3 py-2">
+              <td className="px-3 py-2 min-w-[140px]">
                 <select
-  className="w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+  className="w-[130px] border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   value={planilla.semana1?.[sector] || ""}
                   onChange={(e) =>
                     actualizarCelda("semana1", sector, e.target.value)

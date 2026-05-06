@@ -1,4 +1,4 @@
-import { useState} from "react";
+import { useState, useEffect, useRef } from "react";
 
 const normalizar = (str) =>
   str
@@ -7,8 +7,15 @@ const normalizar = (str) =>
     .toUpperCase()
     .trim();
 
-function CalendarioDiario({ personal, planilla, tipo, mesActivo, licencias, calendario, setCalendario }) {
+function CalendarioDiario({ personal, planilla, tipo, mesActivo, licencias, calendario, setCalendario, onDataReady }) {
  //console.log(JSON.stringify(personal, null, 2));
+ //console.log("🔥 MOUNT CalendarioDiario PROPS:", {
+  //tipo,
+  //mesActivo,
+  //planillaKeys: planilla && Object.keys(planilla),
+//});
+console.log("🧠 TIPO:", tipo);
+ //console.log("🧩 RENDER CalendarioDiario tipo:", tipo);
   const personalFiltrado = personal.filter(
   (p) => p.categoria === tipo
 );
@@ -31,11 +38,13 @@ const {
   extras = {}
 } = calendario || {};
 
-console.log("🧠 cambiosDia actual:", cambiosDia);
+//console.log("🧠 cambiosDia actual:", cambiosDia);
 //const [nuevoExtra, setNuevoExtra] = useState("");
 const [nuevoNombre, setNuevoNombre] = useState("");
 
   const [seleccionado, setSeleccionado] = useState(null);
+
+  const prevDataRef = useRef(null);
 
   let sectoresFijos = [];
 let sectoresCriticos = [];
@@ -108,6 +117,8 @@ sectoresFijos.forEach((s, i) => {
   }
 });
 
+console.log("FILAS:", filas);
+
 
 const obtenerSemanasDelMes = (mesActivo) => {
   const [year, month] = mesActivo.split("-").map(Number);
@@ -141,7 +152,7 @@ const semanaIndex = semanas.findIndex((inicioSemana) => {
 const semanaKey =
   semanaIndex === -1 ? "semana1" : `semana${semanaIndex + 1}`;
 
-
+//console.log("📦 PLANILLA SEMANA:", planilla?.[semanaKey]);
 const keyDia = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,"0")}-${String(fecha.getDate()).padStart(2,"0")}`;
 
 const esLibreReal = (e) => {
@@ -259,6 +270,13 @@ const asignacionCompleta = filas.map((fila) => {
     nombre = planilla?.[semanaKey]?.[fila];
   }
 
+
+/*console.log("🧪 FILA:", fila);
+  console.log("🧪 semanaKey:", semanaKey);
+  console.log("🧪 planilla semana:", planilla?.[semanaKey]);
+  console.log("🧪 valor planilla:", planilla?.[semanaKey]?.[fila]);*/
+
+
   const enfermero = [...personal, ...extrasDia].find(
     e => normalizar(e.nombre) === normalizar(nombre)
   );
@@ -266,10 +284,11 @@ const asignacionCompleta = filas.map((fila) => {
   return {
     nombre: fila,
     enfermero: enfermero || null,
-    tipo: fila.startsWith("T") ? "turnante" : "sector"
+    tipo: turnantesLabels.includes(fila) ? "turnante" : "sector"
   };
 });
 
+console.log("🧠 ASIGNACION COMPLETA:", asignacionCompleta);
   let turnantesDisponibles = asignacionCompleta
     .filter(f => f.tipo === "turnante")
     .map(f => f.enfermero)
@@ -428,11 +447,47 @@ ordenVisual.forEach(item => {
   if (item === "DIVIDER") {
     asignacionOrdenada.push({ tipo: "divider" });
   } else {
-   const encontrados = asignacionFinal.filter(a => a.nombre === item);
-asignacionOrdenada.push(...encontrados);
+    const encontrados = asignacionFinal.filter(
+      a => normalizar(a.nombre) === normalizar(item)
+    );
+
+    if (encontrados.length === 0) {
+      // 👇 ESTE ES EL FIX CLAVE
+      asignacionOrdenada.push({
+        nombre: item,
+        enfermero: null,
+        tipo: "sector"
+      });
+    } else {
+      asignacionOrdenada.push(...encontrados);
+    }
   }
 });
 
+useEffect(() => {
+  const dataString = JSON.stringify(asignacionOrdenada);
+
+  if (prevDataRef.current !== dataString) {
+    prevDataRef.current = dataString;
+
+    if (onDataReady) {
+      onDataReady(asignacionOrdenada);
+    }
+  }
+}, [asignacionOrdenada, onDataReady]);
+
+
+useEffect(() => {
+  const dataString = JSON.stringify(asignacionOrdenada);
+
+  if (prevDataRef.current !== dataString) {
+    prevDataRef.current = dataString;
+
+    if (onDataReady) {
+      onDataReady(asignacionOrdenada);
+    }
+  }
+}, [asignacionOrdenada, onDataReady]);
 
   const handleClick = (item) => {
     console.log("CLICK en:", item.nombre, item.enfermero?.nombre);
@@ -479,7 +534,7 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
 
 
 
-
+//return principa
 
   return (
     <div className="min-h-fit">

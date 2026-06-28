@@ -7,7 +7,18 @@ const normalizar = (str) =>
     .toUpperCase()
     .trim();
 
-function CalendarioDiario({ personal, planilla, tipo, mesActivo, licencias, calendario, setCalendario, onDataReady }) {
+function CalendarioDiario({
+  personal,
+  planilla,
+  tipo,
+  mesActivo,
+  licencias,
+  calendario,
+  setCalendario,
+  onDataReady,
+  fecha,
+  setFecha
+}) {
  //console.log(JSON.stringify(personal, null, 2));
  //console.log("🔥 MOUNT CalendarioDiario PROPS:", {
   //tipo,
@@ -21,14 +32,9 @@ console.log("🧠 TIPO:", tipo);
 );
 
 
-  const getFechaInicial = () => {
-  if (!mesActivo) return new Date();
+  
 
-  const [year, month] = mesActivo.split("-").map(Number);
-  return new Date(year, month - 1, 1);
-};
 
-const [fecha, setFecha] = useState(getFechaInicial);
 
 
 
@@ -142,6 +148,20 @@ const obtenerSemanasDelMes = (mesActivo) => {
 };
 const semanas = obtenerSemanasDelMes(mesActivo);
 
+semanas.forEach((inicio, i) => {
+  const fin = new Date(inicio);
+  fin.setDate(fin.getDate() + 6);
+
+  console.log(
+    `Semana ${i + 1}:`,
+    inicio,
+    "->",
+    fin
+  );
+});
+
+console.log("Fecha seleccionada:", fecha);
+
 const semanaIndex = semanas.findIndex((inicioSemana) => {
   const fin = new Date(inicioSemana);
   fin.setDate(fin.getDate() + 6);
@@ -158,19 +178,9 @@ const keyDia = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,"
 const esLibreReal = (e) => {
   if (!e || e.libre == null) return false;
 
-  const base = new Date(2026, 0, e.libre, 12);
-  const actual = new Date(
-    fecha.getFullYear(),
-    fecha.getMonth(),
-    fecha.getDate(),
-    12
-  );
+  const dia = fecha.getDate();
 
-  const diff = Math.floor(
-    (actual - base) / (1000 * 60 * 60 * 24)
-  );
-
-  return diff % 5 === 0;
+  return ((dia - e.libre) % 5 + 5) % 5 === 0;
 };
 const estaDeLicencia = (e) => {
   if (!e) return false;
@@ -190,26 +200,15 @@ const estaDeLicencia = (e) => {
 const estaLibre = (e) => {
   if (!e || e.libre == null) return false;
 
-  // 🔥 FIX: si está como extra hoy → NO está libre
   const esExtraHoy = (extras[keyDia] || []).some(
     ex => ex.nombre === e.nombre
   );
 
   if (esExtraHoy) return false;
 
-  const base = new Date(2026, 0, e.libre, 12);
-  const actual = new Date(
-    fecha.getFullYear(),
-    fecha.getMonth(),
-    fecha.getDate(),
-    12
-  );
+  const dia = fecha.getDate();
 
-  const diff = Math.floor(
-    (actual - base) / (1000 * 60 * 60 * 24)
-  );
-
-  return diff % 5 === 0;
+  return ((dia - e.libre) % 5 + 5) % 5 === 0;
 };
 
   const estaNoDisponible = (e) =>
@@ -288,7 +287,13 @@ const asignacionCompleta = filas.map((fila) => {
   };
 });
 
-console.log("🧠 ASIGNACION COMPLETA:", asignacionCompleta);
+console.log(
+  "🧠 ASIGNACION COMPLETA:",
+  asignacionCompleta.map(a => ({
+    sector: a.sector,
+    nombre: a.nombre
+  }))
+);
   let turnantesDisponibles = asignacionCompleta
     .filter(f => f.tipo === "turnante")
     .map(f => f.enfermero)
@@ -544,6 +549,7 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
 
       <input
   type="date"
+  value={`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}-${String(fecha.getDate()).padStart(2, "0")}`}
   className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
   onChange={(e) => {
     const [y, m, d] = e.target.value.split("-");

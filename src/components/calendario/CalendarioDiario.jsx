@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { configuracionSectores } from "../../data/sectores";
 
 const normalizar = (str) =>
@@ -28,9 +28,10 @@ function CalendarioDiario({
 //});
 console.log("🧠 TIPO:", tipo);
  //console.log("🧩 RENDER CalendarioDiario tipo:", tipo);
-  const personalFiltrado = personal.filter(
-  (p) => p.categoria === tipo
-);
+  const personalFiltrado = useMemo(
+    () => personal.filter((p) => p.categoria === tipo),
+    [personal, tipo]
+  );
 
 
   
@@ -62,17 +63,21 @@ const [nuevoNombre, setNuevoNombre] = useState("");
     ordenVisual
   } = configuracionSectores[tipo];
 
-  const filas = [];
-let tIndex = 0;
+  const filas = useMemo(() => {
+    const filasCalculadas = [];
+    let tIndex = 0;
 
-sectoresFijos.forEach((s, i) => {
-  filas.push(s);
+    sectoresFijos.forEach((s, i) => {
+      filasCalculadas.push(s);
 
-  if (posicionesTurnantes.includes(i)) {
-    filas.push(turnantesLabels[tIndex]);
-    tIndex++;
-  }
-});
+      if (posicionesTurnantes.includes(i)) {
+        filasCalculadas.push(turnantesLabels[tIndex]);
+        tIndex++;
+      }
+    });
+
+    return filasCalculadas;
+  }, [posicionesTurnantes, sectoresFijos, turnantesLabels]);
 
 console.log("FILAS:", filas);
 
@@ -126,14 +131,14 @@ const semanaKey =
 //console.log("📦 PLANILLA SEMANA:", planilla?.[semanaKey]);
 const keyDia = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,"0")}-${String(fecha.getDate()).padStart(2,"0")}`;
 
-const esLibreReal = (e) => {
+const esLibreReal = useCallback((e) => {
   if (!e || e.libre == null) return false;
 
   const dia = fecha.getDate();
 
   return ((dia - e.libre) % 5 + 5) % 5 === 0;
-};
-const estaDeLicencia = (e) => {
+}, [fecha]);
+const estaDeLicencia = useCallback((e) => {
   if (!e) return false;
 
   return (licencias || []).some(l => {
@@ -147,8 +152,8 @@ const estaDeLicencia = (e) => {
 
     return fecha >= desde && fecha <= hasta;
   });
-};
-const estaLibre = (e) => {
+}, [fecha, licencias]);
+const estaLibre = useCallback((e) => {
   if (!e || e.libre == null) return false;
 
   const esExtraHoy = (extras[keyDia] || []).some(
@@ -160,19 +165,21 @@ const estaLibre = (e) => {
   const dia = fecha.getDate();
 
   return ((dia - e.libre) % 5 + 5) % 5 === 0;
-};
+}, [extras, fecha, keyDia]);
 
-  const estaNoDisponible = (e) =>
-    e && (noDisponibles[keyDia] || []).includes(e.nombre);
+  const estaNoDisponible = useCallback(
+    (e) => e && (noDisponibles[keyDia] || []).includes(e.nombre),
+    [keyDia, noDisponibles]
+  );
 
- const extrasDia = extras[keyDia] || [];
-const estaAusente = (e) =>
+ const extrasDia = useMemo(() => extras[keyDia] || [], [extras, keyDia]);
+const estaAusente = useCallback((e) =>
   e &&
   (
     (esLibreReal(e) && !extrasDia.some(ex => ex.nombre === e.nombre)) ||
     estaNoDisponible(e) ||
     estaDeLicencia(e)
-  );
+  ), [esLibreReal, estaDeLicencia, estaNoDisponible, extrasDia]);
 const borrarExtra = (nombre) => {
   const lista = extras[keyDia] || [];
 
@@ -206,6 +213,7 @@ console.log("🧠 semanaKey:", semanaKey);
 console.log("📊 data semana:", planilla?.[semanaKey]);*/
 
 
+const asignacionOrdenada = useMemo(() => {
 const asignacionCompleta = filas.map((fila) => {
   // 🔥 primero veo si hay override
   const override = cambiosDia[keyDia]?.[normalizar(fila)];
@@ -353,11 +361,11 @@ if (!hayHuecosFinal && sobrantes.length > 0) {
   });
 }
 
-const asignacionOrdenada = [];
+const resultadoOrdenado = [];
 
 ordenVisual.forEach(item => {
   if (item === "DIVIDER") {
-    asignacionOrdenada.push({ tipo: "divider" });
+    resultadoOrdenado.push({ tipo: "divider" });
   } else {
     const encontrados = asignacionFinal.filter(
       a => normalizar(a.nombre) === normalizar(item)
@@ -365,29 +373,33 @@ ordenVisual.forEach(item => {
 
     if (encontrados.length === 0) {
       // 👇 ESTE ES EL FIX CLAVE
-      asignacionOrdenada.push({
+      resultadoOrdenado.push({
         nombre: item,
         enfermero: null,
         tipo: "sector"
       });
     } else {
-      asignacionOrdenada.push(...encontrados);
+      resultadoOrdenado.push(...encontrados);
     }
   }
 });
 
-useEffect(() => {
-  const dataString = JSON.stringify(asignacionOrdenada);
-
-  if (prevDataRef.current !== dataString) {
-    prevDataRef.current = dataString;
-
-    if (onDataReady) {
-      onDataReady(asignacionOrdenada);
-    }
-  }
-}, [asignacionOrdenada, onDataReady]);
-
+return resultadoOrdenado;
+}, [
+  cambiosDia,
+  estaAusente,
+  extrasDia,
+  filas,
+  keyDia,
+  ordenVisual,
+  personal,
+  personalFiltrado,
+  planilla,
+  sectoresBajaPrioridad,
+  sectoresCriticos,
+  semanaKey,
+  turnantesLabels
+]);
 
 useEffect(() => {
   const dataString = JSON.stringify(asignacionOrdenada);

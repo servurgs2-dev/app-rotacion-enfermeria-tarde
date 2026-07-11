@@ -1,53 +1,13 @@
 
+import { configuracionSectores } from "../../data/sectores";
+
 function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mesActivo }) {
 
     const personalFiltrado = personal.filter(
   (p) => p.categoria === tipo
 );
 
-let sectoresFijos = [];
-let turnantes = [];
-let posicionesTurnantes = [];
-
-if (tipo === "enfermero") {
-  sectoresFijos = [
-    "REA 1",
-    "EXPLORA 1",
-    "1-3 + 21",
-    "PRE INT 1",
-    "DX 25-30",
-    "8-13",
-    "4-7",
-    "SILLÓN 1",
-    "14-19",
-    "REA 2",
-    "SILLON 2",
-    "20-22-24",
-    "PRE INT 2",
-    "EXPLORA 2",
-    "SM"
-  ];
-
-  turnantes = ["T1", "T2", "T3", "T4", "T5"];
-  posicionesTurnantes = [2, 7, 10, 13, 14];
-
-} else if (tipo === "licenciado") {
-  sectoresFijos = [
-    "Triage 1",
-    "Estabiliza",
-    "Reanimación + Sillones",
-    "Observación 1",
-    "Explora",
-    "Triage 2",
-    "Diagnostico",
-    "Observación 2",
-    "Preinternación",
-    "Salud Mental"
-  ];
-
-  turnantes = ["T1", "T2", "T3"];
-  posicionesTurnantes = [1, 7, 10];
-}
+const { sectoresFijos, turnantes, posicionesTurnantes } = configuracionSectores[tipo];
 
   const filas = [];
   let tIndex = 0;

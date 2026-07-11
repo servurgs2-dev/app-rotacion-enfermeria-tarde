@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { configuracionSectores } from "../../data/sectores";
 
 const normalizar = (str) =>
   str
@@ -52,64 +53,14 @@ const [nuevoNombre, setNuevoNombre] = useState("");
 
   const prevDataRef = useRef(null);
 
-  let sectoresFijos = [];
-let sectoresCriticos = [];
-let sectoresBajaPrioridad = [];
-let turnantesLabels = [];
-let posicionesTurnantes = [];
-
-
-
-if (tipo === "enfermero") {
-  sectoresFijos = [
-    "REA 1","EXPLORA 1","1-3 + 21","PRE INT 1","DX 25-30",
-    "8-13","4-7","SILLÓN 1","14-19","REA 2",
-    "SILLON 2","20-22-24","PRE INT 2","EXPLORA 2","SM"
-  ];
-
-  sectoresCriticos = [
-    "REA 1","EXPLORA 1","1-3 + 21","PRE INT 1","DX 25-30",
-    "8-13","4-7","SILLÓN 1","14-19","20-22-24","SM"
-  ];
-
-  sectoresBajaPrioridad = [
-    "REA 2","PRE INT 2","EXPLORA 2","SILLON 2"
-  ];
-
-  turnantesLabels = ["T1","T2","T3","T4","T5"];
-   posicionesTurnantes = [2, 7, 10, 13, 14]; // 👈 MISMAS que planilla
-}
-
-if (tipo === "licenciado") {
-  sectoresFijos = [
-    "Triage 1",
-    "Estabiliza",
-    "Reanimación + Sillones",
-    "Observación 1",
-    "Explora",
-    "Triage 2",
-    "Diagnostico",
-    "Observación 2",
-    "Preinternación",
-    "Salud Mental"
-  ];
-
-  sectoresCriticos = [
-    "Triage 1",
-    "Estabiliza",
-    "Reanimación + Sillones"
-  ];
-
-  sectoresBajaPrioridad = [
-    "Observación 2",
-    "Preinternación",
-    "Salud Mental"
-  ];
-
-  turnantesLabels = ["T1","T2","T3"];
-
-   posicionesTurnantes = [1, 7, 10]; // 👈 MISMAS que planilla
-}
+  const {
+    sectoresFijos,
+    sectoresCriticos,
+    sectoresBajaPrioridad,
+    turnantes: turnantesLabels,
+    posicionesTurnantes,
+    ordenVisual
+  } = configuracionSectores[tipo];
 
   const filas = [];
 let tIndex = 0;
@@ -400,50 +351,6 @@ if (!hayHuecosFinal && sobrantes.length > 0) {
       enfermero: e
     });
   });
-}
-
-let ordenVisual = [];
-
-if (tipo === "enfermero") {
-  ordenVisual = [
-    "REA 1","REA 2",
-    "DIVIDER",
-
-    "1-3 + 21","4-7","8-13","14-19","20-22-24","DX 25-30",
-    "DIVIDER",
-
-    "EXPLORA 1","EXPLORA 2",
-    "DIVIDER",
-
-    "SILLÓN 1","SILLON 2","SILLONES 3",
-    "DIVIDER",
-
-    "PRE INT 1","PRE INT 2","SM",
-    "DIVIDER",
-
-    "SIN ASIGNAR"
-  ];
-}
-
-if (tipo === "licenciado") {
-  ordenVisual = [
-    "Triage 1","Triage 2",
-    "DIVIDER",
-
-    "Estabiliza","Reanimación + Sillones",
-    "DIVIDER",
-
-    "Observación 1","Observación 2",
-    "DIVIDER",
-
-    "Explora","Diagnostico",
-    "DIVIDER",
-
-    "Preinternación","Salud Mental",
-    "DIVIDER",
-
-    "SIN ASIGNAR"
-  ];
 }
 
 const asignacionOrdenada = [];

@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { configuracionSectores } from "../data/sectores";
 
 
 const normalizar = (str) =>
@@ -8,48 +9,6 @@ const normalizar = (str) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
     .trim();
-
-const ORDEN_SECTORES = [
-  "REA 1",
-  "REA 2",
-  "1-3 + 21",
-  "4-7",
-  "8-13",
-  "14-19",
-  "20-22-24",
-  "DX 25-30",
-  "SILLÓN 1",
-  "SILLON 2",
-  "EXPLORA 1",
-  "EXPLORA 2",
-  "PRE INT 1",
-  "PRE INT 2",
-  "SM",
-  "T1",
-  "T2",
-  "T3",
-  "T4",
-  "T5"
-];
-
-
-
-const ORDEN_SECTORES_LIC = [
-  "Triage 1",
-  "Triage 2",
-  "Reanimación + Sillones",
-  "Estabiliza",
-  "Observación 1",
-  "Observación 2",
-  "Diagnostico",
-  "Explora",
-  "Preinternación",
-  "Salud Mental",
-  "T1",
-  "T2",
-];
-
-
 
 
 // 🔹 PLANILLA
@@ -92,7 +51,7 @@ Object.keys(planillaLic || {}).forEach(semana => {
   });
 });
   // 🔹 obtener todos los sectores únicos
- const sectores = ORDEN_SECTORES;
+ const sectores = configuracionSectores.enfermero.ordenPDF;
 
   // 🔹 armar filas
   const body = sectores.map(sector => {
@@ -133,7 +92,7 @@ if (finalY > 180) {
 pdf.setFontSize(12);
 pdf.text("Licenciados", 14, finalY);
 
-const sectoresLic = ORDEN_SECTORES_LIC;
+const sectoresLic = configuracionSectores.licenciado.ordenPDF;
 
 const bodyLic = sectoresLic.map(sector => {
   const fila = [sector];

@@ -244,7 +244,7 @@ console.log("SEMANA LIC:", planillaLicenciados?.semana1);
 console.log("🔁 TAB ACTUAL:", tabCalendario);*/
 return (
   <div className="min-h-screen bg-slate-100 p-4 md:p-6">
-  <div className="max-w-6xl mx-auto space-y-6">
+  <div className="max-w-6xl mx-auto flex flex-col gap-6">
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
   <h1 className="text-2xl md:text-3xl font-bold text-slate-800">
@@ -273,7 +273,7 @@ return (
 
       
 
-      <Seccion titulo="👥 Personal">
+      <Seccion titulo="👥 Personal" className="order-3">
         <ListaPersonal
           personal={personal}
           setPersonal={(nuevo) => {
@@ -296,7 +296,7 @@ return (
 
       
 
-<Seccion titulo="📊 Planilla mensual">
+<Seccion titulo="📊 Planilla mensual" className="order-2">
 
 <button
   onClick={() =>
@@ -416,7 +416,7 @@ return (
 
       </Seccion>
 
-      <Seccion titulo="🏖 Licencias">
+      <Seccion titulo="🏖 Licencias" className="order-4">
         <Licencias
           personal={personal}
           licencias={licenciasMes}
@@ -432,7 +432,7 @@ return (
         />
       </Seccion>
 
-      <div id="calendario-pdf">
+      <div id="calendario-pdf" className="order-1">
         
         <Seccion titulo="📅 Calendario diario">
           

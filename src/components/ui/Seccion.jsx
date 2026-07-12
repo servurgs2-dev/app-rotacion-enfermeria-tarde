@@ -1,10 +1,10 @@
 import { useState } from "react";
 
-function Seccion({ titulo, children }) {
-  const [abierto, setAbierto] = useState(true);
+function Seccion({ titulo, children, className = "" }) {
+  const [abierto, setAbierto] = useState(false);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 ">
+    <div className={`${className} bg-white rounded-2xl shadow-sm border border-slate-200`}>
 
       {/* HEADER */}
       <div

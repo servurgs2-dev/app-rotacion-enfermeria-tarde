@@ -263,10 +263,21 @@ const usadosSet = new Set();
 const usarEnfermero = (e) => {
   if (!e) return null;
 
-  //if (usadosSet.has(e.nombre)) return null;
+  const nombreNormalizado = normalizar(e.nombre);
 
-  usadosSet.add(e.nombre);
+  if (usadosSet.has(nombreNormalizado)) return null;
+
+  usadosSet.add(nombreNormalizado);
   return e;
+};
+const tomarTurnanteDisponible = () => {
+  while (turnoIndex < turnantesDisponibles.length) {
+    const turnante = usarEnfermero(turnantesDisponibles[turnoIndex++]);
+
+    if (turnante) return turnante;
+  }
+
+  return null;
 };
   const asignacionBase = asignacionCompleta
     .filter(f => f.tipo === "sector")
@@ -274,8 +285,7 @@ const usarEnfermero = (e) => {
       if (!item.enfermero) return { ...item, enfermero: null };
 
       if (estaAusente(item.enfermero)) {
-        const reemplazo = turnantesDisponibles[turnoIndex++];
-        const eFinal = usarEnfermero(reemplazo);
+        const eFinal = tomarTurnanteDisponible();
 return { ...item, enfermero: eFinal, reemplazo: true };
       }
 
@@ -285,27 +295,28 @@ return { ...item, enfermero: eFinal, reemplazo: false };
 
   // extras
   let extraIndex = 0;
+const tomarExtraDisponible = () => {
+  const extrasDisponibles = extrasDia.filter(e => !estaAusente(e));
+
+  while (extraIndex < extrasDisponibles.length) {
+    const extra = usarEnfermero(extrasDisponibles[extraIndex++]);
+
+    if (extra) return extra;
+  }
+
+  return null;
+};
 // ✅ extras SIN repetir
 asignacionBase.forEach(item => {
   if (!item.enfermero) {
-    const extra = extrasDia
-      .filter(e => !estaAusente(e))[extraIndex];
-
-   if (extra) {
-  const eFinal = usarEnfermero(extra);
-  if (eFinal) {
-    item.enfermero = eFinal;
-    extraIndex++;
-  }
-}
+    item.enfermero = tomarExtraDisponible();
   }
 });
 
 // turnantes
 asignacionBase.forEach(item => {
   if (!item.enfermero) {
-    const reemplazo = turnantesDisponibles[turnoIndex++];
-    const eFinal = usarEnfermero(reemplazo);
+    const eFinal = tomarTurnanteDisponible();
     if (eFinal) item.enfermero = eFinal;
   }
 });
@@ -319,14 +330,10 @@ asignacionBase.forEach(item => {
         const d = asignacionBase.find(a => a.nombre === s);
 
   if (d?.enfermero && !estaAusente(d.enfermero)) {
-  const eFinal = usarEnfermero(d.enfermero);
-
-  if (eFinal) {
-    c.enfermero = eFinal;
-    d.enfermero = null;
-    d.sacrificado = true;
-    break;
-  }
+  c.enfermero = d.enfermero;
+  d.enfermero = null;
+  d.sacrificado = true;
+  break;
 }
       }
     }
@@ -342,9 +349,17 @@ const usados = asignacionFinal
   .map(a => a.enfermero?.nombre)
   .filter(Boolean);
 
-const sobrantes = [...personalFiltrado, ...extrasDia].filter(
-  e => e && !usados.includes(e.nombre) && !estaAusente(e)
-);
+const nombresSobrantes = new Set(usados.map(normalizar));
+const sobrantes = [...personalFiltrado, ...extrasDia].filter(e => {
+  if (!e || estaAusente(e)) return false;
+
+  const nombreNormalizado = normalizar(e.nombre);
+
+  if (nombresSobrantes.has(nombreNormalizado)) return false;
+
+  nombresSobrantes.add(nombreNormalizado);
+  return true;
+});
 
 // 🔥 SILLONES 3 + SIN ASIGNAR
 if (!hayHuecosFinal && sobrantes.length > 0) {

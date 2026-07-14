@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { configuracionSectores } from "../../data/sectores";
-
-const normalizar = (str) =>
-  str
-    ?.normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .trim();
+import {
+  estaDeLicencia,
+  esDiaLibre,
+  keyDiaFromDate,
+  semanaKeyFromDate
+} from "../../utils/fechas";
+import { normalizar } from "../../utils/texto";
 
 function CalendarioDiario({
   personal,
@@ -20,25 +20,10 @@ function CalendarioDiario({
   fecha,
   setFecha
 }) {
- //console.log(JSON.stringify(personal, null, 2));
- //console.log("🔥 MOUNT CalendarioDiario PROPS:", {
-  //tipo,
-  //mesActivo,
-  //planillaKeys: planilla && Object.keys(planilla),
-//});
-console.log("🧠 TIPO:", tipo);
- //console.log("🧩 RENDER CalendarioDiario tipo:", tipo);
   const personalFiltrado = useMemo(
-    () => personal.filter((p) => p.categoria === tipo),
+    () => personal.filter((p) => p?.categoria === tipo),
     [personal, tipo]
   );
-
-
-  
-
-
-
-
 
 const {
   cambiosDia = {},
@@ -46,12 +31,8 @@ const {
   extras = {}
 } = calendario || {};
 
-//console.log("🧠 cambiosDia actual:", cambiosDia);
-//const [nuevoExtra, setNuevoExtra] = useState("");
 const [nuevoNombre, setNuevoNombre] = useState("");
-
   const [seleccionado, setSeleccionado] = useState(null);
-
   const prevDataRef = useRef(null);
 
   const {
@@ -79,117 +60,54 @@ const [nuevoNombre, setNuevoNombre] = useState("");
     return filasCalculadas;
   }, [posicionesTurnantes, sectoresFijos, turnantesLabels]);
 
-console.log("FILAS:", filas);
+const semanaKey = semanaKeyFromDate(fecha, mesActivo);
+const keyDia = keyDiaFromDate(fecha);
+const diaDelMes = fecha.getDate();
+const extrasDia = useMemo(
+  () => (Array.isArray(extras[keyDia]) ? extras[keyDia].filter(Boolean) : []),
+  [extras, keyDia]
+);
 
+const esLibreReal = useCallback(
+  (e) => esDiaLibre(e, diaDelMes, false),
+  [diaDelMes]
+);
 
-const obtenerSemanasDelMes = (mesActivo) => {
-  const [year, month] = mesActivo.split("-").map(Number);
+const estaLibre = useCallback(
+  (e) => {
+    const esExtraHoy = extrasDia.some((ex) => ex?.nombre === e?.nombre);
+    return esDiaLibre(e, diaDelMes, esExtraHoy);
+  },
+  [diaDelMes, extrasDia]
+);
 
-  const primerDia = new Date(year, month - 1, 1);
-
-  const inicio = new Date(primerDia);
-  const dia = inicio.getDay();
-  inicio.setDate(inicio.getDate() - (dia === 0 ? 6 : dia - 1));
-
-  const semanas = [];
-
-  for (let i = 0; i < 5; i++) {
-    const desde = new Date(inicio);
-    desde.setDate(inicio.getDate() + i * 7);
-
-    semanas.push(desde);
-  }
-
-  return semanas;
-};
-const semanas = obtenerSemanasDelMes(mesActivo);
-
-semanas.forEach((inicio, i) => {
-  const fin = new Date(inicio);
-  fin.setDate(fin.getDate() + 6);
-
-  console.log(
-    `Semana ${i + 1}:`,
-    inicio,
-    "->",
-    fin
-  );
-});
-
-console.log("Fecha seleccionada:", fecha);
-
-const semanaIndex = semanas.findIndex((inicioSemana) => {
-  const fin = new Date(inicioSemana);
-  fin.setDate(fin.getDate() + 6);
-
-  return fecha >= inicioSemana && fecha <= fin;
-});
-
-const semanaKey =
-  semanaIndex === -1 ? "semana1" : `semana${semanaIndex + 1}`;
-
-//console.log("📦 PLANILLA SEMANA:", planilla?.[semanaKey]);
-const keyDia = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,"0")}-${String(fecha.getDate()).padStart(2,"0")}`;
-
-const esLibreReal = useCallback((e) => {
-  if (!e || e.libre == null) return false;
-
-  const dia = fecha.getDate();
-
-  return ((dia - e.libre) % 5 + 5) % 5 === 0;
-}, [fecha]);
-const estaDeLicencia = useCallback((e) => {
-  if (!e) return false;
-
-  return (licencias || []).some(l => {
-    if (l.nombre !== e.nombre) return false;
-
-    const [yd, md, dd] = l.desde.split("-");
-    const [yh, mh, dh] = l.hasta.split("-");
-
-    const desde = new Date(yd, md - 1, dd, 12);
-    const hasta = new Date(yh, mh - 1, dh, 12);
-
-    return fecha >= desde && fecha <= hasta;
-  });
-}, [fecha, licencias]);
-const estaLibre = useCallback((e) => {
-  if (!e || e.libre == null) return false;
-
-  const esExtraHoy = (extras[keyDia] || []).some(
-    ex => ex.nombre === e.nombre
-  );
-
-  if (esExtraHoy) return false;
-
-  const dia = fecha.getDate();
-
-  return ((dia - e.libre) % 5 + 5) % 5 === 0;
-}, [extras, fecha, keyDia]);
+const estaDeLicenciaHoy = useCallback(
+  (e) => e && estaDeLicencia(licencias, e.nombre, fecha),
+  [fecha, licencias]
+);
 
   const estaNoDisponible = useCallback(
     (e) => e && (noDisponibles[keyDia] || []).includes(e.nombre),
     [keyDia, noDisponibles]
   );
 
- const extrasDia = useMemo(() => extras[keyDia] || [], [extras, keyDia]);
-const estaAusente = useCallback((e) =>
-  e &&
-  (
-    (esLibreReal(e) && !extrasDia.some(ex => ex.nombre === e.nombre)) ||
-    estaNoDisponible(e) ||
-    estaDeLicencia(e)
-  ), [esLibreReal, estaDeLicencia, estaNoDisponible, extrasDia]);
+const estaAusente = useCallback(
+  (e) =>
+    e &&
+    (
+      (esLibreReal(e) && !extrasDia.some((ex) => ex?.nombre === e.nombre)) ||
+      estaNoDisponible(e) ||
+      estaDeLicenciaHoy(e)
+    ),
+  [esLibreReal, estaDeLicenciaHoy, estaNoDisponible, extrasDia]
+);
+
 const borrarExtra = (nombre) => {
-  const lista = extras[keyDia] || [];
-
-  // 1. saco el extra de la lista
-  const nuevaLista = lista.filter(e => e.nombre !== nombre);
-
-  // 2. limpio overrides donde aparezca
+  const lista = extrasDia;
+  const nuevaLista = lista.filter((e) => e?.nombre !== nombre);
   const cambios = { ...(cambiosDia[keyDia] || {}) };
 
-  Object.keys(cambios).forEach(sector => {
+  Object.keys(cambios).forEach((sector) => {
     if (cambios[sector] === nombre) {
       delete cambios[sector];
     }
@@ -206,16 +124,9 @@ const borrarExtra = (nombre) => {
     }
   });
 };
- 
-/*console.log("📦 PLANILLA:", planilla);
-console.log("📅 mesActivo:", mesActivo);
-console.log("🧠 semanaKey:", semanaKey);
-console.log("📊 data semana:", planilla?.[semanaKey]);*/
-
 
 const asignacionOrdenada = useMemo(() => {
 const asignacionCompleta = filas.map((fila) => {
-  // 🔥 primero veo si hay override
   const override = cambiosDia[keyDia]?.[normalizar(fila)];
 
   let nombre;
@@ -228,15 +139,8 @@ const asignacionCompleta = filas.map((fila) => {
     nombre = planilla?.[semanaKey]?.[fila];
   }
 
-
-/*console.log("🧪 FILA:", fila);
-  console.log("🧪 semanaKey:", semanaKey);
-  console.log("🧪 planilla semana:", planilla?.[semanaKey]);
-  console.log("🧪 valor planilla:", planilla?.[semanaKey]?.[fila]);*/
-
-
   const enfermero = [...personal, ...extrasDia].find(
-    e => normalizar(e.nombre) === normalizar(nombre)
+    (e) => e && normalizar(e.nombre) === normalizar(nombre)
   );
 
   return {
@@ -246,17 +150,10 @@ const asignacionCompleta = filas.map((fila) => {
   };
 });
 
-console.log(
-  "🧠 ASIGNACION COMPLETA:",
-  asignacionCompleta.map(a => ({
-    sector: a.sector,
-    nombre: a.nombre
-  }))
-);
   let turnantesDisponibles = asignacionCompleta
-    .filter(f => f.tipo === "turnante")
-    .map(f => f.enfermero)
-    .filter(e => e && !estaAusente(e));
+    .filter((f) => f.tipo === "turnante")
+    .map((f) => f.enfermero)
+    .filter((e) => e && !estaAusente(e));
 
   let turnoIndex = 0;
 const usadosSet = new Set();
@@ -280,8 +177,8 @@ const tomarTurnanteDisponible = () => {
   return null;
 };
   const asignacionBase = asignacionCompleta
-    .filter(f => f.tipo === "sector")
-    .map(item => {
+    .filter((f) => f.tipo === "sector")
+    .map((item) => {
       if (!item.enfermero) return { ...item, enfermero: null };
 
       if (estaAusente(item.enfermero)) {
@@ -293,10 +190,9 @@ return { ...item, enfermero: eFinal, reemplazo: true };
 return { ...item, enfermero: eFinal, reemplazo: false };
     });
 
-  // extras
   let extraIndex = 0;
 const tomarExtraDisponible = () => {
-  const extrasDisponibles = extrasDia.filter(e => !estaAusente(e));
+  const extrasDisponibles = extrasDia.filter((e) => e && !estaAusente(e));
 
   while (extraIndex < extrasDisponibles.length) {
     const extra = usarEnfermero(extrasDisponibles[extraIndex++]);
@@ -306,28 +202,26 @@ const tomarExtraDisponible = () => {
 
   return null;
 };
-// ✅ extras SIN repetir
-asignacionBase.forEach(item => {
+
+asignacionBase.forEach((item) => {
   if (!item.enfermero) {
     item.enfermero = tomarExtraDisponible();
   }
 });
 
-// turnantes
-asignacionBase.forEach(item => {
+asignacionBase.forEach((item) => {
   if (!item.enfermero) {
     const eFinal = tomarTurnanteDisponible();
     if (eFinal) item.enfermero = eFinal;
   }
 });
 
-  // 🔥 sacrificio REAL
-  sectoresCriticos.forEach(critico => {
-    const c = asignacionBase.find(a => a.nombre === critico);
+  sectoresCriticos.forEach((critico) => {
+    const c = asignacionBase.find((a) => a.nombre === critico);
 
     if (c && !c.enfermero) {
       for (let s of sectoresBajaPrioridad) {
-        const d = asignacionBase.find(a => a.nombre === s);
+        const d = asignacionBase.find((a) => a.nombre === s);
 
   if (d?.enfermero && !estaAusente(d.enfermero)) {
   c.enfermero = d.enfermero;
@@ -339,18 +233,16 @@ asignacionBase.forEach(item => {
     }
   });
 
-  // overrides
   const asignacionFinal = asignacionBase;
 
-// 🔥 calcular sobrantes
-const hayHuecosFinal = asignacionFinal.some(a => !a.enfermero);
+const hayHuecosFinal = asignacionFinal.some((a) => !a.enfermero);
 
 const usados = asignacionFinal
-  .map(a => a.enfermero?.nombre)
+  .map((a) => a.enfermero?.nombre)
   .filter(Boolean);
 
 const nombresSobrantes = new Set(usados.map(normalizar));
-const sobrantes = [...personalFiltrado, ...extrasDia].filter(e => {
+const sobrantes = [...personalFiltrado, ...extrasDia].filter((e) => {
   if (!e || estaAusente(e)) return false;
 
   const nombreNormalizado = normalizar(e.nombre);
@@ -361,14 +253,13 @@ const sobrantes = [...personalFiltrado, ...extrasDia].filter(e => {
   return true;
 });
 
-// 🔥 SILLONES 3 + SIN ASIGNAR
 if (!hayHuecosFinal && sobrantes.length > 0) {
   asignacionFinal.push({
     nombre: "SILLONES 3",
     enfermero: sobrantes[0]
   });
 
-  sobrantes.slice(1).forEach(e => {
+  sobrantes.slice(1).forEach((e) => {
     asignacionFinal.push({
       nombre: "SIN ASIGNAR",
       enfermero: e
@@ -378,16 +269,15 @@ if (!hayHuecosFinal && sobrantes.length > 0) {
 
 const resultadoOrdenado = [];
 
-ordenVisual.forEach(item => {
+ordenVisual.forEach((item) => {
   if (item === "DIVIDER") {
     resultadoOrdenado.push({ tipo: "divider" });
   } else {
     const encontrados = asignacionFinal.filter(
-      a => normalizar(a.nombre) === normalizar(item)
+      (a) => normalizar(a.nombre) === normalizar(item)
     );
 
     if (encontrados.length === 0) {
-      // 👇 ESTE ES EL FIX CLAVE
       resultadoOrdenado.push({
         nombre: item,
         enfermero: null,
@@ -429,7 +319,6 @@ useEffect(() => {
 }, [asignacionOrdenada, onDataReady]);
 
   const handleClick = (item) => {
-    console.log("CLICK en:", item.nombre, item.enfermero?.nombre);
     if (!item.enfermero) {
       if (seleccionado) {
         const nuevo = { ...(cambiosDia[keyDia] || {}) };
@@ -470,10 +359,6 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
 
     setSeleccionado(null);
   };
-
-
-
-//return principa
 
   return (
     <div className="min-h-fit">
@@ -516,10 +401,7 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
     return (
       <div
         key={i}
-        onClick={() => {
-    console.log("CLICK RAW");
-    handleClick(item);
-  }}
+        onClick={() => handleClick(item)}
         className={`flex justify-between items-center px-4 py-3 border-b border-slate-100 cursor-pointer hover:bg-slate-50 ${bg}`}
       >
         <span className="font-medium text-slate-700">
@@ -537,9 +419,9 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
 <h4 className="text-sm font-semibold text-slate-700">Libres</h4>
 
 <div className="flex flex-wrap gap-2">
-  {personalFiltrado.filter(esLibreReal).map(e => {
-    const yaEsta = (extras[keyDia] || []).some(
-      ex => ex.nombre === e.nombre
+  {personalFiltrado.filter(esLibreReal).map((e) => {
+    const yaEsta = extrasDia.some(
+      (ex) => ex?.nombre === e.nombre
     );
 
     return (
@@ -548,13 +430,13 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
         className={`px-3 py-1.5 rounded-lg text-sm text-white transition
           ${yaEsta ? "bg-green-600" : "bg-green-400 hover:bg-green-500"}`}
         onClick={() => {
-          const lista = extras[keyDia] || [];
+          const lista = extrasDia;
 
           const nueva = yaEsta
-  ? lista.filter(ex => ex.nombre !== e.nombre)
+  ? lista.filter((ex) => ex.nombre !== e.nombre)
   : [...lista, { ...e }];
 
-          setCalendario(prev => ({
+          setCalendario((prev) => ({
   ...prev,
   extras: {
     ...prev.extras,
@@ -574,7 +456,7 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
 </h4>
 
 <div className="flex flex-wrap gap-2">
-  {(extras[keyDia] || []).map(e => (
+  {extrasDia.map((e) => (
     <div
       key={e.nombre}
       className="flex items-center gap-2 bg-blue-100 px-3 py-1.5 rounded-lg text-sm"
@@ -605,7 +487,7 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
     onClick={() => {
       if (!nuevoNombre.trim()) return;
 
-      const lista = extras[keyDia] || [];
+      const lista = extrasDia;
 
       const nuevoExtra = {
         nombre: nuevoNombre,
@@ -614,7 +496,7 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
         temporal: true
       };
 
-      setCalendario(prev => ({
+      setCalendario((prev) => ({
   ...prev,
   extras: {
     ...prev.extras,
@@ -636,7 +518,7 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
 </h4>
 
 <div className="flex flex-wrap gap-2">
-  {personalFiltrado.map(e => {
+  {personalFiltrado.map((e) => {
     const activo = (noDisponibles[keyDia] || []).includes(e.nombre);
 
     return (
@@ -650,10 +532,10 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
           const lista = noDisponibles[keyDia] || [];
 
           const nueva = activo
-            ? lista.filter(n => n !== e.nombre)
+            ? lista.filter((n) => n !== e.nombre)
             : [...lista, e.nombre];
 
-          setCalendario(prev => ({
+          setCalendario((prev) => ({
   ...prev,
   noDisponibles: {
     ...prev.noDisponibles,

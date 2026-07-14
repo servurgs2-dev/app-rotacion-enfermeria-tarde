@@ -1,5 +1,6 @@
 
 import { configuracionSectores } from "../../data/sectores";
+import { estaDeLicencia, obtenerSemanasDelMes } from "../../utils/fechas";
 
 function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mesActivo }) {
 
@@ -58,43 +59,6 @@ const { sectoresFijos, turnantes, posicionesTurnantes } = configuracionSectores[
       }
     }));
   }
-      function estaDeLicencia(nombre, fecha) {
-  return licencias.some((l) => {
-    if (l.nombre !== nombre) return false;
-
-    const f = new Date(fecha);
-    const desde = new Date(l.desde);
-    const hasta = new Date(l.hasta);
-
-    return f >= desde && f <= hasta;
-  });
-}
-
-function obtenerSemanasDelMes(mesActivo) {
-  if (!mesActivo) return [];
-  const [year, month] = mesActivo.split("-").map(Number);
-
-  const primerDia = new Date(year, month - 1, 1);
-
-  // ir al lunes anterior (o el mismo si ya es lunes)
-  const inicio = new Date(primerDia);
-  const dia = inicio.getDay();
-  inicio.setDate(inicio.getDate() - (dia === 0 ? 6 : dia - 1));
-
-  const semanas = [];
-
-  for (let i = 0; i < 5; i++) {
-    const desde = new Date(inicio);
-    desde.setDate(inicio.getDate() + i * 7);
-
-    const hasta = new Date(desde);
-    hasta.setDate(desde.getDate() + 6);
-
-    semanas.push({ desde, hasta });
-  }
-
-  return semanas;
-}
 
 const semanas = obtenerSemanasDelMes(mesActivo);
 
@@ -144,7 +108,7 @@ return (
     !usados.includes(p.nombre) ||
     planilla.semana1?.[sector] === p.nombre;
 
-const noLicencia = !estaDeLicencia(p.nombre, semanas[0].desde);
+const noLicencia = !estaDeLicencia(licencias, p.nombre, semanas[0].desde);
 
   return disponible && noLicencia;
 })
@@ -178,10 +142,7 @@ const noLicencia = !estaDeLicencia(p.nombre, semanas[0].desde);
 
           const fechaSemana = semanas[index + 1].desde;
 
-          const noLicencia = !estaDeLicencia(
-            p.nombre,
-            fechaSemana
-          );
+          const noLicencia = !estaDeLicencia(licencias, p.nombre, fechaSemana);
 
           return disponible && noLicencia;
         })

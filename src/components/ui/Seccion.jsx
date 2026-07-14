@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-function Seccion({ titulo, children, className = "" }) {
-  const [abierto, setAbierto] = useState(false);
+function Seccion({ titulo, children, className = "", defaultAbierto = false }) {
+  const [abierto, setAbierto] = useState(defaultAbierto);
 
   return (
     <div className={`${className} bg-white rounded-2xl shadow-sm border border-slate-200`}>

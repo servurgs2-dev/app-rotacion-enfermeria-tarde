@@ -1,14 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { configuracionSectores } from "../data/sectores";
-
-
-const normalizar = (str) =>
-  str
-    ?.normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .trim();
+import { normalizar } from "./texto";
 
 
 // 🔹 PLANILLA
@@ -63,7 +56,6 @@ Object.keys(planillaLic || {}).forEach(semana => {
     planillaEnfNorm[semanaKey]?.[normalizar(sector)] || "-";
   fila.push(valor);
 }
-console.log(planillaEnf);
     return fila;
   });
 pdf.setFontSize(12);
@@ -100,7 +92,7 @@ const bodyLic = sectoresLic.map(sector => {
   for (let i = 1; i <= 5; i++) {
     const semanaKey = `semana${i}`;
     const valor =
-  planillaLic?.[semanaKey]?.[sector] || "-";
+      planillaLicNorm[semanaKey]?.[normalizar(sector)] || "-";
     fila.push(valor);
   }
 

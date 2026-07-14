@@ -267,8 +267,8 @@ function ListaPersonal({ personal, setPersonal }) {
 </td>
 
 <td className="px-3 py-2">
-  <button className="text-red-400 hover:text-red-600 transition"
-    className="text-red-500 hover:text-red-700"
+  <button
+    className="text-red-500 hover:text-red-700 transition"
     onClick={() => {
       const nueva = personal.filter(per => per.nombre !== p.nombre);
       setPersonal(nueva);

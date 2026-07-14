@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ListaPersonal from "./components/personal/ListaPersonal";
 import PlanillaMensual from "./components/planilla/PlanillaMensual";
 import CalendarioDiario from "./components/calendario/CalendarioDiario";
 import Seccion from "./components/ui/Seccion";
 import Licencias from "./components/licencias/Licencias";
 import { supabase } from "./supabase";
-import { useRef } from "react";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
+import { obtenerSemanasDelMes } from "./utils/fechas";
 
 
 
@@ -22,7 +22,9 @@ const [tabCalendario, setTabCalendario] = useState("enfermeros");
 
 const [fecha, setFecha] = useState(new Date());
 const timeoutRef = useRef(null);
+const ultimaSolicitudGuardadoRef = useRef(0);
 const [cargando, setCargando] = useState(true);
+const [estadoGuardado, setEstadoGuardado] = useState("loading");
 
 const [dataPDFEnf, setDataPDFEnf] = useState([]);
 const [dataPDFLic, setDataPDFLic] = useState([]);
@@ -77,6 +79,36 @@ const licenciasMes = mesData.licencias;
 
 const semanas = obtenerSemanasDelMes(mesActivo);
 
+const guardarMes = async (mes, data) => {
+  if (!data) return null;
+
+  const { error } = await supabase
+    .from("estado_por_mes")
+    .upsert({ mes, data }, { onConflict: "mes" });
+
+  return error;
+};
+
+useEffect(() => {
+  if (cargando) return;
+
+  clearTimeout(timeoutRef.current);
+
+  timeoutRef.current = setTimeout(async () => {
+    const mesData = estadoPorMes[mesActivo];
+    if (!mesData) return;
+
+    const solicitudId = ultimaSolicitudGuardadoRef.current + 1;
+    ultimaSolicitudGuardadoRef.current = solicitudId;
+
+    setEstadoGuardado("saving");
+    const error = await guardarMes(mesActivo, mesData);
+    if (solicitudId === ultimaSolicitudGuardadoRef.current) {
+      setEstadoGuardado(error ? "error" : "saved");
+    }
+  }, 500);
+}, [estadoPorMes, mesActivo, cargando]);
+
 const setPlanillaEnfermeros = (nueva) => {
   setEstadoPorMes(prev => {
     const actual = getMesData(mesActivo);
@@ -118,41 +150,14 @@ const setPlanillaLicenciados = (nueva) => {
 };
 
 
-
-useEffect(() => {
-  if (cargando) return;
-
-  clearTimeout(timeoutRef.current);
-
-  timeoutRef.current = setTimeout(async () => {
-    const mesData = estadoPorMes[mesActivo];
-
-    if (!mesData) return;
-
-    const { error } = await supabase
-      .from("estado_por_mes")
-      .upsert(
-        {
-          mes: mesActivo,
-          data: mesData
-        },
-        { onConflict: "mes" }
-      );
-
-    if (error) {
-      //console.error("Error guardando:", error);
-    } else {
-      console.log("Guardado OK");
-    }
-  }, 500); // espera 500ms
-
-}, [estadoPorMes, mesActivo, cargando]);
-
 useEffect(() => {
   const cargar = async () => {
     setCargando(true); // 👈 empieza carga
 
-    const { data } = await supabase
+    ultimaSolicitudGuardadoRef.current += 1;
+    setEstadoGuardado("loading");
+
+    const { data, error } = await supabase
       .from("estado_por_mes")
       .select("*")
       .eq("mes", mesActivo)
@@ -166,36 +171,13 @@ useEffect(() => {
     }
 
     setCargando(false); // 👈 termina carga
+    if (!error) {
+      setEstadoGuardado("saved");
+    }
   };
 
   cargar();
 }, [mesActivo]);
-
-function obtenerSemanasDelMes(mesActivo) {
-  if (!mesActivo) return [];
-
-  const [year, month] = mesActivo.split("-").map(Number);
-
-  const primerDia = new Date(year, month - 1, 1);
-
-  const inicio = new Date(primerDia);
-  const dia = inicio.getDay();
-  inicio.setDate(inicio.getDate() - (dia === 0 ? 6 : dia - 1));
-
-  const semanas = [];
-
-  for (let i = 0; i < 5; i++) {
-    const desde = new Date(inicio);
-    desde.setDate(inicio.getDate() + i * 7);
-
-    const hasta = new Date(desde);
-    hasta.setDate(desde.getDate() + 6);
-
-    semanas.push({ desde, hasta });
-  }
-
-  return semanas;
-}
 
 const copiarMesAnterior = async () => {
   const [year, month] = mesActivo.split("-").map(Number);
@@ -210,7 +192,7 @@ const copiarMesAnterior = async () => {
     .from("estado_por_mes")
     .select("*")
     .eq("mes", keyAnterior)
-    .single();
+    .maybeSingle();
 
   if (!data) {
     alert("No hay datos del mes anterior");
@@ -242,6 +224,14 @@ if (cargando) {
 /*console.log("PLANILLA LIC:", planillaLicenciados);
 console.log("SEMANA LIC:", planillaLicenciados?.semana1);
 console.log("🔁 TAB ACTUAL:", tabCalendario);*/
+
+const textoEstadoGuardado = {
+  loading: "Cargando...",
+  saving: "Guardando...",
+  saved: "Guardado",
+  error: "Error al guardar"
+}[estadoGuardado];
+
 return (
   <div className="min-h-screen bg-slate-100 p-4 md:p-6">
   <div className="max-w-6xl mx-auto flex flex-col gap-6">
@@ -250,6 +240,17 @@ return (
   <h1 className="text-2xl md:text-3xl font-bold text-slate-800">
     🏥 Gestión de Urgencias
   </h1>
+
+  <div className="flex items-center gap-3">
+    {textoEstadoGuardado && (
+      <span
+        className={`text-sm ${
+          estadoGuardado === "error" ? "text-red-600" : "text-slate-500"
+        }`}
+      >
+        {textoEstadoGuardado}
+      </span>
+    )}
 
   <input
     type="month"
@@ -265,10 +266,11 @@ return (
   setMesActivo(nuevoMes);
 
   const [year, month] = nuevoMes.split("-").map(Number);
-  setFecha(new Date(year, month - 1, 1)); // ✅ CLAVE
+  setFecha(new Date(year, month - 1, 1, 12));
 }}
     className="border border-slate-300 rounded-lg px-3 py-2 text-sm shadow-sm"
   />
+  </div>
 </div>
 
       
@@ -434,31 +436,25 @@ return (
 
       <div id="calendario-pdf" className="order-1">
         
-        <Seccion titulo="📅 Calendario diario">
+        <Seccion titulo="📅 Calendario diario" defaultAbierto>
           
 
   <button
   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
-  onClick={() => {
-    console.log("📦 DATA ENF PDF:", dataPDFEnf);
-    console.log("📦 DATA LIC PDF:", dataPDFLic);
-
+  onClick={() =>
     exportarCalendarioPDF({
       fecha,
       enfermeros: dataPDFEnf,
       licenciados: dataPDFLic
-    });
-  }}
+    })
+  }
 >
   📄 Exportar calendario PDF
 </button>
           {/* 🔹 TABS */}
   <div className="flex gap-2 mb-4">
     <button
-      onClick={() => {
-  console.log("🔥 CLICK ENFERMEROS");
-  setTabCalendario("enfermeros");
-}}
+      onClick={() => setTabCalendario("enfermeros")}
       className={`px-4 py-2 rounded-lg text-sm transition ${
         tabCalendario === "enfermeros"
           ? "bg-blue-600 text-white"
@@ -469,10 +465,7 @@ return (
     </button>
 
     <button
-      onClick={() => {
-  console.log("🔥 CLICK LICENCIADOS");
-  setTabCalendario("licenciados");
-}}
+      onClick={() => setTabCalendario("licenciados")}
       
       className={`px-4 py-2 rounded-lg text-sm transition ${
         tabCalendario === "licenciados"

@@ -6,7 +6,7 @@ export const configuracionSectores = {
       "SILLON 2", "20-22-24", "PRE INT 2", "EXPLORA 2", "SM"
     ],
     turnantes: ["T1", "T2", "T3", "T4", "T5"],
-    posicionesTurnantes: [2, 7, 10, 13, 14],
+    posicionesTurnantes: [2, 5, 7, 11, 14],
     sectoresCriticos: [
       "REA 1", "EXPLORA 1", "1-3 + 21", "PRE INT 1", "DX 25-30",
       "8-13", "4-7", "SILLÓN 1", "14-19", "20-22-24", "SM"

@@ -4,9 +4,23 @@ function Licencias({ personal, licencias, setLicencias }) {
   const [persona, setPersona] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
+  const [error, setError] = useState("");
 
   const agregarLicencia = () => {
-    if (!persona || !desde || !hasta) return;
+    if (!persona) {
+      setError("Seleccioná una persona.");
+      return;
+    }
+
+    if (!desde || !hasta) {
+      setError("Completá las fechas desde y hasta.");
+      return;
+    }
+
+    if (hasta < desde) {
+      setError("La fecha hasta no puede ser anterior a la fecha desde.");
+      return;
+    }
 
     setLicencias([
       ...licencias,
@@ -20,6 +34,7 @@ function Licencias({ personal, licencias, setLicencias }) {
     setPersona("");
     setDesde("");
     setHasta("");
+    setError("");
   };
 
   const eliminarLicencia = (licencia) => {
@@ -47,7 +62,10 @@ function Licencias({ personal, licencias, setLicencias }) {
           
           <select
             value={persona}
-            onChange={(e) => setPersona(e.target.value)}
+            onChange={(e) => {
+              setPersona(e.target.value);
+              setError("");
+            }}
             className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
           >
             <option value="">Seleccionar persona</option>
@@ -61,14 +79,20 @@ function Licencias({ personal, licencias, setLicencias }) {
           <input
             type="date"
             value={desde}
-            onChange={(e) => setDesde(e.target.value)}
+            onChange={(e) => {
+              setDesde(e.target.value);
+              setError("");
+            }}
             className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
           />
 
           <input
             type="date"
             value={hasta}
-            onChange={(e) => setHasta(e.target.value)}
+            onChange={(e) => {
+              setHasta(e.target.value);
+              setError("");
+            }}
             className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
           />
 
@@ -79,6 +103,12 @@ function Licencias({ personal, licencias, setLicencias }) {
             Agregar
           </button>
         </div>
+
+        {error && (
+          <p className="text-sm text-red-600" role="alert">
+            {error}
+          </p>
+        )}
       </div>
 
       {/* 📋 TABLA */}

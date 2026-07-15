@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { normalizar } from "../../utils/texto";
 
 function ListaPersonal({ personal, setPersonal }) {
   const [nombre, setNombre] = useState("");
@@ -9,22 +10,28 @@ function ListaPersonal({ personal, setPersonal }) {
   const [maternal, setMaternal] = useState(false);
   const [funcionario, setFuncionario] = useState("");
   const [busqueda, setBusqueda] = useState("");
+  const [errorNombre, setErrorNombre] = useState("");
 
   const agregar = () => {
-    if (!nombre.trim()) return;
+    const nombreLimpio = nombre.trim();
+
+    if (!nombreLimpio) {
+      setErrorNombre("Ingresá un nombre.");
+      return;
+    }
 
     // 🔴 evitar duplicados por nombre
     const existe = personal.some(
-      (p) => p.nombre.toLowerCase() === nombre.toLowerCase()
+      (p) => normalizar(p.nombre) === normalizar(nombreLimpio)
     );
 
     if (existe) {
-      alert("Ese nombre ya existe");
+      setErrorNombre("Ya existe una persona con ese nombre.");
       return;
     }
 
     const nuevo = {
-      nombre: nombre.trim(),
+      nombre: nombreLimpio,
       categoria,
       rol,
       libre: Number(libre),
@@ -44,6 +51,7 @@ function ListaPersonal({ personal, setPersonal }) {
     setFuncionario("");
     setMaternal(false);
     setHorario("normal");
+    setErrorNombre("");
   };
 
   
@@ -78,7 +86,10 @@ function ListaPersonal({ personal, setPersonal }) {
         <input className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
           placeholder="Nombre"
           value={nombre}
-          onChange={(e) => setNombre(e.target.value)}
+          onChange={(e) => {
+            setNombre(e.target.value);
+            setErrorNombre("");
+          }}
         />
 
         <input className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
@@ -126,6 +137,12 @@ function ListaPersonal({ personal, setPersonal }) {
 >
   Agregar
 </button>
+
+        {errorNombre && (
+          <p className="w-full text-sm text-red-600" role="alert">
+            {errorNombre}
+          </p>
+        )}
       </div>
 
       {/* 🧹 LIMPIAR */}

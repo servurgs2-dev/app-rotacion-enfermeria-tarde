@@ -63,6 +63,10 @@ const [nuevoNombre, setNuevoNombre] = useState("");
 const semanaKey = semanaKeyFromDate(fecha, mesActivo);
 const keyDia = keyDiaFromDate(fecha);
 const diaDelMes = fecha.getDate();
+const fechaMinima = `${mesActivo}-01`;
+const [yearMesActivo, monthMesActivo] = mesActivo.split("-").map(Number);
+const ultimoDiaDelMes = new Date(yearMesActivo, monthMesActivo, 0).getDate();
+const fechaMaxima = `${mesActivo}-${String(ultimoDiaDelMes).padStart(2, "0")}`;
 const extrasDia = useMemo(
   () => (Array.isArray(extras[keyDia]) ? extras[keyDia].filter(Boolean) : []),
   [extras, keyDia]
@@ -369,9 +373,17 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
       <input
   type="date"
   value={`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}-${String(fecha.getDate()).padStart(2, "0")}`}
+  min={fechaMinima}
+  max={fechaMaxima}
   className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
   onChange={(e) => {
-    const [y, m, d] = e.target.value.split("-");
+    const fechaSeleccionada = e.target.value;
+
+    if (!fechaSeleccionada || fechaSeleccionada < fechaMinima || fechaSeleccionada > fechaMaxima) {
+      return;
+    }
+
+    const [y, m, d] = fechaSeleccionada.split("-");
     setFecha(new Date(y, m - 1, d, 12));
   }}
 />

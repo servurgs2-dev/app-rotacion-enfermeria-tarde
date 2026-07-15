@@ -266,7 +266,17 @@ return (
   setMesActivo(nuevoMes);
 
   const [year, month] = nuevoMes.split("-").map(Number);
-  setFecha(new Date(year, month - 1, 1, 12));
+  const fechaPerteneceAlMes =
+    fecha.getFullYear() === year && fecha.getMonth() === month - 1;
+
+  if (!fechaPerteneceAlMes) {
+    const nuevaFecha =
+      nuevoMes === mesActual
+        ? new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 12)
+        : new Date(year, month - 1, 1, 12);
+
+    setFecha(nuevaFecha);
+  }
 }}
     className="border border-slate-300 rounded-lg px-3 py-2 text-sm shadow-sm"
   />

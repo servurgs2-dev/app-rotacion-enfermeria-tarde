@@ -439,7 +439,8 @@ return resultadoOrdenado;
 useEffect(() => {
   const datosParaPDF = {
     asignaciones: asignacionOrdenada,
-    libres
+    libres,
+    keyDia
   };
   const dataString = JSON.stringify(datosParaPDF);
 
@@ -450,7 +451,7 @@ useEffect(() => {
       onDataReady(datosParaPDF);
     }
   }
-}, [asignacionOrdenada, libres, onDataReady]);
+}, [asignacionOrdenada, keyDia, libres, onDataReady]);
 
   const handleClick = (item) => {
     if (!item.enfermero) {

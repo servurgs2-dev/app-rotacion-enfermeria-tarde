@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import ListaPersonal from "./components/personal/ListaPersonal";
 import PlanillaMensual from "./components/planilla/PlanillaMensual";
 import CalendarioDiario from "./components/calendario/CalendarioDiario";
@@ -7,6 +7,7 @@ import Licencias from "./components/licencias/Licencias";
 import { supabase } from "./supabase";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
+import { generarAlertasHorarios } from "./utils/alertasHorarios";
 
 
 
@@ -70,6 +71,22 @@ const getMesData = (mes) => {
 
 const mesData = getMesData(mesActivo);
 const diasParo = mesData.calendario?.diasParo || {};
+const keyDiaActual = keyDiaFromDate(fecha);
+const esDiaParoActual = Boolean(diasParo[keyDiaActual]);
+const alertasHorarios = useMemo(() => {
+  if (
+    esDiaParoActual ||
+    dataPDFEnf.keyDia !== keyDiaActual ||
+    dataPDFLic.keyDia !== keyDiaActual
+  ) {
+    return [];
+  }
+
+  return generarAlertasHorarios({
+    enfermeros: dataPDFEnf.asignaciones,
+    licenciados: dataPDFLic.asignaciones
+  });
+}, [dataPDFEnf, dataPDFLic, esDiaParoActual, keyDiaActual]);
 
 const setDiaParo = (keyDia, activo) => {
   setEstadoPorMes(prev => {
@@ -515,6 +532,17 @@ return (
       🧑‍⚕️ Licenciados
     </button>
   </div>
+
+  {alertasHorarios.length > 0 && (
+    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <p className="mb-2 font-semibold">Horarios especiales</p>
+      <ul className="space-y-1">
+        {alertasHorarios.map((alerta, index) => (
+          <li key={`${alerta}-${index}`}>{alerta}</li>
+        ))}
+      </ul>
+    </div>
+  )}
 
 <div className={tabCalendario === "enfermeros" ? "" : "hidden"}>
   <CalendarioDiario

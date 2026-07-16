@@ -77,6 +77,11 @@ const esLibreReal = useCallback(
   [diaDelMes]
 );
 
+const libres = useMemo(
+  () => personalFiltrado.filter(esLibreReal),
+  [esLibreReal, personalFiltrado]
+);
+
 const estaLibre = useCallback(
   (e) => {
     const esExtraHoy = extrasDia.some((ex) => ex?.nombre === e?.nombre);
@@ -311,16 +316,20 @@ return resultadoOrdenado;
 ]);
 
 useEffect(() => {
-  const dataString = JSON.stringify(asignacionOrdenada);
+  const datosParaPDF = {
+    asignaciones: asignacionOrdenada,
+    libres
+  };
+  const dataString = JSON.stringify(datosParaPDF);
 
   if (prevDataRef.current !== dataString) {
     prevDataRef.current = dataString;
 
     if (onDataReady) {
-      onDataReady(asignacionOrdenada);
+      onDataReady(datosParaPDF);
     }
   }
-}, [asignacionOrdenada, onDataReady]);
+}, [asignacionOrdenada, libres, onDataReady]);
 
   const handleClick = (item) => {
     if (!item.enfermero) {
@@ -431,7 +440,7 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
 <h4 className="text-sm font-semibold text-slate-700">Libres</h4>
 
 <div className="flex flex-wrap gap-2">
-  {personalFiltrado.filter(esLibreReal).map((e) => {
+  {libres.map((e) => {
     const yaEsta = extrasDia.some(
       (ex) => ex?.nombre === e.nombre
     );

@@ -119,49 +119,112 @@ autoTable(pdf, {
 // 🔹 CALENDARIO
 export const exportarCalendarioPDF = ({
   fecha,
-  enfermeros = [],
-  licenciados = []
+  enfermeros = {},
+  licenciados = {}
 }) => {
-  const pdf = new jsPDF();
+  const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const asignacionesEnfermeros = enfermeros.asignaciones || [];
+  const asignacionesLicenciados = licenciados.asignaciones || [];
+  const libresEnfermeros = enfermeros.libres || [];
+  const libresLicenciados = licenciados.libres || [];
+  const anchoColumna = 133;
+  const columnaIzquierda = 10;
+  const columnaDerecha = 154;
 
-  pdf.setFontSize(14);
-  pdf.text(`Distribución ${fecha.toLocaleDateString()}`, 14, 15);
+  pdf.setFontSize(16);
+  pdf.text("Distribución diaria", 10, 14);
+  pdf.setFontSize(10);
+  pdf.setTextColor(90);
+  pdf.text(
+    fecha.toLocaleDateString("es-UY", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    }),
+    10,
+    21
+  );
+  pdf.setTextColor(0);
+  pdf.setDrawColor(210);
+  pdf.line(10, 24, 287, 24);
 
-  const renderTabla = (titulo, data, startY) => {
-    pdf.setFontSize(12);
-    pdf.text(titulo, 14, startY);
-
-    const body = data
-      .filter(i => i?.nombre && i.tipo !== "divider")
-      .map(i => [
-        i.nombre,
-        i.enfermero?.nombre ?? "Sin cobertura"
+  const filasAsignacion = (asignaciones) =>
+    asignaciones
+      .filter((item) => item?.nombre && item.tipo !== "divider")
+      .map((item) => [
+        item.nombre,
+        item.enfermero?.nombre ?? "Sin cobertura"
       ]);
 
+  const renderColumna = (titulo, asignaciones, x, color) => {
+    pdf.setFontSize(11);
+    pdf.text(titulo, x, 31);
+
     autoTable(pdf, {
-      startY: startY + 3,
+      startY: 34,
+      margin: { left: x },
+      tableWidth: anchoColumna,
       head: [["Sector", "Asignado"]],
-      body,
-      styles: { halign: "center" },
-      headStyles: { fillColor: [41, 128, 185] }
+      body: filasAsignacion(asignaciones),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: color, halign: "center" },
+      columnStyles: {
+        0: { cellWidth: 66 },
+        1: { cellWidth: 67 }
+      }
     });
 
-    return pdf.lastAutoTable.finalY + 10;
+    return pdf.lastAutoTable.finalY;
   };
 
-  let y = 20;
+  renderColumna(
+    "Enfermeros",
+    asignacionesEnfermeros,
+    columnaIzquierda,
+    [41, 128, 185]
+  );
+  const finalLicenciados = renderColumna(
+    "Licenciados",
+    asignacionesLicenciados,
+    columnaDerecha,
+    [22, 160, 133]
+  );
 
-  if (enfermeros.length) {
-    y = renderTabla("Enfermeros", enfermeros, y);
-  }
+  const inicioLibres = finalLicenciados + 10;
+  pdf.setFontSize(11);
+  pdf.text("LIBRES", columnaDerecha, inicioLibres);
 
-  if (licenciados.length) {
-    if (y > 250) {
-      pdf.addPage();
-      y = 20;
-    }
-    y = renderTabla("Licenciados", licenciados, y);
-  }
+  const renderLibres = (titulo, libres, startY, color) => {
+    const filas = libres
+      .filter((persona) => persona?.nombre)
+      .map((persona) => [persona.nombre]);
+
+    autoTable(pdf, {
+      startY,
+      margin: { left: columnaDerecha },
+      tableWidth: anchoColumna,
+      head: [[titulo]],
+      body: filas.length ? filas : [["Ninguno"]],
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: color, halign: "left" }
+    });
+
+    return pdf.lastAutoTable.finalY;
+  };
+
+  const finalLibresEnfermeros = renderLibres(
+    "Libres de enfermeros",
+    libresEnfermeros,
+    inicioLibres + 3,
+    [41, 128, 185]
+  );
+  renderLibres(
+    "Libres de licenciados",
+    libresLicenciados,
+    finalLibresEnfermeros + 3,
+    [22, 160, 133]
+  );
 
   pdf.save("calendario.pdf");
 };

@@ -26,8 +26,8 @@ const ultimaSolicitudGuardadoRef = useRef(0);
 const [cargando, setCargando] = useState(true);
 const [estadoGuardado, setEstadoGuardado] = useState("loading");
 
-const [dataPDFEnf, setDataPDFEnf] = useState([]);
-const [dataPDFLic, setDataPDFLic] = useState([]);
+const [dataPDFEnf, setDataPDFEnf] = useState({ asignaciones: [], libres: [] });
+const [dataPDFLic, setDataPDFLic] = useState({ asignaciones: [], libres: [] });
 
 //console.log("🔁 TAB ACTUAL:", tabCalendario);
 
@@ -487,7 +487,7 @@ return (
     </button>
   </div>
 
-{tabCalendario === "enfermeros" && (
+<div className={tabCalendario === "enfermeros" ? "" : "hidden"}>
   <CalendarioDiario
   key="enfermeros"
     personal={personal}
@@ -525,9 +525,9 @@ return (
       });
     }}
   />
-)}
+</div>
 
-{tabCalendario === "licenciados" && (
+<div className={tabCalendario === "licenciados" ? "" : "hidden"}>
   <CalendarioDiario
   key="licenciados"
     personal={personal}
@@ -565,7 +565,7 @@ return (
       });
     }}
   />
-)}
+</div>
 
         </Seccion>
         </div>

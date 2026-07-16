@@ -6,7 +6,7 @@ import Seccion from "./components/ui/Seccion";
 import Licencias from "./components/licencias/Licencias";
 import { supabase } from "./supabase";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
-import { obtenerSemanasDelMes } from "./utils/fechas";
+import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
 
 
 
@@ -48,13 +48,16 @@ const getMesData = (mes) => {
       licenciados: crearEstructuraBase()
     },
     calendario: {
+      diasParo: {},
       enfermeros: {
         cambiosDia: {},
+        cambiosParoDia: {},
         extras: {},
         noDisponibles: {}
       },
       licenciados: {
         cambiosDia: {},
+        cambiosParoDia: {},
         extras: {},
         noDisponibles: {}
       }
@@ -66,6 +69,32 @@ const getMesData = (mes) => {
 
 
 const mesData = getMesData(mesActivo);
+const diasParo = mesData.calendario?.diasParo || {};
+
+const setDiaParo = (keyDia, activo) => {
+  setEstadoPorMes(prev => {
+    const actual = prev[mesActivo] || getMesData(mesActivo);
+    const diasActuales = actual.calendario?.diasParo || {};
+    const nuevosDiasParo = { ...diasActuales };
+
+    if (activo) {
+      nuevosDiasParo[keyDia] = true;
+    } else {
+      delete nuevosDiasParo[keyDia];
+    }
+
+    return {
+      ...prev,
+      [mesActivo]: {
+        ...actual,
+        calendario: {
+          ...actual.calendario,
+          diasParo: nuevosDiasParo
+        }
+      }
+    };
+  });
+};
 
 // 🔹 PERSONAL
 const personal = mesData.personal;
@@ -496,6 +525,8 @@ return (
     mesActivo={mesActivo}
     licencias={licenciasMes}
     calendario={mesData.calendario.enfermeros}
+    esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
+    setDiaParo={setDiaParo}
      onDataReady={setDataPDFEnf}
     fecha={fecha}
     setFecha={setFecha}
@@ -536,6 +567,8 @@ return (
     mesActivo={mesActivo}
     licencias={licenciasMes}
     calendario={mesData.calendario.licenciados}
+    esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
+    setDiaParo={setDiaParo}
     onDataReady={setDataPDFLic}
     fecha={fecha}
     setFecha={setFecha}

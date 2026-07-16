@@ -16,6 +16,8 @@ function CalendarioDiario({
   licencias,
   calendario,
   setCalendario,
+  esDiaParo,
+  setDiaParo,
   onDataReady,
   fecha,
   setFecha
@@ -27,6 +29,7 @@ function CalendarioDiario({
 
 const {
   cambiosDia = {},
+  cambiosParoDia = {},
   noDisponibles = {},
   extras = {}
 } = calendario || {};
@@ -39,6 +42,8 @@ const [nuevoNombre, setNuevoNombre] = useState("");
     sectoresFijos,
     sectoresCriticos,
     sectoresBajaPrioridad,
+    sectoresParo,
+    prioridadesParo,
     turnantes: turnantesLabels,
     posicionesTurnantes,
     ordenVisual
@@ -62,6 +67,8 @@ const [nuevoNombre, setNuevoNombre] = useState("");
 
 const semanaKey = semanaKeyFromDate(fecha, mesActivo);
 const keyDia = keyDiaFromDate(fecha);
+const cambiosActivos = esDiaParo ? cambiosParoDia : cambiosDia;
+const claveCambiosActivos = esDiaParo ? "cambiosParoDia" : "cambiosDia";
 const diaDelMes = fecha.getDate();
 const fechaMinima = `${mesActivo}-01`;
 const [yearMesActivo, monthMesActivo] = mesActivo.split("-").map(Number);
@@ -114,23 +121,28 @@ const estaAusente = useCallback(
 const borrarExtra = (nombre) => {
   const lista = extrasDia;
   const nuevaLista = lista.filter((e) => e?.nombre !== nombre);
-  const cambios = { ...(cambiosDia[keyDia] || {}) };
+  const limpiarCambios = (cambiosPorDia) => {
+    const cambios = { ...(cambiosPorDia[keyDia] || {}) };
 
-  Object.keys(cambios).forEach((sector) => {
-    if (cambios[sector] === nombre) {
-      delete cambios[sector];
-    }
-  });
+    Object.keys(cambios).forEach((sector) => {
+      if (normalizar(cambios[sector]) === normalizar(nombre)) {
+        delete cambios[sector];
+      }
+    });
+
+    return {
+      ...cambiosPorDia,
+      [keyDia]: cambios
+    };
+  };
 
   setCalendario({
     extras: {
       ...extras,
       [keyDia]: nuevaLista
     },
-    cambiosDia: {
-      ...cambiosDia,
-      [keyDia]: cambios
-    }
+    cambiosDia: limpiarCambios(cambiosDia),
+    cambiosParoDia: limpiarCambios(cambiosParoDia)
   });
 };
 
@@ -276,6 +288,111 @@ if (!hayHuecosFinal && sobrantes.length > 0) {
   });
 }
 
+if (esDiaParo) {
+  const candidatos = [];
+  const candidatosSet = new Set();
+  const agregarCandidato = (enfermero) => {
+    if (!enfermero || estaAusente(enfermero)) return;
+
+    const nombreNormalizado = normalizar(enfermero.nombre);
+    if (!nombreNormalizado || candidatosSet.has(nombreNormalizado)) return;
+
+    candidatosSet.add(nombreNormalizado);
+    candidatos.push(enfermero);
+  };
+
+  asignacionFinal.forEach((item) => agregarCandidato(item.enfermero));
+  extrasDia.forEach(agregarCandidato);
+
+  const usadosParo = new Set();
+  const tomarCandidato = (enfermero) => {
+    if (!enfermero) return null;
+
+    const nombreNormalizado = normalizar(enfermero.nombre);
+    if (usadosParo.has(nombreNormalizado)) return null;
+
+    usadosParo.add(nombreNormalizado);
+    return enfermero;
+  };
+  const buscarPorNombre = (nombre) =>
+    candidatos.find((enfermero) => normalizar(enfermero.nombre) === normalizar(nombre));
+  const tomarSobrante = (sectorActual) => {
+    const sectorNormalizado = normalizar(sectorActual);
+
+    for (const candidato of candidatos) {
+      const sectorReservado = reservasParo.get(normalizar(candidato.nombre));
+      if (sectorReservado && sectorReservado !== sectorNormalizado) {
+        continue;
+      }
+
+      const enfermero = tomarCandidato(candidato);
+      if (enfermero) return enfermero;
+    }
+
+    return null;
+  };
+  const cambiosParo = cambiosParoDia[keyDia] || {};
+  const reservasParo = new Map();
+
+  sectoresParo.forEach((sector) => {
+    const override = cambiosParo[normalizar(sector)];
+    const enfermero = override && override !== "__EMPTY__"
+      ? buscarPorNombre(override)
+      : null;
+    const nombreNormalizado = enfermero && normalizar(enfermero.nombre);
+
+    if (nombreNormalizado && !reservasParo.has(nombreNormalizado)) {
+      reservasParo.set(nombreNormalizado, normalizar(sector));
+    }
+  });
+
+  const asignacionParo = sectoresParo.map((sector) => {
+    const override = cambiosParo[normalizar(sector)];
+    let enfermero = null;
+
+    if (override === "__EMPTY__") {
+      return { nombre: sector, enfermero: null, tipo: "sector" };
+    }
+
+    if (override) {
+      enfermero = tomarCandidato(buscarPorNombre(override));
+    } else {
+      for (const sectorPrioritario of prioridadesParo[sector] || []) {
+        const candidatoPrioritario = asignacionFinal.find(
+          (item) => normalizar(item.nombre) === normalizar(sectorPrioritario)
+        )?.enfermero;
+
+        const sectorReservado = candidatoPrioritario &&
+          reservasParo.get(normalizar(candidatoPrioritario.nombre));
+
+        if (sectorReservado && sectorReservado !== normalizar(sector)) {
+          continue;
+        }
+
+        enfermero = tomarCandidato(candidatoPrioritario);
+        if (enfermero) break;
+      }
+    }
+
+    if (!enfermero) enfermero = tomarSobrante(sector);
+
+    return { nombre: sector, enfermero, tipo: "sector" };
+  });
+
+  candidatos.forEach((candidato) => {
+    const enfermero = tomarCandidato(candidato);
+    if (enfermero) {
+      asignacionParo.push({
+        nombre: "SIN ASIGNAR",
+        enfermero,
+        tipo: "sector"
+      });
+    }
+  });
+
+  return asignacionParo;
+}
+
 const resultadoOrdenado = [];
 
 ordenVisual.forEach((item) => {
@@ -301,6 +418,8 @@ ordenVisual.forEach((item) => {
 return resultadoOrdenado;
 }, [
   cambiosDia,
+  cambiosParoDia,
+  esDiaParo,
   estaAusente,
   extrasDia,
   filas,
@@ -311,6 +430,8 @@ return resultadoOrdenado;
   planilla,
   sectoresBajaPrioridad,
   sectoresCriticos,
+  sectoresParo,
+  prioridadesParo,
   semanaKey,
   turnantesLabels
 ]);
@@ -334,14 +455,14 @@ useEffect(() => {
   const handleClick = (item) => {
     if (!item.enfermero) {
       if (seleccionado) {
-        const nuevo = { ...(cambiosDia[keyDia] || {}) };
+        const nuevo = { ...(cambiosActivos[keyDia] || {}) };
 
         nuevo[normalizar(item.nombre)] = seleccionado.enfermero.nombre;
 nuevo[normalizar(seleccionado.nombre)] = "__EMPTY__";
 
       setCalendario({
-  cambiosDia: {
-    ...cambiosDia,
+  [claveCambiosActivos]: {
+    ...cambiosActivos,
     [keyDia]: nuevo
   }
 });
@@ -358,14 +479,14 @@ nuevo[normalizar(seleccionado.nombre)] = "__EMPTY__";
       return;
     }
 
-    const nuevo = { ...(cambiosDia[keyDia] || {}) };
+    const nuevo = { ...(cambiosActivos[keyDia] || {}) };
 
     nuevo[normalizar(item.nombre)] = seleccionado.enfermero.nombre;
 nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
 
     setCalendario({
-  cambiosDia: {
-    ...cambiosDia,
+  [claveCambiosActivos]: {
+    ...cambiosActivos,
     [keyDia]: nuevo
   }
 });
@@ -379,6 +500,7 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
   Distribución diaria
 </h2>
 
+      <div className="flex flex-wrap items-center gap-2">
       <input
   type="date"
   value={`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}-${String(fecha.getDate()).padStart(2, "0")}`}
@@ -396,6 +518,21 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
     setFecha(new Date(y, m - 1, d, 12));
   }}
 />
+      <button
+        type="button"
+        onClick={() => {
+          setSeleccionado(null);
+          setDiaParo(keyDia, !esDiaParo);
+        }}
+        className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+          esDiaParo
+            ? "bg-amber-600 text-white"
+            : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        }`}
+      >
+        Día de paro
+      </button>
+      </div>
 
       <h3>Día {fecha.getDate()}</h3>
 

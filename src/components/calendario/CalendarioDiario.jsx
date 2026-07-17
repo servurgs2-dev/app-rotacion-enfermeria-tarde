@@ -72,7 +72,6 @@ const semanaKey = semanaKeyFromDate(fecha, mesActivo);
 const keyDia = keyDiaFromDate(fecha);
 const cambiosActivos = esDiaParo ? cambiosParoDia : cambiosDia;
 const claveCambiosActivos = esDiaParo ? "cambiosParoDia" : "cambiosDia";
-const diaDelMes = fecha.getDate();
 const fechaMinima = `${mesActivo}-01`;
 const [yearMesActivo, monthMesActivo] = mesActivo.split("-").map(Number);
 const ultimoDiaDelMes = new Date(yearMesActivo, monthMesActivo, 0).getDate();
@@ -83,8 +82,8 @@ const extrasDia = useMemo(
 );
 
 const esLibreReal = useCallback(
-  (e) => esDiaLibre(e, diaDelMes, false),
-  [diaDelMes]
+  (e) => esDiaLibre(e, fecha, false),
+  [fecha]
 );
 
 const libres = useMemo(
@@ -95,9 +94,9 @@ const libres = useMemo(
 const estaLibre = useCallback(
   (e) => {
     const esExtraHoy = extrasDia.some((ex) => ex?.nombre === e?.nombre);
-    return esDiaLibre(e, diaDelMes, esExtraHoy);
+    return esDiaLibre(e, fecha, esExtraHoy);
   },
-  [diaDelMes, extrasDia]
+  [fecha, extrasDia]
 );
 
 const estaDeLicenciaHoy = useCallback(

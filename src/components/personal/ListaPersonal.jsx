@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { normalizar } from "../../utils/texto";
+import { obtenerDiasLibresDelMes } from "../../utils/fechas";
 
-function ListaPersonal({ personal, setPersonal }) {
+function ListaPersonal({ personal, setPersonal, mesActivo }) {
   const [nombre, setNombre] = useState("");
   const [categoria, setCategoria] = useState("enfermero");
   const [rol, setRol] = useState("titular");
@@ -11,6 +12,30 @@ function ListaPersonal({ personal, setPersonal }) {
   const [funcionario, setFuncionario] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [errorNombre, setErrorNombre] = useState("");
+
+  const formatearDias = (dias) => {
+    if (dias.length === 0) return "Sin días";
+    if (dias.length === 1) return String(dias[0]);
+    if (dias.length === 2) return `${dias[0]} y ${dias[1]}`;
+
+    return `${dias.slice(0, -1).join(", ")} y ${dias[dias.length - 1]}`;
+  };
+
+  const nombreMes = (() => {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mesActivo || "")) return "";
+
+    const [anio, mes] = mesActivo.split("-").map(Number);
+    const nombre = new Intl.DateTimeFormat("es-UY", { month: "long" }).format(
+      new Date(anio, mes - 1, 1, 12)
+    );
+
+    return nombre.charAt(0).toUpperCase() + nombre.slice(1);
+  })();
+
+  const textoDiasGrupo = (grupo) => {
+    const dias = obtenerDiasLibresDelMes(grupo, mesActivo);
+    return nombreMes ? `${nombreMes}: ${formatearDias(dias)}` : "";
+  };
 
   const agregar = () => {
     const nombreLimpio = nombre.trim();
@@ -108,10 +133,10 @@ function ListaPersonal({ personal, setPersonal }) {
           <option value="suplente">Suplente</option>
         </select>
 
-        <select className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm" value={libre} onChange={(e) => setLibre(e.target.value)}>
+        <select className="max-w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm" value={libre} onChange={(e) => setLibre(e.target.value)}>
           {[1, 2, 3, 4, 5].map((n) => (
             <option key={n} value={n}>
-              Libre {n}
+              Grupo {n} — {textoDiasGrupo(n)}
             </option>
           ))}
         </select>
@@ -161,7 +186,7 @@ function ListaPersonal({ personal, setPersonal }) {
         <th className="px-3 py-2 text-left">Nombre</th>
         <th className="px-3 py-2 text-left">Categoría</th>
         <th className="px-3 py-2 text-left">Rol</th>
-        <th className="px-3 py-2 text-left">Libre</th>
+        <th className="px-3 py-2 text-left">Grupo 4x1</th>
         <th className="px-3 py-2 text-left">Horario</th>
         <th className="px-3 py-2 text-left">M</th>
         <th className="px-3 py-2 text-left">Func.</th>
@@ -229,9 +254,12 @@ function ListaPersonal({ personal, setPersonal }) {
     }}
   >
     {[1,2,3,4,5].map(n => (
-      <option key={n} value={n}>L{n}</option>
+      <option key={n} value={n}>Grupo {n}</option>
     ))}
   </select>
+  <p className="mt-1 max-w-48 text-xs leading-4 text-slate-500">
+    {textoDiasGrupo(p.libre)}
+  </p>
 </td>
 
 <td className="px-3 py-2">

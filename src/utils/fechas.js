@@ -65,9 +65,54 @@ export const estaCertificado = (certificaciones, nombre, fecha) =>
     return fecha >= desde && fecha <= hasta;
   });
 
-export const esDiaLibre = (persona, diaDelMes, esExtraHoy = false) => {
-  if (!persona || persona.libre == null) return false;
+// El 1/7/2026 es la referencia institucional de las cinco fases del régimen 4 y 1.
+const FECHA_BASE_LIBRES_UTC = Date.UTC(2026, 6, 1);
+const MILISEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
+
+export const esDiaLibre = (persona, fecha, esExtraHoy = false) => {
+  const fasePersona = Number(persona?.libre);
+
+  if (
+    !persona ||
+    !(fecha instanceof Date) ||
+    Number.isNaN(fecha.getTime()) ||
+    !Number.isInteger(fasePersona) ||
+    fasePersona < 1 ||
+    fasePersona > 5
+  ) {
+    return false;
+  }
   if (esExtraHoy) return false;
 
-  return ((diaDelMes - persona.libre) % 5 + 5) % 5 === 0;
+  const fechaUTC = Date.UTC(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+  const diasDesdeBase = (fechaUTC - FECHA_BASE_LIBRES_UTC) / MILISEGUNDOS_POR_DIA;
+  const fase = ((diasDesdeBase % 5) + 5) % 5 + 1;
+
+  return fase === fasePersona;
+};
+
+export const obtenerDiasLibresDelMes = (valorLibre, mesActivo) => {
+  const grupo = Number(valorLibre);
+
+  if (
+    !Number.isInteger(grupo) ||
+    grupo < 1 ||
+    grupo > 5 ||
+    !/^\d{4}-(0[1-9]|1[0-2])$/.test(mesActivo || "")
+  ) {
+    return [];
+  }
+
+  const [anio, mes] = mesActivo.split("-").map(Number);
+  const ultimoDia = new Date(anio, mes, 0).getDate();
+  const diasLibres = [];
+
+  for (let dia = 1; dia <= ultimoDia; dia += 1) {
+    const fecha = new Date(anio, mes - 1, dia, 12);
+    if (esDiaLibre({ libre: grupo }, fecha)) {
+      diasLibres.push(dia);
+    }
+  }
+
+  return diasLibres;
 };

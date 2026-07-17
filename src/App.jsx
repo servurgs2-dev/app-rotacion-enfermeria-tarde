@@ -420,17 +420,10 @@ return (
   setMesActivo(nuevoMes);
 
   const [year, month] = nuevoMes.split("-").map(Number);
-  const fechaPerteneceAlMes =
-    fecha.getFullYear() === year && fecha.getMonth() === month - 1;
+  const ultimoDiaDelNuevoMes = new Date(year, month, 0).getDate();
+  const diaSeleccionado = Math.min(fecha.getDate(), ultimoDiaDelNuevoMes);
 
-  if (!fechaPerteneceAlMes) {
-    const nuevaFecha =
-      nuevoMes === mesActual
-        ? new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 12)
-        : new Date(year, month - 1, 1, 12);
-
-    setFecha(nuevaFecha);
-  }
+  setFecha(new Date(year, month - 1, diaSeleccionado, 12));
 }}
     className="border border-slate-300 rounded-lg px-3 py-2 text-sm shadow-sm"
   />
@@ -442,6 +435,7 @@ return (
       <Seccion titulo="👥 Personal" className="order-3">
         <ListaPersonal
           personal={personal}
+          mesActivo={mesActivo}
           setPersonal={(nuevo) => {
             setEstadoPorMes(prev => ({
               ...prev,

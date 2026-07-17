@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ListaPersonal from "./components/personal/ListaPersonal";
 import PlanillaMensual from "./components/planilla/PlanillaMensual";
 import CalendarioDiario from "./components/calendario/CalendarioDiario";
@@ -10,6 +10,7 @@ import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
 import { generarAlertasHorarios } from "./utils/alertasHorarios";
 
+const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
 
 function App() {
@@ -23,8 +24,16 @@ const [tabPlanilla, setTabPlanilla] = useState("enfermeros");
 const [tabCalendario, setTabCalendario] = useState("enfermeros");
 
 const [fecha, setFecha] = useState(new Date());
-const timeoutRef = useRef(null);
-const ultimaSolicitudGuardadoRef = useRef(0);
+const debouncesGuardadoRef = useRef(new Map());
+const colaGuardadoRef = useRef(new Map());
+const versionesGuardadoRef = useRef(new Map());
+const mesesConErrorGuardadoRef = useRef(new Set());
+const guardadoEnCursoRef = useRef(false);
+const procesarColaGuardadoRef = useRef(null);
+const referenciasEstadoRef = useRef(new Map());
+const mesesCargadosRef = useRef(new Set());
+const cargandoRef = useRef(true);
+const cargaActualRef = useRef(0);
 const [cargando, setCargando] = useState(true);
 const [estadoGuardado, setEstadoGuardado] = useState("loading");
 
@@ -128,7 +137,7 @@ const certificacionesMes = mesData.certificaciones || [];
 
 const semanas = obtenerSemanasDelMes(mesActivo);
 
-const guardarMes = async (mes, data) => {
+const guardarMes = useCallback(async (mes, data) => {
   if (!data) return null;
 
   const { error } = await supabase
@@ -136,27 +145,115 @@ const guardarMes = async (mes, data) => {
     .upsert({ mes, data }, { onConflict: "mes" });
 
   return error;
-};
+}, []);
+
+const actualizarEstadoGuardadoDesdeCola = useCallback(() => {
+  if (guardadoEnCursoRef.current) {
+    setEstadoGuardado("saving");
+    return;
+  }
+
+  if (colaGuardadoRef.current.size > 0) {
+    const hayPendientesReintentables = [...colaGuardadoRef.current.keys()].some(
+      (mes) => !mesesConErrorGuardadoRef.current.has(mes)
+    );
+    setEstadoGuardado(hayPendientesReintentables ? "saving" : "error");
+    return;
+  }
+
+  setEstadoGuardado(
+    mesesConErrorGuardadoRef.current.size > 0
+      ? "error"
+      : cargandoRef.current
+        ? "loading"
+        : "saved"
+  );
+}, []);
+
+const encolarGuardado = useCallback((mes, data) => {
+  const version = (versionesGuardadoRef.current.get(mes) || 0) + 1;
+  versionesGuardadoRef.current.set(mes, version);
+  colaGuardadoRef.current.set(mes, {
+    data: crearInstantanea(data),
+    version
+  });
+  mesesConErrorGuardadoRef.current.delete(mes);
+  setEstadoGuardado("saving");
+  procesarColaGuardadoRef.current?.();
+}, []);
+
+const procesarColaGuardado = useCallback(async () => {
+  if (guardadoEnCursoRef.current) return;
+
+  const siguiente = [...colaGuardadoRef.current.entries()].find(
+    ([mes]) => !mesesConErrorGuardadoRef.current.has(mes)
+  );
+
+  if (!siguiente) {
+    actualizarEstadoGuardadoDesdeCola();
+    return;
+  }
+
+  const [mes, pendiente] = siguiente;
+  colaGuardadoRef.current.delete(mes);
+  guardadoEnCursoRef.current = true;
+  setEstadoGuardado("saving");
+
+  let error;
+  try {
+    error = await guardarMes(mes, pendiente.data);
+  } catch {
+    error = new Error("No se pudo guardar el estado mensual.");
+  } finally {
+    guardadoEnCursoRef.current = false;
+  }
+
+  if (error) {
+    const pendienteMasNuevo = colaGuardadoRef.current.get(mes);
+
+    if (!pendienteMasNuevo || pendienteMasNuevo.version <= pendiente.version) {
+      colaGuardadoRef.current.set(mes, pendiente);
+      mesesConErrorGuardadoRef.current.add(mes);
+    }
+  }
+
+  procesarColaGuardadoRef.current?.();
+}, [actualizarEstadoGuardadoDesdeCola, guardarMes]);
+
+useEffect(() => {
+  procesarColaGuardadoRef.current = procesarColaGuardado;
+}, [procesarColaGuardado]);
+
+useEffect(() => {
+  cargandoRef.current = cargando;
+}, [cargando]);
 
 useEffect(() => {
   if (cargando) return;
 
-  clearTimeout(timeoutRef.current);
+  Object.entries(estadoPorMes).forEach(([mes, data]) => {
+    if (referenciasEstadoRef.current.get(mes) === data) return;
 
-  timeoutRef.current = setTimeout(async () => {
-    const mesData = estadoPorMes[mesActivo];
-    if (!mesData) return;
+    referenciasEstadoRef.current.set(mes, data);
 
-    const solicitudId = ultimaSolicitudGuardadoRef.current + 1;
-    ultimaSolicitudGuardadoRef.current = solicitudId;
+    if (mesesCargadosRef.current.delete(mes)) return;
 
-    setEstadoGuardado("saving");
-    const error = await guardarMes(mesActivo, mesData);
-    if (solicitudId === ultimaSolicitudGuardadoRef.current) {
-      setEstadoGuardado(error ? "error" : "saved");
-    }
-  }, 500);
-}, [estadoPorMes, mesActivo, cargando]);
+    clearTimeout(debouncesGuardadoRef.current.get(mes));
+    const timeout = setTimeout(() => {
+      if (debouncesGuardadoRef.current.get(mes) !== timeout) return;
+
+      debouncesGuardadoRef.current.delete(mes);
+
+      encolarGuardado(mes, data);
+    }, 500);
+
+    debouncesGuardadoRef.current.set(mes, timeout);
+  });
+}, [estadoPorMes, cargando, encolarGuardado]);
+
+useEffect(() => () => {
+  debouncesGuardadoRef.current.forEach((timeout) => clearTimeout(timeout));
+}, []);
 
 const setPlanillaEnfermeros = (nueva) => {
   setEstadoPorMes(prev => {
@@ -201,9 +298,10 @@ const setPlanillaLicenciados = (nueva) => {
 
 useEffect(() => {
   const cargar = async () => {
+    const cargaId = cargaActualRef.current + 1;
+    cargaActualRef.current = cargaId;
+    cargandoRef.current = true;
     setCargando(true); // 👈 empieza carga
-
-    ultimaSolicitudGuardadoRef.current += 1;
     setEstadoGuardado("loading");
 
     const { data, error } = await supabase
@@ -212,21 +310,27 @@ useEffect(() => {
       .eq("mes", mesActivo)
       .maybeSingle();
 
+    if (cargaId !== cargaActualRef.current) return;
+
     if (data?.data) {
-      setEstadoPorMes(prev => ({
-        ...prev,
-        [mesActivo]: data.data
-      }));
+      setEstadoPorMes(prev => {
+        if (prev[mesActivo]) return prev;
+
+        mesesCargadosRef.current.add(mesActivo);
+        return {
+          ...prev,
+          [mesActivo]: data.data
+        };
+      });
     }
 
+    cargandoRef.current = false;
     setCargando(false); // 👈 termina carga
-    if (!error) {
-      setEstadoGuardado("saved");
-    }
+    if (!error) actualizarEstadoGuardadoDesdeCola();
   };
 
   cargar();
-}, [mesActivo]);
+}, [mesActivo, actualizarEstadoGuardadoDesdeCola]);
 
 const copiarMesAnterior = async () => {
   const [year, month] = mesActivo.split("-").map(Number);
@@ -312,6 +416,7 @@ return (
     return;
   }
 
+  cargaActualRef.current += 1;
   setMesActivo(nuevoMes);
 
   const [year, month] = nuevoMes.split("-").map(Number);

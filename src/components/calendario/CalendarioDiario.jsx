@@ -315,7 +315,119 @@ const sobrantes = [...personalFiltrado, ...extrasDia].filter((e) => {
   return true;
 });
 
-if (!hayHuecosFinal && sobrantes.length > 0) {
+const filaReanimacionSillones = asignacionFinal.find(
+  (item) => normalizar(item.nombre) === normalizar("Reanimación + Sillones")
+);
+const seDivideReanimacionSillones =
+  tipo === "licenciado" &&
+  !esDiaParo &&
+  !hayHuecosFinal &&
+  Boolean(filaReanimacionSillones?.enfermero) &&
+  sobrantes.length > 0;
+
+let asignacionParaMostrar = asignacionFinal;
+let ordenVisualActivo = ordenVisual;
+
+if (seDivideReanimacionSillones) {
+  const filasDivididas = [
+    {
+      nombre: "Reanimación",
+      enfermero: filaReanimacionSillones.enfermero,
+      tipo: "sector"
+    },
+    {
+      nombre: "Sillones",
+      enfermero: sobrantes[0],
+      tipo: "sector"
+    },
+    ...sobrantes.slice(1).map((enfermero) => ({
+      nombre: "SIN ASIGNAR",
+      enfermero,
+      tipo: "sector"
+    }))
+  ];
+
+  asignacionParaMostrar = [
+    ...asignacionFinal.filter(
+      (item) => normalizar(item.nombre) !== normalizar("Reanimación + Sillones")
+    ),
+    ...filasDivididas
+  ];
+
+  const cambiosDivididos = cambiosDia[keyDia] || {};
+  const nombresFilasDivididas = ["Reanimación", "Sillones"];
+  const operaciones = [];
+  const personasSolicitadas = new Set();
+
+  nombresFilasDivididas.forEach((nombreFila) => {
+    const destino = asignacionParaMostrar.find(
+      (item) => normalizar(item.nombre) === normalizar(nombreFila)
+    );
+    const nombreSolicitado = cambiosDivididos[normalizar(nombreFila)];
+
+    if (!destino || !nombreSolicitado || nombreSolicitado === "__EMPTY__") return;
+
+    const enfermero = asignacionParaMostrar.find(
+      (item) => normalizar(item.enfermero?.nombre) === normalizar(nombreSolicitado)
+    )?.enfermero;
+    const nombreNormalizado = enfermero && normalizar(enfermero.nombre);
+
+    if (!enfermero || personasSolicitadas.has(nombreNormalizado)) return;
+
+    const fuente = asignacionParaMostrar.find(
+      (item) => normalizar(item.enfermero?.nombre) === nombreNormalizado
+    );
+
+    if (!fuente) return;
+
+    personasSolicitadas.add(nombreNormalizado);
+    operaciones.push({ destino, fuente, enfermero, desplazado: destino.enfermero });
+  });
+
+  const destinosConCambio = new Set(
+    operaciones.map(({ destino }) => normalizar(destino.nombre))
+  );
+
+  operaciones.forEach(({ fuente }) => {
+    fuente.enfermero = null;
+  });
+
+  operaciones.forEach(({ destino, enfermero }) => {
+    destino.enfermero = enfermero;
+  });
+
+  const personasParaReubicar = operaciones
+    .map(({ desplazado }) => desplazado)
+    .filter((enfermero) =>
+      enfermero && !personasSolicitadas.has(normalizar(enfermero.nombre))
+    );
+  const nombresYaAsignados = new Set(
+    asignacionParaMostrar
+      .map((item) => item.enfermero?.nombre)
+      .filter(Boolean)
+      .map(normalizar)
+  );
+
+  operaciones.forEach(({ fuente }) => {
+    if (destinosConCambio.has(normalizar(fuente.nombre)) || fuente.enfermero) return;
+
+    const indiceReubicacion = personasParaReubicar.findIndex(
+      (enfermero) => !nombresYaAsignados.has(normalizar(enfermero.nombre))
+    );
+    const enfermero = personasParaReubicar[indiceReubicacion];
+
+    if (enfermero) {
+      fuente.enfermero = enfermero;
+      nombresYaAsignados.add(normalizar(enfermero.nombre));
+    }
+  });
+
+  ordenVisualActivo = ordenVisual.flatMap((item) =>
+    normalizar(item) === normalizar("Reanimación + Sillones")
+      ? ["Reanimación", "Sillones"]
+      : [item]
+  );
+} else if (!hayHuecosFinal && sobrantes.length > 0) {
   asignacionFinal.push({
     nombre: "SILLONES 3",
     enfermero: sobrantes[0]
@@ -436,11 +548,11 @@ if (esDiaParo) {
 
 const resultadoOrdenado = [];
 
-ordenVisual.forEach((item) => {
+ordenVisualActivo.forEach((item) => {
   if (item === "DIVIDER") {
     resultadoOrdenado.push({ tipo: "divider" });
   } else {
-    const encontrados = asignacionFinal.filter(
+    const encontrados = asignacionParaMostrar.filter(
       (a) => normalizar(a.nombre) === normalizar(item)
     );
 
@@ -475,6 +587,7 @@ return resultadoOrdenado;
   sectoresParo,
   prioridadesParo,
   semanaKey,
+  tipo,
   turnantesLabels
 ]);
 
@@ -496,6 +609,57 @@ useEffect(() => {
 }, [asignacionOrdenada, keyDia, libres, onDataReady]);
 
   const handleClick = (item) => {
+    const esFilaDividida = (fila) =>
+      tipo === "licenciado" &&
+      !esDiaParo &&
+      fila &&
+      ["REANIMACION", "SILLONES"].includes(normalizar(fila.nombre)) &&
+      asignacionOrdenada.some(
+        (asignacion) => normalizar(asignacion.nombre) === normalizar(fila.nombre)
+      );
+
+    if (esFilaDividida(item) || esFilaDividida(seleccionado)) {
+      if (!item.enfermero) {
+        if (seleccionado && esFilaDividida(item)) {
+          const nuevo = { ...(cambiosDia[keyDia] || {}) };
+          nuevo[normalizar(item.nombre)] = seleccionado.enfermero.nombre;
+
+          setCalendario({
+            cambiosDia: {
+              ...cambiosDia,
+              [keyDia]: nuevo
+            }
+          });
+          setSeleccionado(null);
+        }
+        return;
+      }
+
+      if (!seleccionado) {
+        setSeleccionado(item);
+        return;
+      }
+
+      const nuevo = { ...(cambiosDia[keyDia] || {}) };
+
+      if (esFilaDividida(item)) {
+        nuevo[normalizar(item.nombre)] = seleccionado.enfermero.nombre;
+      }
+
+      if (esFilaDividida(seleccionado)) {
+        nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
+      }
+
+      setCalendario({
+        cambiosDia: {
+          ...cambiosDia,
+          [keyDia]: nuevo
+        }
+      });
+      setSeleccionado(null);
+      return;
+    }
+
     if (!item.enfermero) {
       if (seleccionado) {
         const nuevo = { ...(cambiosActivos[keyDia] || {}) };

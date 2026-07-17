@@ -15,7 +15,7 @@ export const gruposOperativos = [
   },
   {
     nombre: "Reanimación y Sillones",
-    licenciados: ["Reanimación + Sillones"],
+    licenciados: ["Reanimación + Sillones", "Reanimación", "Sillones"],
     enfermeros: ["REA 1", "REA 2", "SILLÓN 1", "SILLON 2", "SILLONES 3"]
   },
   {

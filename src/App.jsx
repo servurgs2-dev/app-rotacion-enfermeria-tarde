@@ -4,6 +4,7 @@ import PlanillaMensual from "./components/planilla/PlanillaMensual";
 import CalendarioDiario from "./components/calendario/CalendarioDiario";
 import Seccion from "./components/ui/Seccion";
 import Licencias from "./components/licencias/Licencias";
+import Certificaciones from "./components/certificaciones/Certificaciones";
 import { supabase } from "./supabase";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
@@ -63,7 +64,8 @@ const getMesData = (mes) => {
         noDisponibles: {}
       }
     }, // 👈 ESTA COMA FALTABA
-    licencias: []
+    licencias: [],
+    certificaciones: []
   };
 };
 
@@ -122,6 +124,7 @@ const planillaLicenciados = mesData.planillas.licenciados;
 // 🔹 LICENCIAS
 
 const licenciasMes = mesData.licencias;
+const certificacionesMes = mesData.certificaciones || [];
 
 const semanas = obtenerSemanasDelMes(mesActivo);
 
@@ -490,6 +493,22 @@ return (
         />
       </Seccion>
 
+      <Seccion titulo="🩺 Certificaciones médicas" className="order-4">
+        <Certificaciones
+          personal={personal}
+          certificaciones={certificacionesMes}
+          setCertificaciones={(nuevas) => {
+            setEstadoPorMes(prev => ({
+              ...prev,
+              [mesActivo]: {
+                ...getMesData(mesActivo),
+                certificaciones: nuevas
+              }
+            }));
+          }}
+        />
+      </Seccion>
+
       <div id="calendario-pdf" className="order-1">
         
         <Seccion titulo="📅 Calendario diario" defaultAbierto>
@@ -552,6 +571,7 @@ return (
     tipo="enfermero"
     mesActivo={mesActivo}
     licencias={licenciasMes}
+    certificaciones={certificacionesMes}
     calendario={mesData.calendario.enfermeros}
     esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
     setDiaParo={setDiaParo}
@@ -594,6 +614,7 @@ return (
     tipo="licenciado"
     mesActivo={mesActivo}
     licencias={licenciasMes}
+    certificaciones={certificacionesMes}
     calendario={mesData.calendario.licenciados}
     esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
     setDiaParo={setDiaParo}

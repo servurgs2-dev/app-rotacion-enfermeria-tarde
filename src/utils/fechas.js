@@ -55,6 +55,16 @@ export const estaDeLicencia = (licencias, nombre, fecha) =>
     return fecha >= desde && fecha <= hasta;
   });
 
+export const estaCertificado = (certificaciones, nombre, fecha) =>
+  (certificaciones || []).some((certificacion) => {
+    if (certificacion.nombre !== nombre) return false;
+
+    const desde = parsearFechaLocal(certificacion.desde);
+    const hasta = parsearFechaLocal(certificacion.hasta);
+
+    return fecha >= desde && fecha <= hasta;
+  });
+
 export const esDiaLibre = (persona, diaDelMes, esExtraHoy = false) => {
   if (!persona || persona.libre == null) return false;
   if (esExtraHoy) return false;

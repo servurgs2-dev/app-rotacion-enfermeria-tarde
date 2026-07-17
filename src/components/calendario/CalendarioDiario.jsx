@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { configuracionSectores } from "../../data/sectores";
 import {
+  estaCertificado,
   estaDeLicencia,
   esDiaLibre,
   keyDiaFromDate,
@@ -14,6 +15,7 @@ function CalendarioDiario({
   tipo,
   mesActivo,
   licencias,
+  certificaciones,
   calendario,
   setCalendario,
   esDiaParo,
@@ -102,6 +104,20 @@ const estaDeLicenciaHoy = useCallback(
   [fecha, licencias]
 );
 
+const estaCertificadoHoy = useCallback(
+  (e) => e && estaCertificado(certificaciones, e.nombre, fecha),
+  [certificaciones, fecha]
+);
+
+const certificados = useMemo(
+  () => [...new Map(
+    personalFiltrado
+      .filter(estaCertificadoHoy)
+      .map((persona) => [normalizar(persona.nombre), persona])
+  ).values()],
+  [estaCertificadoHoy, personalFiltrado]
+);
+
   const estaNoDisponible = useCallback(
     (e) => e && (noDisponibles[keyDia] || []).includes(e.nombre),
     [keyDia, noDisponibles]
@@ -113,9 +129,10 @@ const estaAusente = useCallback(
     (
       (esLibreReal(e) && !extrasDia.some((ex) => ex?.nombre === e.nombre)) ||
       estaNoDisponible(e) ||
-      estaDeLicenciaHoy(e)
+      estaDeLicenciaHoy(e) ||
+      estaCertificadoHoy(e)
     ),
-  [esLibreReal, estaDeLicenciaHoy, estaNoDisponible, extrasDia]
+  [esLibreReal, estaCertificadoHoy, estaDeLicenciaHoy, estaNoDisponible, extrasDia]
 );
 
 const borrarExtra = (nombre) => {
@@ -608,6 +625,21 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
       </button>
     );
   })}
+</div>
+
+<h4 className="text-sm font-semibold text-slate-700">Certificados</h4>
+
+<div className="flex flex-wrap gap-2">
+  {certificados.length > 0 ? certificados.map((persona) => (
+    <span
+      key={persona.nombre}
+      className="bg-rose-100 px-3 py-1.5 rounded-lg text-sm text-rose-800"
+    >
+      {persona.nombre}
+    </span>
+  )) : (
+    <span className="text-sm text-slate-500">Ninguno</span>
+  )}
 </div>
 
 <h4 className="text-sm font-semibold text-slate-700">

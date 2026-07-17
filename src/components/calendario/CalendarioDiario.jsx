@@ -44,6 +44,7 @@ const [nuevoNombre, setNuevoNombre] = useState("");
     sectoresFijos,
     sectoresCriticos,
     sectoresBajaPrioridad,
+    prioridadSectores,
     sectoresParo,
     prioridadesParo,
     turnantes: turnantesLabels,
@@ -254,22 +255,45 @@ asignacionBase.forEach((item) => {
   }
 });
 
-  sectoresCriticos.forEach((critico) => {
-    const c = asignacionBase.find((a) => a.nombre === critico);
+  if (esDiaParo) {
+    sectoresCriticos.forEach((critico) => {
+      const sectorCritico = asignacionBase.find((item) => item.nombre === critico);
 
-    if (c && !c.enfermero) {
-      for (let s of sectoresBajaPrioridad) {
-        const d = asignacionBase.find((a) => a.nombre === s);
+      if (sectorCritico && !sectorCritico.enfermero) {
+        for (const sectorBajaPrioridad of sectoresBajaPrioridad) {
+          const donante = asignacionBase.find((item) => item.nombre === sectorBajaPrioridad);
 
-  if (d?.enfermero && !estaAusente(d.enfermero)) {
-  c.enfermero = d.enfermero;
-  d.enfermero = null;
-  d.sacrificado = true;
-  break;
-}
+          if (donante?.enfermero && !estaAusente(donante.enfermero)) {
+            sectorCritico.enfermero = donante.enfermero;
+            donante.enfermero = null;
+            donante.sacrificado = true;
+            break;
+          }
+        }
       }
-    }
-  });
+    });
+  } else {
+    prioridadSectores.forEach((sector, indiceSector) => {
+      const destino = asignacionBase.find(
+        (item) => normalizar(item.nombre) === normalizar(sector)
+      );
+
+      if (!destino || destino.enfermero) return;
+
+      for (let indiceDonante = prioridadSectores.length - 1; indiceDonante > indiceSector; indiceDonante--) {
+        const donante = asignacionBase.find(
+          (item) => normalizar(item.nombre) === normalizar(prioridadSectores[indiceDonante])
+        );
+
+        if (donante?.enfermero && !estaAusente(donante.enfermero)) {
+          destino.enfermero = donante.enfermero;
+          donante.enfermero = null;
+          donante.sacrificado = true;
+          break;
+        }
+      }
+    });
+  }
 
   const asignacionFinal = asignacionBase;
 
@@ -447,6 +471,7 @@ return resultadoOrdenado;
   planilla,
   sectoresBajaPrioridad,
   sectoresCriticos,
+  prioridadSectores,
   sectoresParo,
   prioridadesParo,
   semanaKey,

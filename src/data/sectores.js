@@ -12,6 +12,23 @@ export const configuracionSectores = {
       "8-13", "4-7", "SILLÓN 1", "14-19", "20-22-24", "SM"
     ],
     sectoresBajaPrioridad: ["REA 2", "PRE INT 2", "EXPLORA 2", "SILLON 2"],
+    prioridadSectores: [
+      "REA 1",
+      "1-3 + 21",
+      "4-7",
+      "8-13",
+      "14-19",
+      "20-22-24",
+      "DX 25-30",
+      "SILLÓN 1",
+      "EXPLORA 1",
+      "PRE INT 1",
+      "SM",
+      "PRE INT 2",
+      "SILLON 2",
+      "EXPLORA 2",
+      "REA 2"
+    ],
     sectoresParo: [
       "1 al 3 + 19 al 22",
       "4 al 10",
@@ -53,6 +70,18 @@ export const configuracionSectores = {
     posicionesTurnantes: [1, 7, 10],
     sectoresCriticos: ["Triage 1", "Estabiliza", "Reanimación + Sillones"],
     sectoresBajaPrioridad: ["Observación 2", "Preinternación", "Salud Mental"],
+    prioridadSectores: [
+      "Triage 1",
+      "Estabiliza",
+      "Reanimación + Sillones",
+      "Observación 1",
+      "Observación 2",
+      "Diagnóstico",
+      "Preinternación",
+      "Triage 2",
+      "Salud Mental",
+      "Explora"
+    ],
     sectoresParo: [
       "Triage",
       "Reanimación + Sillones",

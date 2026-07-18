@@ -7,25 +7,35 @@ export const keyDiaFromDate = (fecha) =>
   `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}-${String(fecha.getDate()).padStart(2, "0")}`;
 
 export const obtenerSemanasDelMes = (mesActivo) => {
-  if (!mesActivo) return [];
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mesActivo || "")) return [];
 
   const [year, month] = mesActivo.split("-").map(Number);
-  const primerDia = new Date(year, month - 1, 1);
+  const primerDia = new Date(year, month - 1, 1, 12);
+  const ultimoDiaDelMes = new Date(year, month, 0, 12);
 
   const inicio = new Date(primerDia);
   const dia = inicio.getDay();
   inicio.setDate(inicio.getDate() - (dia === 0 ? 6 : dia - 1));
 
-  const semanas = [];
-
-  for (let i = 0; i < 5; i++) {
+  const crearSemana = (indice) => {
     const desde = new Date(inicio);
-    desde.setDate(inicio.getDate() + i * 7);
+    desde.setDate(inicio.getDate() + indice * 7);
 
     const hasta = new Date(desde);
     hasta.setDate(desde.getDate() + 6);
 
-    semanas.push({ desde, hasta });
+    return {
+      clave: `semana${indice + 1}`,
+      indice,
+      desde,
+      hasta
+    };
+  };
+
+  const semanas = Array.from({ length: 5 }, (_, indice) => crearSemana(indice));
+
+  if (semanas[4].hasta < ultimoDiaDelMes) {
+    semanas.push(crearSemana(5));
   }
 
   return semanas;
@@ -35,14 +45,16 @@ export const obtenerIniciosSemana = (mesActivo) =>
   obtenerSemanasDelMes(mesActivo).map((s) => s.desde);
 
 export const semanaKeyFromDate = (fecha, mesActivo) => {
-  const semanas = obtenerIniciosSemana(mesActivo);
-  const semanaIndex = semanas.findIndex((inicioSemana) => {
-    const fin = new Date(inicioSemana);
-    fin.setDate(fin.getDate() + 6);
-    return fecha >= inicioSemana && fecha <= fin;
+  if (!(fecha instanceof Date) || Number.isNaN(fecha.getTime())) return null;
+
+  const fechaUTC = Date.UTC(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+  const semana = obtenerSemanasDelMes(mesActivo).find(({ desde, hasta }) => {
+    const desdeUTC = Date.UTC(desde.getFullYear(), desde.getMonth(), desde.getDate());
+    const hastaUTC = Date.UTC(hasta.getFullYear(), hasta.getMonth(), hasta.getDate());
+    return fechaUTC >= desdeUTC && fechaUTC <= hastaUTC;
   });
 
-  return semanaIndex === -1 ? "semana1" : `semana${semanaIndex + 1}`;
+  return semana?.clave || null;
 };
 
 export const estaDeLicencia = (licencias, nombre, fecha) =>

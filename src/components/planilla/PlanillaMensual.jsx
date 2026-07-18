@@ -1,171 +1,136 @@
-
 import { configuracionSectores } from "../../data/sectores";
 import { estaDeLicencia, obtenerSemanasDelMes } from "../../utils/fechas";
 
 function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mesActivo }) {
-
-    const personalFiltrado = personal.filter(
-  (p) => p.categoria === tipo
-);
-
-const { sectoresFijos, turnantes, posicionesTurnantes } = configuracionSectores[tipo];
+  const personalFiltrado = personal.filter((p) => p.categoria === tipo);
+  const { sectoresFijos, turnantes, posicionesTurnantes } = configuracionSectores[tipo];
+  const semanas = obtenerSemanasDelMes(mesActivo);
 
   const filas = [];
   let tIndex = 0;
 
-  sectoresFijos.forEach((s, i) => {
-    filas.push(s);
-    if (posicionesTurnantes.includes(i)) {
+  sectoresFijos.forEach((sector, indice) => {
+    filas.push(sector);
+    if (posicionesTurnantes.includes(indice)) {
       filas.push(turnantes[tIndex]);
-      tIndex++;
+      tIndex += 1;
     }
   });
 
   function rotarArray(array, pasos) {
     const copia = [...array];
-    for (let i = 0; i < pasos; i++) {
+    for (let indice = 0; indice < pasos; indice += 1) {
       copia.unshift(copia.pop());
     }
     return copia;
   }
 
   function mapear(array) {
-    const obj = {};
-    filas.forEach((f, i) => {
-      obj[f] = array[i];
+    const resultado = {};
+    filas.forEach((fila, indice) => {
+      resultado[fila] = array[indice];
     });
-    return obj;
+    return resultado;
   }
 
   function generarMes() {
-    const base = filas.map(f => planilla.semana1?.[f] || "");
+    const base = filas.map((fila) => planilla?.semana1?.[fila] || "");
+    const nuevaPlanilla = {
+      ...planilla,
+      semana1: planilla?.semana1 || {},
+      semana6: planilla?.semana6 || {}
+    };
 
-    setPlanilla({
-      semana1: planilla.semana1,
-      semana2: mapear(rotarArray(base, 1)),
-      semana3: mapear(rotarArray(base, 2)),
-      semana4: mapear(rotarArray(base, 3)),
-      semana5: mapear(rotarArray(base, 4))
+    semanas.slice(1).forEach((semana, indice) => {
+      nuevaPlanilla[semana.clave] = mapear(rotarArray(base, indice + 1));
     });
+
+    setPlanilla(nuevaPlanilla);
   }
 
-  
   function actualizarCelda(semana, sector, valor) {
-    setPlanilla(prev => ({
+    setPlanilla((prev) => ({
       ...prev,
       [semana]: {
-        ...(prev?.[semana] ||{}),
+        ...(prev?.[semana] || {}),
         [sector]: valor
       }
     }));
   }
 
-const semanas = obtenerSemanasDelMes(mesActivo);
-
-//return principal
-return (
+  return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-slate-800">
-  Planilla Mensual
-</h2>
-<div className="overflow-x-auto">
-      <table className="min-w-[900px] border border-slate-200 rounded-xl overflow-hidden text-sm table-auto">
-<thead className="bg-slate-100 text-slate-700">
-  <tr>
-    <th className="px-4 py-3 text-left font-semibold">Sector</th>
+      <h2 className="text-lg font-semibold text-slate-800">Planilla Mensual</h2>
 
-    {semanas.map((s, i) => (
-      <th key={i} className="px-4 py-3 text-left font-semibold min-w-[140px] whitespace-nowrap">
-        {`${s.desde.getDate()}/${s.desde.getMonth() + 1} - ${s.hasta.getDate()}/${s.hasta.getMonth() + 1}`}
-      </th>
-    ))}
-  </tr>
-</thead>
-
-        <tbody className="divide-y divide-slate-100">
-          {filas.map((sector) => (
-            <tr key={sector} className="hover:bg-slate-50 transition">
-              <td className="px-4 py-3 font-medium text-slate-700 bg-slate-50 min-w-[180px] whitespace-nowrap">
-  {sector}
-</td>
-
-              {/* SEMANA 1 editable */}
-              <td className="px-3 py-2 min-w-[140px]">
-                <select
-  className="w-[130px] border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  value={planilla.semana1?.[sector] || ""}
-                  onChange={(e) =>
-                    actualizarCelda("semana1", sector, e.target.value)
-                  }
+      <div className="overflow-x-auto">
+        <table className="min-w-[900px] border border-slate-200 rounded-xl overflow-hidden text-sm table-auto">
+          <thead className="bg-slate-100 text-slate-700">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold">Sector</th>
+              {semanas.map((semana) => (
+                <th
+                  key={semana.clave}
+                  className="px-4 py-3 text-left font-semibold min-w-[140px] whitespace-nowrap"
                 >
-                  <option value="">-- elegir --</option>
-
-                  {personalFiltrado
-  .filter((p) => {
-  const usados = Object.values(planilla.semana1 ||{});
-
-  const disponible =
-    !usados.includes(p.nombre) ||
-    planilla.semana1?.[sector] === p.nombre;
-
-const noLicencia = !estaDeLicencia(licencias, p.nombre, semanas[0].desde);
-
-  return disponible && noLicencia;
-})
-  .map((p) => (
-                    <option key={p.nombre} value={p.nombre}>
-                      {p.nombre}
-                    </option>
-                  ))}
-                </select>
-              </td>
-
-              {/* SEMANAS AUTOMÁTICAS */}
-              {["semana2", "semana3", "semana4", "semana5"].map((sem, index) => (
-  <td key={sem} className="px-3 py-2">
-    <select
-  className="w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-      value={planilla[sem]?.[sector] || ""}
-      onChange={(e) =>
-        actualizarCelda(sem, sector, e.target.value)
-      }
-    >
-      <option value="">-- elegir --</option>
-
-      {personalFiltrado
-        .filter((p) => {
-          const usados = Object.values(planilla[sem] || {});
-
-          const disponible =
-            !usados.includes(p.nombre) ||
-            planilla[sem]?.[sector] === p.nombre;
-
-          const fechaSemana = semanas[index + 1].desde;
-
-          const noLicencia = !estaDeLicencia(licencias, p.nombre, fechaSemana);
-
-          return disponible && noLicencia;
-        })
-        .map((p) => (
-          <option key={p.nombre} value={p.nombre}>
-            {p.nombre}
-          </option>
-        ))}
-    </select>
-  </td>
-))}
+                  {`${semana.desde.getDate()}/${semana.desde.getMonth() + 1} - ${semana.hasta.getDate()}/${semana.hasta.getMonth() + 1}`}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody className="divide-y divide-slate-100">
+            {filas.map((sector) => (
+              <tr key={sector} className="hover:bg-slate-50 transition">
+                <td className="px-4 py-3 font-medium text-slate-700 bg-slate-50 min-w-[180px] whitespace-nowrap">
+                  {sector}
+                </td>
+
+                {semanas.map((semana) => {
+                  const valoresSemana = planilla?.[semana.clave] || {};
+
+                  return (
+                    <td key={semana.clave} className="px-3 py-2 min-w-[140px]">
+                      <select
+                        className="w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        value={valoresSemana[sector] || ""}
+                        onChange={(evento) =>
+                          actualizarCelda(semana.clave, sector, evento.target.value)
+                        }
+                      >
+                        <option value="">-- elegir --</option>
+                        {personalFiltrado
+                          .filter((persona) => {
+                            const usados = Object.values(valoresSemana);
+                            const disponible =
+                              !usados.includes(persona.nombre) ||
+                              valoresSemana[sector] === persona.nombre;
+                            const noLicencia = !estaDeLicencia(
+                              licencias,
+                              persona.nombre,
+                              semana.desde
+                            );
+
+                            return disponible && noLicencia;
+                          })
+                          .map((persona) => (
+                            <option key={persona.nombre} value={persona.nombre}>
+                              {persona.nombre}
+                            </option>
+                          ))}
+                      </select>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-<div className="pt-2"></div>
-      
 
       <button
-  onClick={generarMes}
-  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
->
+        onClick={generarMes}
+        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
+      >
         🔄 Generar rotación automática
       </button>
     </div>

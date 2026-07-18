@@ -6,6 +6,7 @@ import { normalizar } from "./texto";
 
 // 🔹 PLANILLA
 export const exportarPlanillaPDF = (planillaEnf, planillaLic, semanas) => {
+  const semanasActivas = Array.isArray(semanas) ? semanas : [];
   const pdf = new jsPDF("l"); // 🔥 horizontal (clave)
 
   pdf.setFontSize(14);
@@ -17,7 +18,7 @@ pdf.line(14, 17, 280, 17);
   // 🔹 HEADERS (fechas de semanas)
   const headers = [
     "Sector",
-    ...semanas.map(s =>
+    ...semanasActivas.map(s =>
       `${s.desde.getDate()}/${s.desde.getMonth() + 1} - ${s.hasta.getDate()}/${s.hasta.getMonth() + 1}`
     )
   ];
@@ -50,12 +51,11 @@ Object.keys(planillaLic || {}).forEach(semana => {
   const body = sectores.map(sector => {
     const fila = [sector];
 
-    for (let i = 1; i <= 5; i++) {
-  const semanaKey = `semana${i}`;
-  const valor =
-    planillaEnfNorm[semanaKey]?.[normalizar(sector)] || "-";
-  fila.push(valor);
-}
+    semanasActivas.forEach(({ clave }, indice) => {
+      const semanaKey = clave || `semana${indice + 1}`;
+      const valor = planillaEnfNorm[semanaKey]?.[normalizar(sector)] || "-";
+      fila.push(valor);
+    });
     return fila;
   });
 pdf.setFontSize(12);
@@ -66,7 +66,8 @@ pdf.text("Enfermeros", 14, 20);
     head: [headers],
     body,
     styles: {
-      halign: "center"
+      halign: "center",
+      ...(semanasActivas.length === 6 ? { fontSize: 7 } : {})
     },
     headStyles: {
       fillColor: [41, 128, 185]
@@ -89,12 +90,11 @@ const sectoresLic = configuracionSectores.licenciado.ordenPDF;
 const bodyLic = sectoresLic.map(sector => {
   const fila = [sector];
 
-  for (let i = 1; i <= 5; i++) {
-    const semanaKey = `semana${i}`;
-    const valor =
-      planillaLicNorm[semanaKey]?.[normalizar(sector)] || "-";
+  semanasActivas.forEach(({ clave }, indice) => {
+    const semanaKey = clave || `semana${indice + 1}`;
+    const valor = planillaLicNorm[semanaKey]?.[normalizar(sector)] || "-";
     fila.push(valor);
-  }
+  });
 
   return fila;
 });
@@ -104,7 +104,8 @@ autoTable(pdf, {
   head: [headers],
   body: bodyLic,
   styles: {
-    halign: "center"
+    halign: "center",
+    ...(semanasActivas.length === 6 ? { fontSize: 7 } : {})
   },
   headStyles: {
     fillColor: [22, 160, 133] // verde

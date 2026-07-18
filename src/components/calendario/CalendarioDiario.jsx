@@ -69,6 +69,10 @@ const [nuevoNombre, setNuevoNombre] = useState("");
   }, [posicionesTurnantes, sectoresFijos, turnantesLabels]);
 
 const semanaKey = semanaKeyFromDate(fecha, mesActivo);
+const planillaSemana = useMemo(
+  () => (semanaKey ? planilla?.[semanaKey] || {} : {}),
+  [planilla, semanaKey]
+);
 const keyDia = keyDiaFromDate(fecha);
 const cambiosActivos = esDiaParo ? cambiosParoDia : cambiosDia;
 const claveCambiosActivos = esDiaParo ? "cambiosParoDia" : "cambiosDia";
@@ -174,7 +178,7 @@ const asignacionCompleta = filas.map((fila) => {
   } else if (override) {
     nombre = override;
   } else {
-    nombre = planilla?.[semanaKey]?.[fila];
+    nombre = planillaSemana[fila];
   }
 
   const enfermero = [...personal, ...extrasDia].find(
@@ -579,13 +583,12 @@ return resultadoOrdenado;
   ordenVisual,
   personal,
   personalFiltrado,
-  planilla,
+  planillaSemana,
   sectoresBajaPrioridad,
   sectoresCriticos,
   prioridadSectores,
   sectoresParo,
   prioridadesParo,
-  semanaKey,
   tipo,
   turnantesLabels
 ]);

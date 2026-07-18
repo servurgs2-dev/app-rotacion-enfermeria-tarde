@@ -48,7 +48,8 @@ function crearEstructuraBase() {
     semana2: {},
     semana3: {},
     semana4: {},
-    semana5: {}
+    semana5: {},
+    semana6: {}
   };
 }
 const getMesData = (mes) => {
@@ -540,8 +541,14 @@ return (
                 .eq("mes", keyAnterior)
                 .maybeSingle();
 
-              const baseEnf = data?.data?.planillas?.enfermeros?.semana5;
-              const baseLic = data?.data?.planillas?.licenciados?.semana5;
+              const semanasAnteriores = obtenerSemanasDelMes(keyAnterior);
+              const ultimaSemanaAnterior = semanasAnteriores.at(-1)?.clave || "semana5";
+              const baseEnf =
+                data?.data?.planillas?.enfermeros?.[ultimaSemanaAnterior] ||
+                data?.data?.planillas?.enfermeros?.semana5;
+              const baseLic =
+                data?.data?.planillas?.licenciados?.[ultimaSemanaAnterior] ||
+                data?.data?.planillas?.licenciados?.semana5;
 
               if (!baseEnf && !baseLic) {
                 alert("No hay planilla anterior");
@@ -550,21 +557,15 @@ return (
 
               if (baseEnf) {
                 setPlanillaEnfermeros({
-                  semana1: baseEnf,
-                  semana2: {},
-                  semana3: {},
-                  semana4: {},
-                  semana5: {}
+                  ...crearEstructuraBase(),
+                  semana1: { ...baseEnf }
                 });
               }
 
               if (baseLic) {
                 setPlanillaLicenciados({
-                  semana1: baseLic,
-                  semana2: {},
-                  semana3: {},
-                  semana4: {},
-                  semana5: {}
+                  ...crearEstructuraBase(),
+                  semana1: { ...baseLic }
                 });
               }
             }}

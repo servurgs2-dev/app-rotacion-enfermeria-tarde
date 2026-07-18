@@ -181,7 +181,7 @@ const asignacionCompleta = filas.map((fila) => {
     nombre = planillaSemana[fila];
   }
 
-  const enfermero = [...personal, ...extrasDia].find(
+  const enfermero = [...personalFiltrado, ...extrasDia].find(
     (e) => e && normalizar(e.nombre) === normalizar(nombre)
   );
 
@@ -581,7 +581,6 @@ return resultadoOrdenado;
   filas,
   keyDia,
   ordenVisual,
-  personal,
   personalFiltrado,
   planillaSemana,
   sectoresBajaPrioridad,

@@ -11,6 +11,11 @@ import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
 import { generarAlertasHorarios } from "./utils/alertasHorarios";
 import { TURNO_POR_DEFECTO, obtenerConfiguracionTurno } from "./config/turnos";
 import {
+  crearEstadoMensualVacio,
+  crearPlanillaMensualVacia,
+  normalizarEstadoMensual
+} from "./utils/estadoMensual";
+import {
   limpiarReferenciasDeCategoria,
   limpiarReferenciasDePersona
 } from "./utils/integridadPersonas";
@@ -49,41 +54,8 @@ const [dataPDFLic, setDataPDFLic] = useState({ asignaciones: [], libres: [] });
 
 //console.log("🔁 TAB ACTUAL:", tabCalendario);
 
-function crearEstructuraBase() {
-  return {
-    semana1: {},
-    semana2: {},
-    semana3: {},
-    semana4: {},
-    semana5: {},
-    semana6: {}
-  };
-}
 const getMesData = (mes) => {
-  return estadoPorMes[mes] || {
-    personal: [],
-    planillas: {
-      enfermeros: crearEstructuraBase(),
-      licenciados: crearEstructuraBase()
-    },
-    calendario: {
-      diasParo: {},
-      enfermeros: {
-        cambiosDia: {},
-        cambiosParoDia: {},
-        extras: {},
-        noDisponibles: {}
-      },
-      licenciados: {
-        cambiosDia: {},
-        cambiosParoDia: {},
-        extras: {},
-        noDisponibles: {}
-      }
-    }, // 👈 ESTA COMA FALTABA
-    licencias: [],
-    certificaciones: []
-  };
+  return estadoPorMes[mes] || crearEstadoMensualVacio();
 };
 
 
@@ -371,13 +343,15 @@ useEffect(() => {
     if (cargaId !== cargaActualRef.current) return;
 
     if (data?.data) {
+      const estadoNormalizado = normalizarEstadoMensual(data.data);
+
       setEstadoPorMes(prev => {
         if (prev[mesActivo]) return prev;
 
         mesesCargadosRef.current.add(mesActivo);
         return {
           ...prev,
-          [mesActivo]: data.data
+          [mesActivo]: estadoNormalizado
         };
       });
     }
@@ -412,7 +386,7 @@ const copiarMesAnterior = async () => {
 
   setEstadoPorMes(prev => ({
     ...prev,
-    [mesActivo]: data.data
+    [mesActivo]: normalizarEstadoMensual(data.data)
   }));
 };
 
@@ -602,14 +576,18 @@ return (
                 .eq("mes", keyAnterior)
                 .maybeSingle();
 
+              const estadoAnterior = data?.data
+                ? normalizarEstadoMensual(data.data)
+                : null;
+
               const semanasAnteriores = obtenerSemanasDelMes(keyAnterior);
               const ultimaSemanaAnterior = semanasAnteriores.at(-1)?.clave || "semana5";
               const baseEnf =
-                data?.data?.planillas?.enfermeros?.[ultimaSemanaAnterior] ||
-                data?.data?.planillas?.enfermeros?.semana5;
+                estadoAnterior?.planillas.enfermeros[ultimaSemanaAnterior] ||
+                estadoAnterior?.planillas.enfermeros.semana5;
               const baseLic =
-                data?.data?.planillas?.licenciados?.[ultimaSemanaAnterior] ||
-                data?.data?.planillas?.licenciados?.semana5;
+                estadoAnterior?.planillas.licenciados[ultimaSemanaAnterior] ||
+                estadoAnterior?.planillas.licenciados.semana5;
 
               if (!baseEnf && !baseLic) {
                 alert("No hay planilla anterior");
@@ -618,14 +596,14 @@ return (
 
               if (baseEnf) {
                 setPlanillaEnfermeros({
-                  ...crearEstructuraBase(),
+                  ...crearPlanillaMensualVacia(),
                   semana1: { ...baseEnf }
                 });
               }
 
               if (baseLic) {
                 setPlanillaLicenciados({
-                  ...crearEstructuraBase(),
+                  ...crearPlanillaMensualVacia(),
                   semana1: { ...baseLic }
                 });
               }

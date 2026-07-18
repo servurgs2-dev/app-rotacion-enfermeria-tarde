@@ -17,18 +17,20 @@ import {
   cargarEstadoMensual,
   guardarEstadoMensual
 } from "./services/estadoMensual";
+import { crearClaveTurnoMes } from "./utils/claveTurnoMes";
 import {
   limpiarReferenciasDeCategoria,
   limpiarReferenciasDePersona
 } from "./utils/integridadPersonas";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
+const TURNO_REPOSITORIO_HISTORICO = "tarde";
 
 
 function App() {
  const turnoActivo = TURNO_POR_DEFECTO;
  const configTurno = obtenerConfiguracionTurno(turnoActivo);
- const [estadoPorMes, setEstadoPorMes] = useState({});
+ const [estadoPorTurnoMes, setEstadoPorTurnoMes] = useState({});
   const [mesActivo, setMesActivo] = useState(() => {
   const hoy = new Date();
   return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
@@ -38,6 +40,7 @@ const [tabPlanilla, setTabPlanilla] = useState("enfermeros");
 const [tabCalendario, setTabCalendario] = useState("enfermeros");
 
 const [fecha, setFecha] = useState(new Date());
+const claveActiva = crearClaveTurnoMes(turnoActivo, mesActivo);
 const debouncesGuardadoRef = useRef(new Map());
 const colaGuardadoRef = useRef(new Map());
 const versionesGuardadoRef = useRef(new Map());
@@ -45,9 +48,10 @@ const mesesConErrorGuardadoRef = useRef(new Set());
 const guardadoEnCursoRef = useRef(false);
 const procesarColaGuardadoRef = useRef(null);
 const referenciasEstadoRef = useRef(new Map());
+const identidadesEstadoRef = useRef(new Map());
 const mesesCargadosRef = useRef(new Set());
 const cargandoRef = useRef(true);
-const cargaActualRef = useRef(0);
+const cargaActualRef = useRef({ id: 0, clave: null });
 const [cargando, setCargando] = useState(true);
 const [estadoGuardado, setEstadoGuardado] = useState("loading");
 
@@ -56,8 +60,13 @@ const [dataPDFLic, setDataPDFLic] = useState({ asignaciones: [], libres: [] });
 
 //console.log("🔁 TAB ACTUAL:", tabCalendario);
 
-const getMesData = (mes) => {
-  return estadoPorMes[mes] || crearEstadoMensualVacio();
+useEffect(() => {
+  identidadesEstadoRef.current.set(claveActiva, { turnoId: turnoActivo, mes: mesActivo });
+}, [claveActiva, mesActivo, turnoActivo]);
+
+const getMesData = (mes, turnoId = turnoActivo) => {
+  const clave = crearClaveTurnoMes(turnoId, mes);
+  return estadoPorTurnoMes[clave] || crearEstadoMensualVacio();
 };
 
 
@@ -83,8 +92,8 @@ const alertasHorarios = useMemo(() => {
 }, [configTurno, dataPDFEnf, dataPDFLic, esDiaParoActual, keyDiaActual]);
 
 const setDiaParo = (keyDia, activo) => {
-  setEstadoPorMes(prev => {
-    const actual = prev[mesActivo] || getMesData(mesActivo);
+  setEstadoPorTurnoMes(prev => {
+    const actual = prev[claveActiva] || getMesData(mesActivo);
     const diasActuales = actual.calendario?.diasParo || {};
     const nuevosDiasParo = { ...diasActuales };
 
@@ -96,7 +105,7 @@ const setDiaParo = (keyDia, activo) => {
 
     return {
       ...prev,
-      [mesActivo]: {
+      [claveActiva]: {
         ...actual,
         calendario: {
           ...actual.calendario,
@@ -120,8 +129,13 @@ const certificacionesMes = mesData.certificaciones || [];
 
 const semanas = obtenerSemanasDelMes(mesActivo);
 
-const guardarMes = useCallback(async (mes, data) => {
+const guardarMes = useCallback(async (turnoId, mes, data) => {
   if (!data) return null;
+
+  // La tabla histórica estado_por_mes pertenece exclusivamente al Turno Tarde.
+  if (turnoId !== TURNO_REPOSITORIO_HISTORICO) {
+    return new Error("El repositorio histórico solo admite el Turno Tarde.");
+  }
 
   try {
     await guardarEstadoMensual(mes, data);
@@ -139,7 +153,7 @@ const actualizarEstadoGuardadoDesdeCola = useCallback(() => {
 
   if (colaGuardadoRef.current.size > 0) {
     const hayPendientesReintentables = [...colaGuardadoRef.current.keys()].some(
-      (mes) => !mesesConErrorGuardadoRef.current.has(mes)
+      (clave) => !mesesConErrorGuardadoRef.current.has(clave)
     );
     setEstadoGuardado(hayPendientesReintentables ? "saving" : "error");
     return;
@@ -154,14 +168,17 @@ const actualizarEstadoGuardadoDesdeCola = useCallback(() => {
   );
 }, []);
 
-const encolarGuardado = useCallback((mes, data) => {
-  const version = (versionesGuardadoRef.current.get(mes) || 0) + 1;
-  versionesGuardadoRef.current.set(mes, version);
-  colaGuardadoRef.current.set(mes, {
+const encolarGuardado = useCallback(({ clave, turnoId, mes, data }) => {
+  const version = (versionesGuardadoRef.current.get(clave) || 0) + 1;
+  versionesGuardadoRef.current.set(clave, version);
+  colaGuardadoRef.current.set(clave, {
+    clave,
+    turnoId,
+    mes,
     data: crearInstantanea(data),
     version
   });
-  mesesConErrorGuardadoRef.current.delete(mes);
+  mesesConErrorGuardadoRef.current.delete(clave);
   setEstadoGuardado("saving");
   procesarColaGuardadoRef.current?.();
 }, []);
@@ -170,7 +187,7 @@ const procesarColaGuardado = useCallback(async () => {
   if (guardadoEnCursoRef.current) return;
 
   const siguiente = [...colaGuardadoRef.current.entries()].find(
-    ([mes]) => !mesesConErrorGuardadoRef.current.has(mes)
+    ([clave]) => !mesesConErrorGuardadoRef.current.has(clave)
   );
 
   if (!siguiente) {
@@ -178,14 +195,14 @@ const procesarColaGuardado = useCallback(async () => {
     return;
   }
 
-  const [mes, pendiente] = siguiente;
-  colaGuardadoRef.current.delete(mes);
+  const [clave, pendiente] = siguiente;
+  colaGuardadoRef.current.delete(clave);
   guardadoEnCursoRef.current = true;
   setEstadoGuardado("saving");
 
   let error;
   try {
-    error = await guardarMes(mes, pendiente.data);
+    error = await guardarMes(pendiente.turnoId, pendiente.mes, pendiente.data);
   } catch {
     error = new Error("No se pudo guardar el estado mensual.");
   } finally {
@@ -193,11 +210,11 @@ const procesarColaGuardado = useCallback(async () => {
   }
 
   if (error) {
-    const pendienteMasNuevo = colaGuardadoRef.current.get(mes);
+    const pendienteMasNuevo = colaGuardadoRef.current.get(clave);
 
     if (!pendienteMasNuevo || pendienteMasNuevo.version <= pendiente.version) {
-      colaGuardadoRef.current.set(mes, pendiente);
-      mesesConErrorGuardadoRef.current.add(mes);
+      colaGuardadoRef.current.set(clave, pendiente);
+      mesesConErrorGuardadoRef.current.add(clave);
     }
   }
 
@@ -215,37 +232,40 @@ useEffect(() => {
 useEffect(() => {
   if (cargando) return;
 
-  Object.entries(estadoPorMes).forEach(([mes, data]) => {
-    if (referenciasEstadoRef.current.get(mes) === data) return;
+  Object.entries(estadoPorTurnoMes).forEach(([clave, data]) => {
+    if (referenciasEstadoRef.current.get(clave) === data) return;
 
-    referenciasEstadoRef.current.set(mes, data);
+    referenciasEstadoRef.current.set(clave, data);
 
-    if (mesesCargadosRef.current.delete(mes)) return;
+    if (mesesCargadosRef.current.delete(clave)) return;
 
-    clearTimeout(debouncesGuardadoRef.current.get(mes));
+    const identidad = identidadesEstadoRef.current.get(clave);
+    if (!identidad) return;
+
+    clearTimeout(debouncesGuardadoRef.current.get(clave));
     const timeout = setTimeout(() => {
-      if (debouncesGuardadoRef.current.get(mes) !== timeout) return;
+      if (debouncesGuardadoRef.current.get(clave) !== timeout) return;
 
-      debouncesGuardadoRef.current.delete(mes);
+      debouncesGuardadoRef.current.delete(clave);
 
-      encolarGuardado(mes, data);
+      encolarGuardado({ clave, ...identidad, data });
     }, 500);
 
-    debouncesGuardadoRef.current.set(mes, timeout);
+    debouncesGuardadoRef.current.set(clave, timeout);
   });
-}, [estadoPorMes, cargando, encolarGuardado]);
+}, [estadoPorTurnoMes, cargando, encolarGuardado]);
 
 useEffect(() => () => {
   debouncesGuardadoRef.current.forEach((timeout) => clearTimeout(timeout));
 }, []);
 
 const setPlanillaEnfermeros = (nueva) => {
-  setEstadoPorMes(prev => {
+  setEstadoPorTurnoMes(prev => {
     const actual = getMesData(mesActivo);
 
     return {
       ...prev,
-      [mesActivo]: {
+      [claveActiva]: {
         ...actual,
         planillas: {
           ...actual.planillas,
@@ -260,12 +280,12 @@ const setPlanillaEnfermeros = (nueva) => {
 };
 
 const setPlanillaLicenciados = (nueva) => {
-  setEstadoPorMes(prev => {
+  setEstadoPorTurnoMes(prev => {
     const actual = getMesData(mesActivo);
 
     return {
       ...prev,
-      [mesActivo]: {
+      [claveActiva]: {
         ...actual,
         planillas: {
           ...actual.planillas,
@@ -280,8 +300,8 @@ const setPlanillaLicenciados = (nueva) => {
 };
 
 const actualizarPersona = (personaAnterior, personaNueva) => {
-  setEstadoPorMes((prev) => {
-    const actual = prev[mesActivo] || getMesData(mesActivo);
+  setEstadoPorTurnoMes((prev) => {
+    const actual = prev[claveActiva] || getMesData(mesActivo);
     const indicePersona = actual.personal?.indexOf(personaAnterior) ?? -1;
 
     if (indicePersona === -1) return prev;
@@ -299,40 +319,41 @@ const actualizarPersona = (personaAnterior, personaNueva) => {
       );
     }
 
-    return { ...prev, [mesActivo]: nuevoMes };
+    return { ...prev, [claveActiva]: nuevoMes };
   });
 };
 
 const eliminarPersona = (persona) => {
-  setEstadoPorMes((prev) => {
-    const actual = prev[mesActivo] || getMesData(mesActivo);
+  setEstadoPorTurnoMes((prev) => {
+    const actual = prev[claveActiva] || getMesData(mesActivo);
 
     if (!actual.personal?.includes(persona)) return prev;
 
     return {
       ...prev,
-      [mesActivo]: limpiarReferenciasDePersona(actual, persona)
+      [claveActiva]: limpiarReferenciasDePersona(actual, persona)
     };
   });
 };
 
 const limpiarPersonal = () => {
-  setEstadoPorMes((prev) => {
-    const actual = prev[mesActivo] || getMesData(mesActivo);
+  setEstadoPorTurnoMes((prev) => {
+    const actual = prev[claveActiva] || getMesData(mesActivo);
     const nuevoMes = (actual.personal || []).reduce(
       (mes, persona) => limpiarReferenciasDePersona(mes, persona),
       actual
     );
 
-    return { ...prev, [mesActivo]: nuevoMes };
+    return { ...prev, [claveActiva]: nuevoMes };
   });
 };
 
 
 useEffect(() => {
   const cargar = async () => {
-    const cargaId = cargaActualRef.current + 1;
-    cargaActualRef.current = cargaId;
+    const claveCarga = crearClaveTurnoMes(turnoActivo, mesActivo);
+    const cargaId = cargaActualRef.current.id + 1;
+    cargaActualRef.current = { id: cargaId, clave: claveCarga };
     cargandoRef.current = true;
     setCargando(true); // 👈 empieza carga
     setEstadoGuardado("loading");
@@ -346,16 +367,19 @@ useEffect(() => {
       error = errorCarga;
     }
 
-    if (cargaId !== cargaActualRef.current) return;
+    if (
+      cargaId !== cargaActualRef.current.id ||
+      claveCarga !== cargaActualRef.current.clave
+    ) return;
 
     if (resultado?.existe) {
-      setEstadoPorMes(prev => {
-        if (prev[mesActivo]) return prev;
+      setEstadoPorTurnoMes(prev => {
+        if (prev[claveCarga]) return prev;
 
-        mesesCargadosRef.current.add(mesActivo);
+        mesesCargadosRef.current.add(claveCarga);
         return {
           ...prev,
-          [mesActivo]: resultado.estado
+          [claveCarga]: resultado.estado
         };
       });
     }
@@ -366,7 +390,7 @@ useEffect(() => {
   };
 
   cargar();
-}, [mesActivo, actualizarEstadoGuardadoDesdeCola]);
+}, [mesActivo, turnoActivo, actualizarEstadoGuardadoDesdeCola]);
 
 const copiarMesAnterior = async () => {
   const [year, month] = mesActivo.split("-").map(Number);
@@ -391,9 +415,9 @@ const copiarMesAnterior = async () => {
     return;
   }
 
-  setEstadoPorMes(prev => ({
+  setEstadoPorTurnoMes(prev => ({
     ...prev,
-    [mesActivo]: resultado.estado
+    [claveActiva]: resultado.estado
   }));
 };
 
@@ -455,7 +479,11 @@ return (
     return;
   }
 
-  cargaActualRef.current += 1;
+  const nuevaClave = crearClaveTurnoMes(turnoActivo, nuevoMes);
+  cargaActualRef.current = {
+    id: cargaActualRef.current.id + 1,
+    clave: nuevaClave
+  };
   setMesActivo(nuevoMes);
 
   const [year, month] = nuevoMes.split("-").map(Number);
@@ -480,9 +508,9 @@ return (
           onEliminarPersona={eliminarPersona}
           onLimpiarPersonal={limpiarPersonal}
           setPersonal={(nuevo) => {
-            setEstadoPorMes(prev => ({
+            setEstadoPorTurnoMes(prev => ({
               ...prev,
-              [mesActivo]: {
+              [claveActiva]: {
                 ...getMesData(mesActivo),
                 personal: nuevo
               }
@@ -629,9 +657,9 @@ return (
           personal={personal}
           licencias={licenciasMes}
           setLicencias={(nueva) => {
-            setEstadoPorMes(prev => ({
+            setEstadoPorTurnoMes(prev => ({
               ...prev,
-              [mesActivo]: {
+              [claveActiva]: {
                 ...getMesData(mesActivo),
                 licencias: nueva
               }
@@ -645,9 +673,9 @@ return (
           personal={personal}
           certificaciones={certificacionesMes}
           setCertificaciones={(nuevas) => {
-            setEstadoPorMes(prev => ({
+            setEstadoPorTurnoMes(prev => ({
               ...prev,
-              [mesActivo]: {
+              [claveActiva]: {
                 ...getMesData(mesActivo),
                 certificaciones: nuevas
               }
@@ -726,8 +754,8 @@ return (
     fecha={fecha}
     setFecha={setFecha}
     setCalendario={(update) => {
-      setEstadoPorMes(prev => {
-        const actual = prev[mesActivo] || getMesData(mesActivo);
+      setEstadoPorTurnoMes(prev => {
+        const actual = prev[claveActiva] || getMesData(mesActivo);
         const calendarioActual = actual.calendario?.enfermeros || {};
 
         const nuevoCalendario =
@@ -737,7 +765,7 @@ return (
 
         return {
           ...prev,
-          [mesActivo]: {
+          [claveActiva]: {
             ...actual,
             calendario: {
               ...actual.calendario,
@@ -769,8 +797,8 @@ return (
     fecha={fecha}
     setFecha={setFecha}
     setCalendario={(update) => {
-      setEstadoPorMes(prev => {
-        const actual = prev[mesActivo] || getMesData(mesActivo);
+      setEstadoPorTurnoMes(prev => {
+        const actual = prev[claveActiva] || getMesData(mesActivo);
         const calendarioActual = actual.calendario?.licenciados || {};
 
         const nuevoCalendario =
@@ -780,7 +808,7 @@ return (
 
         return {
           ...prev,
-          [mesActivo]: {
+          [claveActiva]: {
             ...actual,
             calendario: {
               ...actual.calendario,

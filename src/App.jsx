@@ -5,16 +5,18 @@ import CalendarioDiario from "./components/calendario/CalendarioDiario";
 import Seccion from "./components/ui/Seccion";
 import Licencias from "./components/licencias/Licencias";
 import Certificaciones from "./components/certificaciones/Certificaciones";
-import { supabase } from "./supabase";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
 import { generarAlertasHorarios } from "./utils/alertasHorarios";
 import { TURNO_POR_DEFECTO, obtenerConfiguracionTurno } from "./config/turnos";
 import {
   crearEstadoMensualVacio,
-  crearPlanillaMensualVacia,
-  normalizarEstadoMensual
+  crearPlanillaMensualVacia
 } from "./utils/estadoMensual";
+import {
+  cargarEstadoMensual,
+  guardarEstadoMensual
+} from "./services/estadoMensual";
 import {
   limpiarReferenciasDeCategoria,
   limpiarReferenciasDePersona
@@ -121,11 +123,12 @@ const semanas = obtenerSemanasDelMes(mesActivo);
 const guardarMes = useCallback(async (mes, data) => {
   if (!data) return null;
 
-  const { error } = await supabase
-    .from("estado_por_mes")
-    .upsert({ mes, data }, { onConflict: "mes" });
-
-  return error;
+  try {
+    await guardarEstadoMensual(mes, data);
+    return null;
+  } catch (error) {
+    return error;
+  }
 }, []);
 
 const actualizarEstadoGuardadoDesdeCola = useCallback(() => {
@@ -334,24 +337,25 @@ useEffect(() => {
     setCargando(true); // 👈 empieza carga
     setEstadoGuardado("loading");
 
-    const { data, error } = await supabase
-      .from("estado_por_mes")
-      .select("*")
-      .eq("mes", mesActivo)
-      .maybeSingle();
+    let resultado;
+    let error;
+
+    try {
+      resultado = await cargarEstadoMensual(mesActivo);
+    } catch (errorCarga) {
+      error = errorCarga;
+    }
 
     if (cargaId !== cargaActualRef.current) return;
 
-    if (data?.data) {
-      const estadoNormalizado = normalizarEstadoMensual(data.data);
-
+    if (resultado?.existe) {
       setEstadoPorMes(prev => {
         if (prev[mesActivo]) return prev;
 
         mesesCargadosRef.current.add(mesActivo);
         return {
           ...prev,
-          [mesActivo]: estadoNormalizado
+          [mesActivo]: resultado.estado
         };
       });
     }
@@ -373,20 +377,23 @@ const copiarMesAnterior = async () => {
   ).padStart(2, "0")}`;
 
   // 👇 traer desde Supabase SI o SI
-  const { data } = await supabase
-    .from("estado_por_mes")
-    .select("*")
-    .eq("mes", keyAnterior)
-    .maybeSingle();
+  let resultado;
 
-  if (!data) {
+  try {
+    resultado = await cargarEstadoMensual(keyAnterior);
+  } catch {
+    alert("No hay datos del mes anterior");
+    return;
+  }
+
+  if (!resultado.existe) {
     alert("No hay datos del mes anterior");
     return;
   }
 
   setEstadoPorMes(prev => ({
     ...prev,
-    [mesActivo]: normalizarEstadoMensual(data.data)
+    [mesActivo]: resultado.estado
   }));
 };
 
@@ -570,15 +577,16 @@ return (
                 fechaAnterior.getMonth() + 1
               ).padStart(2, "0")}`;
 
-              const { data } = await supabase
-                .from("estado_por_mes")
-                .select("*")
-                .eq("mes", keyAnterior)
-                .maybeSingle();
+              let resultado;
 
-              const estadoAnterior = data?.data
-                ? normalizarEstadoMensual(data.data)
-                : null;
+              try {
+                resultado = await cargarEstadoMensual(keyAnterior);
+              } catch {
+                alert("No hay planilla anterior");
+                return;
+              }
+
+              const estadoAnterior = resultado.existe ? resultado.estado : null;
 
               const semanasAnteriores = obtenerSemanasDelMes(keyAnterior);
               const ultimaSemanaAnterior = semanasAnteriores.at(-1)?.clave || "semana5";

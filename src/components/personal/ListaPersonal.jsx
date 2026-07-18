@@ -2,7 +2,14 @@ import { useState } from "react";
 import { normalizar } from "../../utils/texto";
 import { obtenerDiasLibresDelMes } from "../../utils/fechas";
 
-function ListaPersonal({ personal, setPersonal, mesActivo }) {
+function ListaPersonal({
+  personal,
+  setPersonal,
+  mesActivo,
+  onActualizarPersona,
+  onEliminarPersona,
+  onLimpiarPersonal
+}) {
   const [nombre, setNombre] = useState("");
   const [categoria, setCategoria] = useState("enfermero");
   const [rol, setRol] = useState("titular");
@@ -35,6 +42,10 @@ function ListaPersonal({ personal, setPersonal, mesActivo }) {
   const textoDiasGrupo = (grupo) => {
     const dias = obtenerDiasLibresDelMes(grupo, mesActivo);
     return nombreMes ? `${nombreMes}: ${formatearDias(dias)}` : "";
+  };
+
+  const actualizarPersona = (personaAnterior, cambios) => {
+    onActualizarPersona(personaAnterior, { ...personaAnterior, ...cambios });
   };
 
   const agregar = () => {
@@ -83,7 +94,7 @@ function ListaPersonal({ personal, setPersonal, mesActivo }) {
 
   const limpiarTodo = () => {
     if (confirm("¿Seguro querés borrar todo?")) {
-      setPersonal([]);
+      onLimpiarPersonal();
     }
   };
 
@@ -209,12 +220,7 @@ function ListaPersonal({ personal, setPersonal, mesActivo }) {
     className="border border-slate-200 rounded px-2 py-1 text-xs"
     value={p.categoria}
     onChange={(e) => {
-      const nueva = personal.map((per) =>
-        per.nombre === p.nombre
-          ? { ...per, categoria: e.target.value }
-          : per
-      );
-      setPersonal(nueva);
+      actualizarPersona(p, { categoria: e.target.value });
     }}
   >
     <option value="enfermero">Enfermero</option>
@@ -227,12 +233,7 @@ function ListaPersonal({ personal, setPersonal, mesActivo }) {
     className="border border-slate-200 rounded px-2 py-1 text-xs"
     value={p.rol}
     onChange={(e) => {
-      const nueva = personal.map((per) =>
-        per.nombre === p.nombre
-          ? { ...per, rol: e.target.value }
-          : per
-      );
-      setPersonal(nueva);
+      actualizarPersona(p, { rol: e.target.value });
     }}
   >
     <option value="titular">Titular</option>
@@ -245,12 +246,7 @@ function ListaPersonal({ personal, setPersonal, mesActivo }) {
     className="border border-slate-200 rounded px-2 py-1 text-xs"
     value={p.libre}
     onChange={(e) => {
-      const nueva = personal.map((per) =>
-        per.nombre === p.nombre
-          ? { ...per, libre: Number(e.target.value) }
-          : per
-      );
-      setPersonal(nueva);
+      actualizarPersona(p, { libre: Number(e.target.value) });
     }}
   >
     {[1,2,3,4,5].map(n => (
@@ -267,12 +263,7 @@ function ListaPersonal({ personal, setPersonal, mesActivo }) {
     className="border border-slate-200 rounded px-2 py-1 text-xs"
     value={p.horario}
     onChange={(e) => {
-      const nueva = personal.map((per) =>
-        per.nombre === p.nombre
-          ? { ...per, horario: e.target.value }
-          : per
-      );
-      setPersonal(nueva);
+      actualizarPersona(p, { horario: e.target.value });
     }}
   >
     <option value="normal">12-18</option>
@@ -286,12 +277,7 @@ function ListaPersonal({ personal, setPersonal, mesActivo }) {
     type="checkbox"
     checked={p.maternal}
     onChange={(e) => {
-      const nueva = personal.map((per) =>
-        per.nombre === p.nombre
-          ? { ...per, maternal: e.target.checked }
-          : per
-      );
-      setPersonal(nueva);
+      actualizarPersona(p, { maternal: e.target.checked });
     }}
   />
 </td>
@@ -301,12 +287,7 @@ function ListaPersonal({ personal, setPersonal, mesActivo }) {
     className="w-20 border border-slate-200 rounded px-2 py-1 text-xs"
     value={p.funcionario || ""}
     onChange={(e) => {
-      const nueva = personal.map((per) =>
-        per.nombre === p.nombre
-          ? { ...per, funcionario: e.target.value }
-          : per
-      );
-      setPersonal(nueva);
+      actualizarPersona(p, { funcionario: e.target.value });
     }}
   />
 </td>
@@ -315,8 +296,7 @@ function ListaPersonal({ personal, setPersonal, mesActivo }) {
   <button
     className="text-red-500 hover:text-red-700 transition"
     onClick={() => {
-      const nueva = personal.filter(per => per.nombre !== p.nombre);
-      setPersonal(nueva);
+      onEliminarPersona(p);
     }}
   >
     ❌

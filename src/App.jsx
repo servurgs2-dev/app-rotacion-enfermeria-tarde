@@ -9,6 +9,10 @@ import { supabase } from "./supabase";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
 import { generarAlertasHorarios } from "./utils/alertasHorarios";
+import {
+  limpiarReferenciasDeCategoria,
+  limpiarReferenciasDePersona
+} from "./utils/integridadPersonas";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
@@ -296,6 +300,55 @@ const setPlanillaLicenciados = (nueva) => {
   });
 };
 
+const actualizarPersona = (personaAnterior, personaNueva) => {
+  setEstadoPorMes((prev) => {
+    const actual = prev[mesActivo] || getMesData(mesActivo);
+    const indicePersona = actual.personal?.indexOf(personaAnterior) ?? -1;
+
+    if (indicePersona === -1) return prev;
+
+    const personalActualizado = actual.personal.map((persona, indice) =>
+      indice === indicePersona ? personaNueva : persona
+    );
+    let nuevoMes = { ...actual, personal: personalActualizado };
+
+    if (personaAnterior.categoria !== personaNueva.categoria) {
+      nuevoMes = limpiarReferenciasDeCategoria(
+        nuevoMes,
+        personaAnterior.categoria,
+        personaAnterior
+      );
+    }
+
+    return { ...prev, [mesActivo]: nuevoMes };
+  });
+};
+
+const eliminarPersona = (persona) => {
+  setEstadoPorMes((prev) => {
+    const actual = prev[mesActivo] || getMesData(mesActivo);
+
+    if (!actual.personal?.includes(persona)) return prev;
+
+    return {
+      ...prev,
+      [mesActivo]: limpiarReferenciasDePersona(actual, persona)
+    };
+  });
+};
+
+const limpiarPersonal = () => {
+  setEstadoPorMes((prev) => {
+    const actual = prev[mesActivo] || getMesData(mesActivo);
+    const nuevoMes = (actual.personal || []).reduce(
+      (mes, persona) => limpiarReferenciasDePersona(mes, persona),
+      actual
+    );
+
+    return { ...prev, [mesActivo]: nuevoMes };
+  });
+};
+
 
 useEffect(() => {
   const cargar = async () => {
@@ -437,6 +490,9 @@ return (
         <ListaPersonal
           personal={personal}
           mesActivo={mesActivo}
+          onActualizarPersona={actualizarPersona}
+          onEliminarPersona={eliminarPersona}
+          onLimpiarPersonal={limpiarPersonal}
           setPersonal={(nuevo) => {
             setEstadoPorMes(prev => ({
               ...prev,

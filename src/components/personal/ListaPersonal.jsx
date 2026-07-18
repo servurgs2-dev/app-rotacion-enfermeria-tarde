@@ -6,6 +6,7 @@ function ListaPersonal({
   personal,
   setPersonal,
   mesActivo,
+  configTurno,
   onActualizarPersona,
   onEliminarPersona,
   onLimpiarPersonal
@@ -102,11 +103,10 @@ function ListaPersonal({
     p.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
 
-  const textoHorario = (h) => {
-    if (h === "entraAntes") return "11:30 - 17:30";
-    if (h === "entraDespues") return "12:30 - 18:30";
-    return "12 - 18";
-  };
+  const horariosTurno = configTurno.horarios;
+  const opcionesHorario = Object.values(horariosTurno);
+  const textoHorario = (horarioId) =>
+    (horariosTurno[horarioId] || horariosTurno.normal).textoVisible;
 
   return (
     <div className="space-y-4">
@@ -153,9 +153,11 @@ function ListaPersonal({
         </select>
 
         <select className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm" value={horario} onChange={(e) => setHorario(e.target.value)}>
-          <option value="normal">12 - 18</option>
-          <option value="entraAntes">11:30 - 17:30</option>
-          <option value="entraDespues">12:30 - 18:30</option>
+          {opcionesHorario.map((opcion) => (
+            <option key={opcion.id} value={opcion.id}>
+              {opcion.nombre}: {opcion.textoVisible}
+            </option>
+          ))}
         </select>
 
         <label className="flex items-center gap-1 text-sm">
@@ -266,9 +268,11 @@ function ListaPersonal({
       actualizarPersona(p, { horario: e.target.value });
     }}
   >
-    <option value="normal">12-18</option>
-    <option value="entraAntes">11:30-17:30</option>
-    <option value="entraDespues">12:30-18:30</option>
+    {opcionesHorario.map((opcion) => (
+      <option key={opcion.id} value={opcion.id}>
+        {opcion.nombre}: {opcion.textoVisible}
+      </option>
+    ))}
   </select>
 </td>
 

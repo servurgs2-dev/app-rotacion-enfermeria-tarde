@@ -9,6 +9,7 @@ import { supabase } from "./supabase";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
 import { generarAlertasHorarios } from "./utils/alertasHorarios";
+import { TURNO_POR_DEFECTO, obtenerConfiguracionTurno } from "./config/turnos";
 import {
   limpiarReferenciasDeCategoria,
   limpiarReferenciasDePersona
@@ -18,6 +19,8 @@ const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
 
 function App() {
+ const turnoActivo = TURNO_POR_DEFECTO;
+ const configTurno = obtenerConfiguracionTurno(turnoActivo);
  const [estadoPorMes, setEstadoPorMes] = useState({});
   const [mesActivo, setMesActivo] = useState(() => {
   const hoy = new Date();
@@ -100,9 +103,10 @@ const alertasHorarios = useMemo(() => {
 
   return generarAlertasHorarios({
     enfermeros: dataPDFEnf.asignaciones,
-    licenciados: dataPDFLic.asignaciones
+    licenciados: dataPDFLic.asignaciones,
+    configTurno
   });
-}, [dataPDFEnf, dataPDFLic, esDiaParoActual, keyDiaActual]);
+}, [configTurno, dataPDFEnf, dataPDFLic, esDiaParoActual, keyDiaActual]);
 
 const setDiaParo = (keyDia, activo) => {
   setEstadoPorMes(prev => {
@@ -490,6 +494,7 @@ return (
         <ListaPersonal
           personal={personal}
           mesActivo={mesActivo}
+          configTurno={configTurno}
           onActualizarPersona={actualizarPersona}
           onEliminarPersona={eliminarPersona}
           onLimpiarPersonal={limpiarPersonal}

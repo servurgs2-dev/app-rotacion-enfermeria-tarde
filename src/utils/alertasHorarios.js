@@ -1,10 +1,5 @@
-import { normalizar } from "./texto";
-
-const HORARIOS_BASE = {
-  normal: { entrada: "12:00", salida: "18:00" },
-  entraAntes: { entrada: "11:30", salida: "17:30" },
-  entraDespues: { entrada: "12:30", salida: "18:30" }
-};
+import { normalizar } from "./texto.js";
+import { obtenerConfiguracionTurno } from "../config/turnos.js";
 
 export const gruposOperativos = [
   {
@@ -62,8 +57,8 @@ const restarUnaHora = (hora) => {
   return `${String(horasAjustadas).padStart(2, "0")}:${String(totalMinutos % 60).padStart(2, "0")}`;
 };
 
-export const obtenerHorarioEfectivo = (persona) => {
-  const horario = HORARIOS_BASE[persona?.horario] || HORARIOS_BASE.normal;
+export const obtenerHorarioEfectivo = (persona, configTurno = obtenerConfiguracionTurno()) => {
+  const horario = configTurno.horarios[persona?.horario] || configTurno.horarios.normal;
   const horarioEspecial = persona?.horario === "entraAntes" || persona?.horario === "entraDespues";
 
   return {
@@ -109,12 +104,12 @@ const minutosDesdeMedianoche = (hora) => {
   return horas * 60 + minutos;
 };
 
-const MINUTOS_CIERRE = 18 * 60;
-
-const generarAlertaGrupo = (grupo, personas) => {
+const generarAlertaGrupo = (grupo, personas, configTurno) => {
+  const horaCierre = configTurno.horarios.normal.salida;
+  const minutosCierre = minutosDesdeMedianoche(horaCierre);
   const salidasAnticipadas = personas
-    .map((persona) => ({ persona, salida: obtenerHorarioEfectivo(persona).salida }))
-    .filter(({ salida }) => minutosDesdeMedianoche(salida) < MINUTOS_CIERRE);
+    .map((persona) => ({ persona, salida: obtenerHorarioEfectivo(persona, configTurno).salida }))
+    .filter(({ salida }) => minutosDesdeMedianoche(salida) < minutosCierre);
 
   const salidasPorHora = new Map();
   salidasAnticipadas.forEach(({ persona, salida }) => {
@@ -126,7 +121,7 @@ const generarAlertaGrupo = (grupo, personas) => {
   const momentosCriticos = [...salidasPorHora.entries()]
     .map(([hora, personasQueSalen]) => {
       const personasRestantes = personas.filter(
-        (persona) => minutosDesdeMedianoche(obtenerHorarioEfectivo(persona).salida) > minutosDesdeMedianoche(hora)
+        (persona) => minutosDesdeMedianoche(obtenerHorarioEfectivo(persona, configTurno).salida) > minutosDesdeMedianoche(hora)
       ).length;
 
       return { hora, personasQueSalen, personasRestantes };
@@ -150,17 +145,21 @@ const generarAlertaGrupo = (grupo, personas) => {
     } ${listarNombres(momentoCritico.personasQueSalen)}.`;
 
   if (momentoCritico.personasRestantes === 0) {
-    return `⚠️ ${grupo.nombre}: ${salidaDescripcion} El sector queda sin cobertura hasta las 18:00.`;
+    return `⚠️ ${grupo.nombre}: ${salidaDescripcion} El sector queda sin cobertura hasta las ${horaCierre}.`;
   }
 
   const coberturaDescripcion = momentoCritico.personasRestantes === 1
-    ? "Queda 1 persona hasta las 18:00."
-    : `Quedan ${momentoCritico.personasRestantes} personas hasta las 18:00.`;
+    ? `Queda 1 persona hasta las ${horaCierre}.`
+    : `Quedan ${momentoCritico.personasRestantes} personas hasta las ${horaCierre}.`;
 
   return `⚠️ ${grupo.nombre}: ${salidaDescripcion} ${coberturaDescripcion}`;
 };
 
-export const generarAlertasHorarios = ({ enfermeros = [], licenciados = [] }) =>
+export const generarAlertasHorarios = ({
+  enfermeros = [],
+  licenciados = [],
+  configTurno = obtenerConfiguracionTurno()
+}) =>
   gruposOperativos.flatMap((grupo) => {
     const responsablesHabituales = obtenerAsignados(licenciados, grupo.licenciados);
     const sectorRespaldo = grupo.respaldoSiSinCobertura;
@@ -174,7 +173,7 @@ export const generarAlertasHorarios = ({ enfermeros = [], licenciados = [] }) =>
     const personasUnicas = [...new Map(
       personas.map((persona) => [normalizar(persona.nombre), persona])
     ).values()];
-    const alerta = generarAlertaGrupo(grupo, personasUnicas);
+    const alerta = generarAlertaGrupo(grupo, personasUnicas, configTurno);
 
     return alerta ? [alerta] : [];
   });

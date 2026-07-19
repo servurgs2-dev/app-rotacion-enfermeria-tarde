@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { normalizar } from "../../utils/texto";
 import { obtenerDiasLibresDelMes } from "../../utils/fechas";
+import {
+  TIPOS_MATERNAL,
+  normalizarMaternal,
+  obtenerEtiquetaMaternal
+} from "../../utils/maternal.js";
 
 function ListaPersonal({
   personal,
@@ -16,7 +21,7 @@ function ListaPersonal({
   const [rol, setRol] = useState("titular");
   const [libre, setLibre] = useState(1);
   const [horario, setHorario] = useState("normal");
-  const [maternal, setMaternal] = useState(false);
+  const [maternal, setMaternal] = useState(TIPOS_MATERNAL.NINGUNO);
   const [funcionario, setFuncionario] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [errorNombre, setErrorNombre] = useState("");
@@ -86,7 +91,7 @@ function ListaPersonal({
     // reset
     setNombre("");
     setFuncionario("");
-    setMaternal(false);
+    setMaternal(TIPOS_MATERNAL.NINGUNO);
     setHorario("normal");
     setErrorNombre("");
   };
@@ -160,13 +165,19 @@ function ListaPersonal({
           ))}
         </select>
 
-        <label className="flex items-center gap-1 text-sm">
-          <input className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
-             type="checkbox"
-            checked={maternal}
-            onChange={(e) => setMaternal(e.target.checked)}
-          />
-          Maternal
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          <span>Horario maternal</span>
+          <select
+            className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
+            value={maternal}
+            onChange={(e) => setMaternal(normalizarMaternal(e.target.value))}
+          >
+            {Object.values(TIPOS_MATERNAL).map((tipoMaternal) => (
+              <option key={tipoMaternal} value={tipoMaternal}>
+                {obtenerEtiquetaMaternal(tipoMaternal)}
+              </option>
+            ))}
+          </select>
         </label>
 
         <button
@@ -201,7 +212,7 @@ function ListaPersonal({
         <th className="px-3 py-2 text-left">Rol</th>
         <th className="px-3 py-2 text-left">Grupo 4x1</th>
         <th className="px-3 py-2 text-left">Horario</th>
-        <th className="px-3 py-2 text-left">M</th>
+        <th className="px-3 py-2 text-left">Horario maternal</th>
         <th className="px-3 py-2 text-left">Func.</th>
         <th className="px-3 py-2 text-left">❌</th>
       </tr>
@@ -277,13 +288,19 @@ function ListaPersonal({
 </td>
 
 <td className="px-3 py-2">
-  <input
-    type="checkbox"
-    checked={p.maternal}
+  <select
+    className="border border-slate-200 rounded px-2 py-1 text-xs"
+    value={normalizarMaternal(p.maternal)}
     onChange={(e) => {
-      actualizarPersona(p, { maternal: e.target.checked });
+      actualizarPersona(p, { maternal: normalizarMaternal(e.target.value) });
     }}
-  />
+  >
+    {Object.values(TIPOS_MATERNAL).map((tipoMaternal) => (
+      <option key={tipoMaternal} value={tipoMaternal}>
+        {obtenerEtiquetaMaternal(tipoMaternal)}
+      </option>
+    ))}
+  </select>
 </td>
 
 <td className="px-3 py-2">

@@ -1,3 +1,5 @@
+import { normalizarMaternal } from "./maternal.js";
+
 const esObjetoValido = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
 
@@ -28,6 +30,17 @@ const crearCalendarioCategoriaVacio = () => ({
   extras: {},
   noDisponibles: {}
 });
+
+const normalizarPersona = (persona) => esObjetoValido(persona)
+  ? { ...persona, maternal: normalizarMaternal(persona.maternal) }
+  : persona;
+
+const normalizarExtrasPorDia = (extrasPorDia) => Object.fromEntries(
+  Object.entries(extrasPorDia).map(([fecha, extras]) => [
+    fecha,
+    Array.isArray(extras) ? extras.map(normalizarPersona) : extras
+  ])
+);
 
 export const crearEstadoMensualVacio = () => ({
   personal: [],
@@ -67,6 +80,8 @@ const normalizarCalendarioCategoria = (calendario) => {
     if (!esObjetoValido(normalizado[clave])) normalizado[clave] = {};
   });
 
+  normalizado.extras = normalizarExtrasPorDia(normalizado.extras);
+
   return normalizado;
 };
 
@@ -77,7 +92,9 @@ export const normalizarEstadoMensual = (estado) => {
   const planillas = esObjetoValido(normalizado.planillas) ? normalizado.planillas : {};
   const calendario = esObjetoValido(normalizado.calendario) ? normalizado.calendario : {};
 
-  normalizado.personal = Array.isArray(normalizado.personal) ? normalizado.personal : [];
+  normalizado.personal = Array.isArray(normalizado.personal)
+    ? normalizado.personal.map(normalizarPersona)
+    : [];
   normalizado.licencias = Array.isArray(normalizado.licencias) ? normalizado.licencias : [];
   normalizado.certificaciones = Array.isArray(normalizado.certificaciones)
     ? normalizado.certificaciones

@@ -1,6 +1,11 @@
 import { normalizar } from "./texto.js";
 import { obtenerConfiguracionTurno } from "../config/turnos.js";
 import { crearIntervaloRelativo, horaAMinutos, minutosAHora } from "./horarios.js";
+import {
+  TIPOS_MATERNAL,
+  normalizarMaternal,
+  obtenerAjusteMaternal
+} from "./maternal.js";
 
 export const gruposOperativos = [
   {
@@ -53,20 +58,29 @@ export const gruposOperativos = [
 export const obtenerHorarioEfectivo = (persona, configTurno = obtenerConfiguracionTurno()) => {
   const horario = configTurno.horarios[persona?.horario] || configTurno.horarios.normal;
   const horarioEspecial = persona?.horario === "entraAntes" || persona?.horario === "entraDespues";
+  const maternal = normalizarMaternal(persona?.maternal);
+  const { minutosEntrada, minutosSalida } = obtenerAjusteMaternal(maternal);
   const inicioNormal = configTurno.horarios.normal.entrada;
   const intervalo = crearIntervaloRelativo(horario, inicioNormal);
-  const finRelativo = intervalo.finRelativo - (persona?.maternal ? 60 : 0);
+  const inicioRelativo = intervalo.inicioRelativo + minutosEntrada;
+  const finRelativo = intervalo.finRelativo + minutosSalida;
+  const entradaEfectiva = minutosAHora(horaAMinutos(inicioNormal) + inicioRelativo);
   const salidaEfectiva = minutosAHora(horaAMinutos(inicioNormal) + finRelativo);
+  const inicioAbsoluto = horaAMinutos(inicioNormal) + inicioRelativo;
+  const finAbsoluto = horaAMinutos(inicioNormal) + finRelativo;
 
   return {
-    entrada: horario.entrada,
+    entrada: entradaEfectiva,
     salida: salidaEfectiva,
-    entradaEspecial: horarioEspecial,
-    salidaEspecial: horarioEspecial || Boolean(persona?.maternal),
-    inicioRelativo: intervalo.inicioRelativo,
+    entradaEspecial:
+      horarioEspecial || maternal === TIPOS_MATERNAL.ENTRA_UNA_HORA_DESPUES,
+    salidaEspecial:
+      horarioEspecial || maternal === TIPOS_MATERNAL.SALE_UNA_HORA_ANTES,
+    inicioRelativo,
     finRelativo,
-    duracion: finRelativo - intervalo.inicioRelativo,
-    cruzaMedianoche: horaAMinutos(salidaEfectiva) <= horaAMinutos(horario.entrada)
+    duracion: finRelativo - inicioRelativo,
+    cruzaMedianoche:
+      Math.floor(finAbsoluto / (24 * 60)) > Math.floor(inicioAbsoluto / (24 * 60))
   };
 };
 

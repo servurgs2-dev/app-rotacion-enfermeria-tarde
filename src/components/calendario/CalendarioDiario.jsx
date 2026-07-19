@@ -154,17 +154,17 @@ const borrarExtra = (nombre) => {
   const lista = extrasDia;
   const extraEliminado = lista.find((extra) => extra?.nombre === nombre);
   const nuevaLista = lista.filter((e) => e?.nombre !== nombre);
-  const limpiarCambios = (cambiosPorDia, usarReferencias) => {
+  const limpiarCambios = (cambiosPorDia) => {
     const cambios = { ...(cambiosPorDia[keyDia] || {}) };
 
     Object.keys(cambios).forEach((sector) => {
-      const corresponde = usarReferencias && extraEliminado
+      const corresponde = extraEliminado
         ? referenciaIdentificaPersona(
             cambios[sector],
             extraEliminado,
             [...personalFiltrado, ...extrasDia]
           )
-        : normalizar(cambios[sector]) === normalizar(nombre);
+        : false;
       if (corresponde) {
         delete cambios[sector];
       }
@@ -181,8 +181,8 @@ const borrarExtra = (nombre) => {
       ...extras,
       [keyDia]: nuevaLista
     },
-    cambiosDia: limpiarCambios(cambiosDia, true),
-    cambiosParoDia: limpiarCambios(cambiosParoDia, false)
+    cambiosDia: limpiarCambios(cambiosDia),
+    cambiosParoDia: limpiarCambios(cambiosParoDia)
   });
 };
 
@@ -493,8 +493,8 @@ if (esDiaParo) {
     usadosParo.add(nombreNormalizado);
     return enfermero;
   };
-  const buscarPorNombre = (nombre) =>
-    candidatos.find((enfermero) => normalizar(enfermero.nombre) === normalizar(nombre));
+  const resolverCambioParo = (referencia) =>
+    resolverPersonaDesdeReferencia(referencia, candidatos);
   const tomarSobrante = (sectorActual) => {
     const sectorNormalizado = normalizar(sectorActual);
 
@@ -516,7 +516,7 @@ if (esDiaParo) {
   sectoresParo.forEach((sector) => {
     const override = cambiosParo[normalizar(sector)];
     const enfermero = override && override !== "__EMPTY__"
-      ? buscarPorNombre(override)
+      ? resolverCambioParo(override)
       : null;
     const nombreNormalizado = enfermero && normalizar(enfermero.nombre);
 
@@ -534,7 +534,7 @@ if (esDiaParo) {
     }
 
     if (override) {
-      enfermero = tomarCandidato(buscarPorNombre(override));
+      enfermero = tomarCandidato(resolverCambioParo(override));
     } else {
       for (const sectorPrioritario of prioridadesParo[sector] || []) {
         const candidatoPrioritario = asignacionFinal.find(
@@ -636,8 +636,7 @@ useEffect(() => {
     const guardarMovimientos = (movimientos) => {
       const nuevo = aplicarMovimientosCalendario({
         cambios: cambiosActivos[keyDia],
-        movimientos,
-        esDiaParo
+        movimientos
       });
 
       setCalendario({

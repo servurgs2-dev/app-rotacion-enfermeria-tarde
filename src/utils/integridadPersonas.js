@@ -148,7 +148,8 @@ export const limpiarPersonaDeCalendario = (calendario, persona, personal = []) =
   const cambiosParoDia = limpiarCambiosPorDia(
     calendario.cambiosParoDia,
     persona,
-    personal
+    personal,
+    true
   );
   const extras = limpiarExtrasPorDia(calendario.extras, persona);
   const noDisponibles = limpiarNoDisponiblesPorDia(

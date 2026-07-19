@@ -112,6 +112,11 @@ const normalizarCalendarioCategoria = (calendario, personal) => {
     personal,
     normalizado.extras
   );
+  normalizado.cambiosParoDia = normalizarCambiosPersonasPorDia(
+    normalizado.cambiosParoDia,
+    personal,
+    normalizado.extras
+  );
   normalizado.noDisponibles = normalizarNoDisponiblesPorDia(
     normalizado.noDisponibles,
     personal

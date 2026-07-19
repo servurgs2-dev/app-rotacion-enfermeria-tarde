@@ -1,4 +1,5 @@
 import { normalizarMaternal } from "./maternal.js";
+import { asegurarIdPersona } from "./identidadPersonas.js";
 
 const esObjetoValido = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -32,7 +33,10 @@ const crearCalendarioCategoriaVacio = () => ({
 });
 
 const normalizarPersona = (persona) => esObjetoValido(persona)
-  ? { ...persona, maternal: normalizarMaternal(persona.maternal) }
+  ? asegurarIdPersona({
+      ...persona,
+      maternal: normalizarMaternal(persona.maternal)
+    })
   : persona;
 
 const normalizarExtrasPorDia = (extrasPorDia) => Object.fromEntries(

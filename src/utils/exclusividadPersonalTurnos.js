@@ -1,10 +1,10 @@
 import { normalizar } from "./texto.js";
+import { normalizarFuncionarioIdentidad } from "./identidadPersonas.js";
 
 const normalizarNombreParaExclusividad = (nombre) =>
   (normalizar(nombre) || "").replace(/\s+/g, " ");
 
-export const normalizarFuncionarioParaExclusividad = (funcionario) =>
-  String(funcionario ?? "").trim().replace(/\s+/g, "");
+export const normalizarFuncionarioParaExclusividad = normalizarFuncionarioIdentidad;
 
 const representanLaMismaPersona = (candidata, existente) => {
   const funcionarioCandidato = normalizarFuncionarioParaExclusividad(

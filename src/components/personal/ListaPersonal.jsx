@@ -6,6 +6,7 @@ import {
   normalizarMaternal,
   obtenerEtiquetaMaternal
 } from "../../utils/maternal.js";
+import { crearIdPersonaNueva } from "../../utils/identidadPersonas.js";
 
 function ListaPersonal({
   personal,
@@ -117,7 +118,7 @@ function ListaPersonal({
 
     if (validacionNombreIdRef.current !== validacionId) return;
 
-    const nuevo = {
+    const datosNuevaPersona = {
       nombre: nombreLimpio,
       categoria,
       rol,
@@ -125,6 +126,10 @@ function ListaPersonal({
       horario,
       maternal,
       funcionario: funcionario.trim()
+    };
+    const nuevo = {
+      id: crearIdPersonaNueva(datosNuevaPersona),
+      ...datosNuevaPersona
     };
 
     const nuevaLista = [...personal, nuevo].sort((a, b) =>

@@ -8,6 +8,7 @@ import {
   semanaKeyFromDate
 } from "../../utils/fechas";
 import { normalizar } from "../../utils/texto";
+import { crearIdPersonaNueva } from "../../utils/identidadPersonas.js";
 
 function CalendarioDiario({
   personal,
@@ -871,6 +872,7 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
       const lista = extrasDia;
 
       const nuevoExtra = {
+        id: crearIdPersonaNueva({ nombre: nuevoNombre, funcionario: "" }),
         nombre: nuevoNombre,
         categoria: tipo,
         libre: null,

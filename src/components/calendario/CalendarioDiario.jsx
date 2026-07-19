@@ -9,6 +9,7 @@ import {
 } from "../../utils/fechas";
 import { normalizar } from "../../utils/texto";
 import { crearIdPersonaNueva } from "../../utils/identidadPersonas.js";
+import { resolverPersonaDesdeReferencia } from "../../utils/referenciasPersonas.js";
 
 function CalendarioDiario({
   personal,
@@ -173,18 +174,21 @@ const asignacionCompleta = filas.map((fila) => {
   const override = cambiosDia[keyDia]?.[normalizar(fila)];
 
   let nombre;
+  let enfermero;
 
   if (override === "__EMPTY__") {
     nombre = null;
   } else if (override) {
     nombre = override;
+    enfermero = [...personalFiltrado, ...extrasDia].find(
+      (e) => e && normalizar(e.nombre) === normalizar(nombre)
+    );
   } else {
-    nombre = planillaSemana[fila];
+    enfermero = resolverPersonaDesdeReferencia(
+      planillaSemana[fila],
+      [...personalFiltrado, ...extrasDia]
+    );
   }
-
-  const enfermero = [...personalFiltrado, ...extrasDia].find(
-    (e) => e && normalizar(e.nombre) === normalizar(nombre)
-  );
 
   return {
     nombre: fila,

@@ -2,10 +2,14 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { configuracionSectores } from "../data/sectores";
 import { normalizar } from "./texto";
+import {
+  obtenerNombreDesdeReferencia,
+  resolverPersonaDesdeReferencia
+} from "./referenciasPersonas.js";
 
 
 // 🔹 PLANILLA
-export const exportarPlanillaPDF = (planillaEnf, planillaLic, semanas) => {
+export const exportarPlanillaPDF = (planillaEnf, planillaLic, semanas, personal = []) => {
   const semanasActivas = Array.isArray(semanas) ? semanas : [];
   const pdf = new jsPDF("l"); // 🔥 horizontal (clave)
 
@@ -23,6 +27,14 @@ pdf.line(14, 17, 280, 17);
     )
   ];
 
+  const nombreParaPDF = (referencia) => {
+    const nombre = obtenerNombreDesdeReferencia(referencia, personal);
+    const esIdIntermedioNoResuelto = typeof referencia === "string" &&
+      referencia.trim().startsWith("persona-") &&
+      !resolverPersonaDesdeReferencia(referencia, personal);
+    return esIdIntermedioNoResuelto ? "" : nombre;
+  };
+
   const planillaEnfNorm = {};
 
 Object.keys(planillaEnf || {}).forEach(semana => {
@@ -30,7 +42,7 @@ Object.keys(planillaEnf || {}).forEach(semana => {
 
   Object.keys(planillaEnf[semana] || {}).forEach(sector => {
     planillaEnfNorm[semana][normalizar(sector)] =
-      planillaEnf[semana][sector];
+      nombreParaPDF(planillaEnf[semana][sector]);
   });
 });
 
@@ -41,7 +53,7 @@ Object.keys(planillaLic || {}).forEach(semana => {
 
   Object.keys(planillaLic[semana] || {}).forEach(sector => {
     planillaLicNorm[semana][normalizar(sector)] =
-      planillaLic[semana][sector];
+      nombreParaPDF(planillaLic[semana][sector]);
   });
 });
   // 🔹 obtener todos los sectores únicos

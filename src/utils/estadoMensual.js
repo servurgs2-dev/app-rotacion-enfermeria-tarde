@@ -1,5 +1,6 @@
 import { normalizarMaternal } from "./maternal.js";
 import { asegurarIdPersona } from "./identidadPersonas.js";
+import { normalizarReferenciaPlanilla } from "./referenciasPersonas.js";
 
 const esObjetoValido = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -61,12 +62,19 @@ export const crearEstadoMensualVacio = () => ({
   certificaciones: []
 });
 
-const normalizarPlanilla = (planilla) => {
+const normalizarPlanilla = (planilla, personal) => {
   const normalizada = esObjetoValido(planilla) ? clonarValor(planilla) : {};
 
   Object.keys(normalizada).forEach((clave) => {
     if (clave.startsWith("semana") && !esObjetoValido(normalizada[clave])) {
       normalizada[clave] = {};
+    } else if (clave.startsWith("semana")) {
+      normalizada[clave] = Object.fromEntries(
+        Object.entries(normalizada[clave]).map(([sector, referencia]) => [
+          sector,
+          normalizarReferenciaPlanilla(referencia, personal)
+        ])
+      );
     }
   });
 
@@ -106,8 +114,8 @@ export const normalizarEstadoMensual = (estado) => {
 
   normalizado.planillas = {
     ...planillas,
-    enfermeros: normalizarPlanilla(planillas.enfermeros),
-    licenciados: normalizarPlanilla(planillas.licenciados)
+    enfermeros: normalizarPlanilla(planillas.enfermeros, normalizado.personal),
+    licenciados: normalizarPlanilla(planillas.licenciados, normalizado.personal)
   };
 
   normalizado.calendario = {

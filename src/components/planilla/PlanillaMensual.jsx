@@ -1,5 +1,11 @@
 import { configuracionSectores } from "../../data/sectores";
 import { estaDeLicencia, obtenerSemanasDelMes } from "../../utils/fechas";
+import {
+  crearReferenciaPersona,
+  obtenerNombreDesdeReferencia,
+  referenciaCorrespondeAPersona,
+  resolverPersonaDesdeReferencia
+} from "../../utils/referenciasPersonas.js";
 
 function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mesActivo }) {
   const personalFiltrado = personal.filter((p) => p.categoria === tipo);
@@ -28,7 +34,10 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
   function mapear(array) {
     const resultado = {};
     filas.forEach((fila, indice) => {
-      resultado[fila] = array[indice];
+      const referencia = array[indice];
+      resultado[fila] = referencia && typeof referencia === "object"
+        ? { ...referencia }
+        : referencia;
     });
     return resultado;
   }
@@ -48,7 +57,11 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
     setPlanilla(nuevaPlanilla);
   }
 
-  function actualizarCelda(semana, sector, valor) {
+  function actualizarCelda(semana, sector, personaId) {
+    const persona = personalFiltrado.find((item) => item.id === personaId);
+    const valor = personaId ? crearReferenciaPersona(persona) : "";
+    if (personaId && !valor) return;
+
     setPlanilla((prev) => ({
       ...prev,
       [semana]: {
@@ -87,23 +100,40 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
 
                 {semanas.map((semana) => {
                   const valoresSemana = planilla?.[semana.clave] || {};
+                  const referenciaActual = valoresSemana[sector] || "";
+                  const personaActual = resolverPersonaDesdeReferencia(
+                    referenciaActual,
+                    personalFiltrado
+                  );
+                  const nombreHistorico = obtenerNombreDesdeReferencia(
+                    referenciaActual,
+                    personalFiltrado
+                  );
+                  const valorSelect = personaActual?.id ||
+                    (nombreHistorico ? "__REFERENCIA_NO_RESUELTA__" : "");
 
                   return (
                     <td key={semana.clave} className="px-3 py-2 min-w-[140px]">
                       <select
                         className="w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                        value={valoresSemana[sector] || ""}
+                        value={valorSelect}
                         onChange={(evento) =>
                           actualizarCelda(semana.clave, sector, evento.target.value)
                         }
                       >
                         <option value="">-- elegir --</option>
+                        {!personaActual && nombreHistorico && (
+                          <option value="__REFERENCIA_NO_RESUELTA__" disabled>
+                            {nombreHistorico}
+                          </option>
+                        )}
                         {personalFiltrado
                           .filter((persona) => {
-                            const usados = Object.values(valoresSemana);
-                            const disponible =
-                              !usados.includes(persona.nombre) ||
-                              valoresSemana[sector] === persona.nombre;
+                            const disponible = !Object.entries(valoresSemana).some(
+                              ([otroSector, referencia]) =>
+                                otroSector !== sector &&
+                                referenciaCorrespondeAPersona(referencia, persona)
+                            );
                             const noLicencia = !estaDeLicencia(
                               licencias,
                               persona.nombre,
@@ -113,7 +143,7 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                             return disponible && noLicencia;
                           })
                           .map((persona) => (
-                            <option key={persona.nombre} value={persona.nombre}>
+                            <option key={persona.id} value={persona.id}>
                               {persona.nombre}
                             </option>
                           ))}

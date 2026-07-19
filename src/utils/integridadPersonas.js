@@ -1,4 +1,5 @@
-import { normalizar } from "./texto";
+import { normalizar } from "./texto.js";
+import { referenciaCorrespondeAPersona } from "./referenciasPersonas.js";
 
 const esObjetoPlano = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -26,13 +27,13 @@ export const limpiarPersonaDePlanilla = (planilla, persona) => {
     let semanaCambio = false;
     const semanaLimpia = {};
 
-    Object.entries(semana).forEach(([sector, nombre]) => {
-      if (coincidePersona(nombre, persona)) {
+    Object.entries(semana).forEach(([sector, referencia]) => {
+      if (referenciaCorrespondeAPersona(referencia, persona)) {
         semanaLimpia[sector] = "";
         semanaCambio = true;
         huboCambios = true;
       } else {
-        semanaLimpia[sector] = nombre;
+        semanaLimpia[sector] = referencia;
       }
     });
 

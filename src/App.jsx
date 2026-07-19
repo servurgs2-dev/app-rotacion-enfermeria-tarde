@@ -5,10 +5,11 @@ import CalendarioDiario from "./components/calendario/CalendarioDiario";
 import Seccion from "./components/ui/Seccion";
 import Licencias from "./components/licencias/Licencias";
 import Certificaciones from "./components/certificaciones/Certificaciones";
+import SelectorTurno from "./components/turnos/SelectorTurno";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
 import { generarAlertasHorarios } from "./utils/alertasHorarios";
-import { TURNO_POR_DEFECTO, obtenerConfiguracionTurno } from "./config/turnos";
+import { TURNOS, obtenerConfiguracionTurno } from "./config/turnos";
 import {
   crearEstadoMensualVacio,
   crearPlanillaMensualVacia
@@ -27,8 +28,8 @@ const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
 
 function App() {
- const turnoActivo = TURNO_POR_DEFECTO;
- const configTurno = obtenerConfiguracionTurno(turnoActivo);
+ const [turnoActivo, setTurnoActivo] = useState(null);
+ const configTurno = turnoActivo ? obtenerConfiguracionTurno(turnoActivo) : null;
  const [estadoPorTurnoMes, setEstadoPorTurnoMes] = useState({});
   const [mesActivo, setMesActivo] = useState(() => {
   const hoy = new Date();
@@ -39,7 +40,9 @@ const [tabPlanilla, setTabPlanilla] = useState("enfermeros");
 const [tabCalendario, setTabCalendario] = useState("enfermeros");
 
 const [fecha, setFecha] = useState(new Date());
-const claveActiva = crearClaveTurnoMes(turnoActivo, mesActivo);
+const claveActiva = turnoActivo
+  ? crearClaveTurnoMes(turnoActivo, mesActivo)
+  : null;
 const debouncesGuardadoRef = useRef(new Map());
 const colaGuardadoRef = useRef(new Map());
 const versionesGuardadoRef = useRef(new Map());
@@ -60,10 +63,14 @@ const [dataPDFLic, setDataPDFLic] = useState({ asignaciones: [], libres: [] });
 //console.log("🔁 TAB ACTUAL:", tabCalendario);
 
 useEffect(() => {
+  if (!claveActiva || !turnoActivo) return;
+
   identidadesEstadoRef.current.set(claveActiva, { turnoId: turnoActivo, mes: mesActivo });
 }, [claveActiva, mesActivo, turnoActivo]);
 
 const getMesData = (mes, turnoId = turnoActivo) => {
+  if (!turnoId) return crearEstadoMensualVacio();
+
   const clave = crearClaveTurnoMes(turnoId, mes);
   return estadoPorTurnoMes[clave] || crearEstadoMensualVacio();
 };
@@ -76,6 +83,7 @@ const keyDiaActual = keyDiaFromDate(fecha);
 const esDiaParoActual = Boolean(diasParo[keyDiaActual]);
 const alertasHorarios = useMemo(() => {
   if (
+    !configTurno ||
     esDiaParoActual ||
     dataPDFEnf.keyDia !== keyDiaActual ||
     dataPDFLic.keyDia !== keyDiaActual
@@ -344,6 +352,14 @@ const limpiarPersonal = () => {
 
 
 useEffect(() => {
+  if (!turnoActivo) {
+    cargaActualRef.current = {
+      id: cargaActualRef.current.id + 1,
+      clave: null
+    };
+    return;
+  }
+
   const cargar = async () => {
     const claveCarga = crearClaveTurnoMes(turnoActivo, mesActivo);
     const cargaId = cargaActualRef.current.id + 1;
@@ -425,6 +441,32 @@ const mesSiguiente = `${mesSiguienteFecha.getFullYear()}-${String(
   mesSiguienteFecha.getMonth() + 1
 ).padStart(2, "0")}`;
 
+const seleccionarTurno = (turnoId) => {
+  if (!Object.hasOwn(TURNOS, turnoId)) return;
+
+  setDataPDFEnf({ asignaciones: [], libres: [] });
+  setDataPDFLic({ asignaciones: [], libres: [] });
+  setCargando(true);
+  cargandoRef.current = true;
+  setTurnoActivo(turnoId);
+};
+
+const cambiarTurno = () => {
+  cargaActualRef.current = {
+    id: cargaActualRef.current.id + 1,
+    clave: null
+  };
+  cargandoRef.current = false;
+  setCargando(false);
+  setDataPDFEnf({ asignaciones: [], libres: [] });
+  setDataPDFLic({ asignaciones: [], libres: [] });
+  setTurnoActivo(null);
+};
+
+if (!turnoActivo) {
+  return <SelectorTurno turnos={TURNOS} onSeleccionar={seleccionarTurno} />;
+}
+
 if (cargando) {
   return <div>Cargando datos...</div>;
 }
@@ -447,11 +489,16 @@ return (
   <div className="max-w-6xl mx-auto flex flex-col gap-6">
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-  <h1 className="text-2xl md:text-3xl font-bold text-slate-800">
-    🏥 Gestión de Urgencias
-  </h1>
+  <div>
+    <h1 className="text-2xl md:text-3xl font-bold text-slate-800">
+      🏥 Gestión de Urgencias
+    </h1>
+    <p className="mt-1 text-sm font-medium text-slate-600">
+      Turno {configTurno.nombre} · {configTurno.horarioVisible}
+    </p>
+  </div>
 
-  <div className="flex items-center gap-3">
+  <div className="flex flex-wrap items-center gap-3">
     {textoEstadoGuardado && (
       <span
         className={`text-sm ${
@@ -488,6 +535,13 @@ return (
 }}
     className="border border-slate-300 rounded-lg px-3 py-2 text-sm shadow-sm"
   />
+  <button
+    type="button"
+    onClick={cambiarTurno}
+    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-500/30"
+  >
+    Cambiar turno
+  </button>
   </div>
 </div>
 

@@ -14,9 +14,9 @@ import {
   crearPlanillaMensualVacia
 } from "./utils/estadoMensual";
 import {
-  cargarEstadoMensual,
-  guardarEstadoMensual
-} from "./services/estadoMensual";
+  cargarEstadoTurnoMes,
+  guardarEstadoTurnoMes
+} from "./services/estadoTurnos";
 import { crearClaveTurnoMes } from "./utils/claveTurnoMes";
 import {
   limpiarReferenciasDeCategoria,
@@ -24,7 +24,6 @@ import {
 } from "./utils/integridadPersonas";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
-const TURNO_REPOSITORIO_HISTORICO = "tarde";
 
 
 function App() {
@@ -132,13 +131,8 @@ const semanas = obtenerSemanasDelMes(mesActivo);
 const guardarMes = useCallback(async (turnoId, mes, data) => {
   if (!data) return null;
 
-  // La tabla histórica estado_por_mes pertenece exclusivamente al Turno Tarde.
-  if (turnoId !== TURNO_REPOSITORIO_HISTORICO) {
-    return new Error("El repositorio histórico solo admite el Turno Tarde.");
-  }
-
   try {
-    await guardarEstadoMensual(mes, data);
+    await guardarEstadoTurnoMes(turnoId, mes, data);
     return null;
   } catch (error) {
     return error;
@@ -362,7 +356,7 @@ useEffect(() => {
     let error;
 
     try {
-      resultado = await cargarEstadoMensual(mesActivo);
+      resultado = await cargarEstadoTurnoMes(turnoActivo, mesActivo);
     } catch (errorCarga) {
       error = errorCarga;
     }
@@ -404,7 +398,7 @@ const copiarMesAnterior = async () => {
   let resultado;
 
   try {
-    resultado = await cargarEstadoMensual(keyAnterior);
+    resultado = await cargarEstadoTurnoMes(turnoActivo, keyAnterior);
   } catch {
     alert("No hay datos del mes anterior");
     return;
@@ -608,7 +602,7 @@ return (
               let resultado;
 
               try {
-                resultado = await cargarEstadoMensual(keyAnterior);
+                resultado = await cargarEstadoTurnoMes(turnoActivo, keyAnterior);
               } catch {
                 alert("No hay planilla anterior");
                 return;

@@ -6,6 +6,7 @@ import {
   referenciaCorrespondeAPersona,
   resolverPersonaDesdeReferencia
 } from "../../utils/referenciasPersonas.js";
+import { generarRotacionMensual } from "../../utils/rotacionPlanilla.js";
 
 function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mesActivo }) {
   const personalFiltrado = personal.filter((p) => p.categoria === tipo);
@@ -23,38 +24,14 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
     }
   });
 
-  function rotarArray(array, pasos) {
-    const copia = [...array];
-    for (let indice = 0; indice < pasos; indice += 1) {
-      copia.unshift(copia.pop());
-    }
-    return copia;
-  }
-
-  function mapear(array) {
-    const resultado = {};
-    filas.forEach((fila, indice) => {
-      const referencia = array[indice];
-      resultado[fila] = referencia && typeof referencia === "object"
-        ? { ...referencia }
-        : referencia;
-    });
-    return resultado;
-  }
-
   function generarMes() {
-    const base = filas.map((fila) => planilla?.semana1?.[fila] || "");
-    const nuevaPlanilla = {
-      ...planilla,
-      semana1: planilla?.semana1 || {},
-      semana6: planilla?.semana6 || {}
-    };
-
-    semanas.slice(1).forEach((semana, indice) => {
-      nuevaPlanilla[semana.clave] = mapear(rotarArray(base, indice + 1));
-    });
-
-    setPlanilla(nuevaPlanilla);
+    setPlanilla(generarRotacionMensual({
+      planilla,
+      filas,
+      semanas,
+      filaFija: tipo === "enfermero" ? "SM" : "Salud Mental",
+      personal: personalFiltrado
+    }));
   }
 
   function actualizarCelda(semana, sector, personaId) {

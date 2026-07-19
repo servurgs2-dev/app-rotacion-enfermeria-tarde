@@ -13,8 +13,10 @@ import {
   agregarPersonaAListaReferencias,
   quitarPersonaDeListaReferencias,
   referenciaCorrespondeAPersona,
+  referenciaIdentificaPersona,
   resolverPersonaDesdeReferencia
 } from "../../utils/referenciasPersonas.js";
+import { aplicarMovimientosCalendario } from "../../utils/cambiosCalendario.js";
 
 function CalendarioDiario({
   personal,
@@ -150,12 +152,20 @@ const estaAusente = useCallback(
 
 const borrarExtra = (nombre) => {
   const lista = extrasDia;
+  const extraEliminado = lista.find((extra) => extra?.nombre === nombre);
   const nuevaLista = lista.filter((e) => e?.nombre !== nombre);
-  const limpiarCambios = (cambiosPorDia) => {
+  const limpiarCambios = (cambiosPorDia, usarReferencias) => {
     const cambios = { ...(cambiosPorDia[keyDia] || {}) };
 
     Object.keys(cambios).forEach((sector) => {
-      if (normalizar(cambios[sector]) === normalizar(nombre)) {
+      const corresponde = usarReferencias && extraEliminado
+        ? referenciaIdentificaPersona(
+            cambios[sector],
+            extraEliminado,
+            [...personalFiltrado, ...extrasDia]
+          )
+        : normalizar(cambios[sector]) === normalizar(nombre);
+      if (corresponde) {
         delete cambios[sector];
       }
     });
@@ -171,8 +181,8 @@ const borrarExtra = (nombre) => {
       ...extras,
       [keyDia]: nuevaLista
     },
-    cambiosDia: limpiarCambios(cambiosDia),
-    cambiosParoDia: limpiarCambios(cambiosParoDia)
+    cambiosDia: limpiarCambios(cambiosDia, true),
+    cambiosParoDia: limpiarCambios(cambiosParoDia, false)
   });
 };
 
@@ -180,17 +190,14 @@ const asignacionOrdenada = useMemo(() => {
 const asignacionCompleta = filas.map((fila) => {
   const override = cambiosDia[keyDia]?.[normalizar(fila)];
 
-  let nombre;
   let enfermero;
 
-  if (override === "__EMPTY__") {
-    nombre = null;
-  } else if (override) {
-    nombre = override;
-    enfermero = [...personalFiltrado, ...extrasDia].find(
-      (e) => e && normalizar(e.nombre) === normalizar(nombre)
+  if (override && override !== "__EMPTY__") {
+    enfermero = resolverPersonaDesdeReferencia(
+      override,
+      [...personalFiltrado, ...extrasDia]
     );
-  } else {
+  } else if (!override) {
     enfermero = resolverPersonaDesdeReferencia(
       planillaSemana[fila],
       [...personalFiltrado, ...extrasDia]
@@ -378,12 +385,16 @@ if (seDivideReanimacionSillones) {
     const destino = asignacionParaMostrar.find(
       (item) => normalizar(item.nombre) === normalizar(nombreFila)
     );
-    const nombreSolicitado = cambiosDivididos[normalizar(nombreFila)];
+    const referenciaSolicitada = cambiosDivididos[normalizar(nombreFila)];
 
-    if (!destino || !nombreSolicitado || nombreSolicitado === "__EMPTY__") return;
+    if (!destino || !referenciaSolicitada || referenciaSolicitada === "__EMPTY__") return;
 
+    const personaSolicitada = resolverPersonaDesdeReferencia(
+      referenciaSolicitada,
+      [...personalFiltrado, ...extrasDia]
+    );
     const enfermero = asignacionParaMostrar.find(
-      (item) => normalizar(item.enfermero?.nombre) === normalizar(nombreSolicitado)
+      (item) => item.enfermero?.id === personaSolicitada?.id
     )?.enfermero;
     const nombreNormalizado = enfermero && normalizar(enfermero.nombre);
 
@@ -622,6 +633,21 @@ useEffect(() => {
 }, [asignacionOrdenada, keyDia, libres, onDataReady]);
 
   const handleClick = (item) => {
+    const guardarMovimientos = (movimientos) => {
+      const nuevo = aplicarMovimientosCalendario({
+        cambios: cambiosActivos[keyDia],
+        movimientos,
+        esDiaParo
+      });
+
+      setCalendario({
+        [claveCambiosActivos]: {
+          ...cambiosActivos,
+          [keyDia]: nuevo
+        }
+      });
+    };
+
     const esFilaDividida = (fila) =>
       tipo === "licenciado" &&
       !esDiaParo &&
@@ -634,15 +660,10 @@ useEffect(() => {
     if (esFilaDividida(item) || esFilaDividida(seleccionado)) {
       if (!item.enfermero) {
         if (seleccionado && esFilaDividida(item)) {
-          const nuevo = { ...(cambiosDia[keyDia] || {}) };
-          nuevo[normalizar(item.nombre)] = seleccionado.enfermero.nombre;
-
-          setCalendario({
-            cambiosDia: {
-              ...cambiosDia,
-              [keyDia]: nuevo
-            }
-          });
+          guardarMovimientos([
+            { sector: item.nombre, persona: seleccionado.enfermero },
+            { sector: seleccionado.nombre, vacio: true }
+          ]);
           setSeleccionado(null);
         }
         return;
@@ -653,39 +674,27 @@ useEffect(() => {
         return;
       }
 
-      const nuevo = { ...(cambiosDia[keyDia] || {}) };
+      const movimientos = [];
 
       if (esFilaDividida(item)) {
-        nuevo[normalizar(item.nombre)] = seleccionado.enfermero.nombre;
+        movimientos.push({ sector: item.nombre, persona: seleccionado.enfermero });
       }
 
       if (esFilaDividida(seleccionado)) {
-        nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
+        movimientos.push({ sector: seleccionado.nombre, persona: item.enfermero });
       }
 
-      setCalendario({
-        cambiosDia: {
-          ...cambiosDia,
-          [keyDia]: nuevo
-        }
-      });
+      guardarMovimientos(movimientos);
       setSeleccionado(null);
       return;
     }
 
     if (!item.enfermero) {
       if (seleccionado) {
-        const nuevo = { ...(cambiosActivos[keyDia] || {}) };
-
-        nuevo[normalizar(item.nombre)] = seleccionado.enfermero.nombre;
-nuevo[normalizar(seleccionado.nombre)] = "__EMPTY__";
-
-      setCalendario({
-  [claveCambiosActivos]: {
-    ...cambiosActivos,
-    [keyDia]: nuevo
-  }
-});
+        guardarMovimientos([
+          { sector: item.nombre, persona: seleccionado.enfermero },
+          { sector: seleccionado.nombre, vacio: true }
+        ]);
 
         setSeleccionado(null);
       }
@@ -699,17 +708,10 @@ nuevo[normalizar(seleccionado.nombre)] = "__EMPTY__";
       return;
     }
 
-    const nuevo = { ...(cambiosActivos[keyDia] || {}) };
-
-    nuevo[normalizar(item.nombre)] = seleccionado.enfermero.nombre;
-nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
-
-    setCalendario({
-  [claveCambiosActivos]: {
-    ...cambiosActivos,
-    [keyDia]: nuevo
-  }
-});
+    guardarMovimientos([
+      { sector: item.nombre, persona: seleccionado.enfermero },
+      { sector: seleccionado.nombre, persona: item.enfermero }
+    ]);
 
     setSeleccionado(null);
   };

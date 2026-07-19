@@ -1,6 +1,7 @@
 import { normalizar } from "./texto.js";
 import {
   quitarPersonaDeListaReferencias,
+  referenciaIdentificaPersona,
   referenciaCorrespondeAPersona
 } from "./referenciasPersonas.js";
 
@@ -46,7 +47,12 @@ export const limpiarPersonaDePlanilla = (planilla, persona) => {
   return huboCambios ? planillaLimpia : planilla;
 };
 
-const limpiarCambiosPorDia = (cambiosPorDia, persona) => {
+const limpiarCambiosPorDia = (
+  cambiosPorDia,
+  persona,
+  personal,
+  usarReferencias = false
+) => {
   if (!esObjetoPlano(cambiosPorDia)) return cambiosPorDia;
 
   let huboCambios = false;
@@ -59,7 +65,11 @@ const limpiarCambiosPorDia = (cambiosPorDia, persona) => {
     }
 
     const cambiosDelDia = Object.fromEntries(
-      Object.entries(cambiosDia).filter(([, nombre]) => !coincidePersona(nombre, persona))
+      Object.entries(cambiosDia).filter(([, referencia]) =>
+        usarReferencias
+          ? !referenciaIdentificaPersona(referencia, persona, personal)
+          : !coincidePersona(referencia, persona)
+      )
     );
 
     if (Object.keys(cambiosDelDia).length !== Object.keys(cambiosDia).length) {
@@ -129,8 +139,17 @@ const limpiarNoDisponiblesPorDia = (noDisponiblesPorDia, persona, personal) => {
 export const limpiarPersonaDeCalendario = (calendario, persona, personal = []) => {
   if (!esObjetoPlano(calendario)) return calendario;
 
-  const cambiosDia = limpiarCambiosPorDia(calendario.cambiosDia, persona);
-  const cambiosParoDia = limpiarCambiosPorDia(calendario.cambiosParoDia, persona);
+  const cambiosDia = limpiarCambiosPorDia(
+    calendario.cambiosDia,
+    persona,
+    personal,
+    true
+  );
+  const cambiosParoDia = limpiarCambiosPorDia(
+    calendario.cambiosParoDia,
+    persona,
+    personal
+  );
   const extras = limpiarExtrasPorDia(calendario.extras, persona);
   const noDisponibles = limpiarNoDisponiblesPorDia(
     calendario.noDisponibles,

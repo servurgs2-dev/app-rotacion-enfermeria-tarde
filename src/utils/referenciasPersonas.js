@@ -116,6 +116,46 @@ export const normalizarListaReferenciasPersonas = (lista, personal) => {
   return normalizada;
 };
 
+export const normalizarCambiosPersonasPorDia = (
+  cambiosPorDia,
+  personal,
+  extrasPorDia
+) => {
+  if (!esObjeto(cambiosPorDia)) return cambiosPorDia;
+
+  return Object.fromEntries(
+    Object.entries(cambiosPorDia).map(([fecha, cambios]) => {
+      if (!esObjeto(cambios)) return [fecha, cambios];
+
+      const extras = Array.isArray(extrasPorDia?.[fecha])
+        ? extrasPorDia[fecha]
+        : [];
+      const candidatos = [...(Array.isArray(personal) ? personal : []), ...extras];
+      return [
+        fecha,
+        Object.fromEntries(
+          Object.entries(cambios).map(([sector, referencia]) => [
+            sector,
+            normalizarReferenciaPersona(referencia, candidatos)
+          ])
+        )
+      ];
+    })
+  );
+};
+
+export const referenciaIdentificaPersona = (referencia, persona, personal) => {
+  const personaId = obtenerId(persona?.id);
+  const resuelta = resolverPersonaDesdeReferencia(referencia, personal);
+  if (resuelta) return Boolean(personaId) && obtenerId(resuelta.id) === personaId;
+  if (esReferenciaPersona(referencia)) {
+    return Boolean(personaId) && obtenerId(referencia.personaId) === personaId;
+  }
+
+  const hayPersonalParaResolver = Array.isArray(personal) && personal.length > 0;
+  return !hayPersonalParaResolver && referenciaCorrespondeAPersona(referencia, persona);
+};
+
 export const agregarPersonaAListaReferencias = (lista, persona, personal) => {
   const referencias = Array.isArray(lista) ? lista : [];
   const personaId = obtenerId(persona?.id);
@@ -132,16 +172,7 @@ export const agregarPersonaAListaReferencias = (lista, persona, personal) => {
 export const quitarPersonaDeListaReferencias = (lista, persona, personal) => {
   if (!Array.isArray(lista)) return lista;
 
-  const personaId = obtenerId(persona?.id);
-  const hayPersonalParaResolver = Array.isArray(personal) && personal.length > 0;
-  return lista.filter((referencia) => {
-    const resuelta = resolverPersonaDesdeReferencia(referencia, personal);
-    if (resuelta) return obtenerId(resuelta.id) !== personaId;
-
-    if (esReferenciaPersona(referencia)) {
-      return obtenerId(referencia.personaId) !== personaId;
-    }
-
-    return hayPersonalParaResolver || !referenciaCorrespondeAPersona(referencia, persona);
-  });
+  return lista.filter(
+    (referencia) => !referenciaIdentificaPersona(referencia, persona, personal)
+  );
 };

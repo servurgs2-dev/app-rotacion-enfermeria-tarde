@@ -1,6 +1,7 @@
 import { normalizarMaternal } from "./maternal.js";
 import { asegurarIdPersona } from "./identidadPersonas.js";
 import {
+  normalizarCambiosPersonasPorDia,
   normalizarListaReferenciasPersonas,
   normalizarReferenciaPlanilla
 } from "./referenciasPersonas.js";
@@ -106,6 +107,11 @@ const normalizarCalendarioCategoria = (calendario, personal) => {
   });
 
   normalizado.extras = normalizarExtrasPorDia(normalizado.extras);
+  normalizado.cambiosDia = normalizarCambiosPersonasPorDia(
+    normalizado.cambiosDia,
+    personal,
+    normalizado.extras
+  );
   normalizado.noDisponibles = normalizarNoDisponiblesPorDia(
     normalizado.noDisponibles,
     personal
@@ -140,11 +146,11 @@ export const normalizarEstadoMensual = (estado) => {
     diasParo: esObjetoValido(calendario.diasParo) ? calendario.diasParo : {},
     enfermeros: normalizarCalendarioCategoria(
       calendario.enfermeros,
-      normalizado.personal
+      normalizado.personal.filter((persona) => persona?.categoria === "enfermero")
     ),
     licenciados: normalizarCalendarioCategoria(
       calendario.licenciados,
-      normalizado.personal
+      normalizado.personal.filter((persona) => persona?.categoria === "licenciado")
     )
   };
 

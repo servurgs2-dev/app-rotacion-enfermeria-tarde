@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { normalizar } from "../../utils/texto";
 import { obtenerDiasLibresDelMes } from "../../utils/fechas";
 import {
@@ -14,7 +14,8 @@ function ListaPersonal({
   configTurno,
   onActualizarPersona,
   onEliminarPersona,
-  onLimpiarPersonal
+  onLimpiarPersonal,
+  onValidarExclusividadTurno
 }) {
   const [nombre, setNombre] = useState("");
   const [categoria, setCategoria] = useState("enfermero");
@@ -25,6 +26,9 @@ function ListaPersonal({
   const [funcionario, setFuncionario] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [errorNombre, setErrorNombre] = useState("");
+  const [verificandoExclusividad, setVerificandoExclusividad] = useState(false);
+  const validacionNombreIdRef = useRef(0);
+  const validacionEnCursoRef = useRef(false);
 
   const formatearDias = (dias) => {
     if (dias.length === 0) return "Sin días";
@@ -44,6 +48,9 @@ function ListaPersonal({
 
     return nombre.charAt(0).toUpperCase() + nombre.slice(1);
   })();
+  const periodoVisible = nombreMes && mesActivo
+    ? `${nombreMes.toLowerCase()} de ${mesActivo.slice(0, 4)}`
+    : mesActivo;
 
   const textoDiasGrupo = (grupo) => {
     const dias = obtenerDiasLibresDelMes(grupo, mesActivo);
@@ -54,7 +61,9 @@ function ListaPersonal({
     onActualizarPersona(personaAnterior, { ...personaAnterior, ...cambios });
   };
 
-  const agregar = () => {
+  const agregar = async () => {
+    if (validacionEnCursoRef.current) return;
+
     const nombreLimpio = nombre.trim();
 
     if (!nombreLimpio) {
@@ -71,6 +80,42 @@ function ListaPersonal({
       setErrorNombre("Ya existe una persona con ese nombre.");
       return;
     }
+
+    const validacionId = validacionNombreIdRef.current + 1;
+    validacionNombreIdRef.current = validacionId;
+    validacionEnCursoRef.current = true;
+    setVerificandoExclusividad(true);
+    setErrorNombre("");
+
+    try {
+      const resultado = await onValidarExclusividadTurno({
+        nombre: nombreLimpio,
+        funcionario: funcionario.trim()
+      });
+
+      if (validacionNombreIdRef.current !== validacionId || resultado.cancelada) {
+        return;
+      }
+
+      if (resultado.existeEnOtroTurno) {
+        setErrorNombre(
+          `${nombreLimpio} ya pertenece al Turno ${resultado.turnoNombre} en ${periodoVisible}.`
+        );
+        return;
+      }
+    } catch {
+      if (validacionNombreIdRef.current === validacionId) {
+        setErrorNombre(
+          "No se pudo verificar en qué turno está esta persona. Intentá nuevamente."
+        );
+      }
+      return;
+    } finally {
+      validacionEnCursoRef.current = false;
+      setVerificandoExclusividad(false);
+    }
+
+    if (validacionNombreIdRef.current !== validacionId) return;
 
     const nuevo = {
       nombre: nombreLimpio,
@@ -128,6 +173,7 @@ function ListaPersonal({
           placeholder="Nombre"
           value={nombre}
           onChange={(e) => {
+            validacionNombreIdRef.current += 1;
             setNombre(e.target.value);
             setErrorNombre("");
           }}
@@ -181,10 +227,12 @@ function ListaPersonal({
         </label>
 
         <button
+  type="button"
   onClick={agregar}
-  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm transition"
+  disabled={verificandoExclusividad}
+  className="bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 text-white px-3 py-1.5 rounded-lg text-sm transition"
 >
-  Agregar
+  {verificandoExclusividad ? "Verificando…" : "Agregar"}
 </button>
 
         {errorNombre && (

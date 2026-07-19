@@ -20,6 +20,10 @@ import {
 } from "./services/estadoTurnos";
 import { crearClaveTurnoMes } from "./utils/claveTurnoMes";
 import {
+  buscarPersonaEnEstadosDeTurnos,
+  obtenerEstadosDeOtrosTurnos
+} from "./utils/exclusividadPersonalTurnos";
+import {
   limpiarReferenciasDeCategoria,
   limpiarReferenciasDePersona
 } from "./utils/integridadPersonas";
@@ -350,6 +354,68 @@ const limpiarPersonal = () => {
   });
 };
 
+const validarPersonasDisponiblesEnOtrosTurnos = useCallback(async (personas) => {
+  if (!turnoActivo || !claveActiva) {
+    return { cancelada: true };
+  }
+
+  const turnoValidado = turnoActivo;
+  const mesValidado = mesActivo;
+  const claveValidada = claveActiva;
+  const cargaIdValidada = cargaActualRef.current.id;
+  try {
+    const estadosLeidos = await obtenerEstadosDeOtrosTurnos({
+      turnoActual: turnoValidado,
+      mes: mesValidado,
+      turnosIds: Object.keys(TURNOS),
+      estadosPorTurnoMes: estadoPorTurnoMes,
+      crearClave: crearClaveTurnoMes,
+      cargarEstado: cargarEstadoTurnoMes
+    });
+
+    if (
+      cargaActualRef.current.id !== cargaIdValidada ||
+      cargaActualRef.current.clave !== claveValidada
+    ) {
+      return { cancelada: true };
+    }
+
+    const conflicto = personas
+      .map((personaCandidata) => ({
+        personaCandidata,
+        resultado: buscarPersonaEnEstadosDeTurnos({
+          personaCandidata,
+          turnoActual: turnoValidado,
+          estadosPorTurno: estadosLeidos
+        })
+      }))
+      .find(({ resultado }) => resultado.existeEnOtroTurno);
+
+    const resultado = conflicto?.resultado || {
+      existeEnOtroTurno: false,
+      turnoId: null,
+      persona: null
+    };
+
+    return {
+      ...resultado,
+      cancelada: false,
+      personaValidada: conflicto?.personaCandidata || null,
+      turnoNombre: resultado.turnoId
+        ? TURNOS[resultado.turnoId]?.nombre || resultado.turnoId
+        : null
+    };
+  } catch (error) {
+    console.error("No se pudo verificar la exclusividad de la persona por turno.", error);
+    throw error;
+  }
+}, [claveActiva, estadoPorTurnoMes, mesActivo, turnoActivo]);
+
+const validarPersonaDisponibleEnOtrosTurnos = useCallback(
+  (persona) => validarPersonasDisponiblesEnOtrosTurnos([persona]),
+  [validarPersonasDisponiblesEnOtrosTurnos]
+);
+
 
 useEffect(() => {
   if (!turnoActivo) {
@@ -422,6 +488,25 @@ const copiarMesAnterior = async () => {
 
   if (!resultado.existe) {
     alert("No hay datos del mes anterior");
+    return;
+  }
+
+  let validacion;
+  try {
+    validacion = await validarPersonasDisponiblesEnOtrosTurnos(
+      resultado.estado.personal || []
+    );
+  } catch {
+    alert("No se pudo verificar en qué turno está el personal. Intentá nuevamente.");
+    return;
+  }
+
+  if (validacion.cancelada) return;
+
+  if (validacion.existeEnOtroTurno) {
+    alert(
+      `${validacion.personaValidada.nombre} ya pertenece al Turno ${validacion.turnoNombre} en el mes actual.`
+    );
     return;
   }
 
@@ -555,6 +640,7 @@ return (
           onActualizarPersona={actualizarPersona}
           onEliminarPersona={eliminarPersona}
           onLimpiarPersonal={limpiarPersonal}
+          onValidarExclusividadTurno={validarPersonaDisponibleEnOtrosTurnos}
           setPersonal={(nuevo) => {
             setEstadoPorTurnoMes(prev => ({
               ...prev,

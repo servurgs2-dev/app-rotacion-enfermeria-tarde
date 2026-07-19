@@ -1,5 +1,6 @@
 import { normalizar } from "./texto.js";
 import { obtenerConfiguracionTurno } from "../config/turnos.js";
+import { crearIntervaloRelativo, horaAMinutos, minutosAHora } from "./horarios.js";
 
 export const gruposOperativos = [
   {
@@ -49,23 +50,23 @@ export const gruposOperativos = [
   }
 ];
 
-const restarUnaHora = (hora) => {
-  const [horas, minutos] = hora.split(":").map(Number);
-  const totalMinutos = horas * 60 + minutos - 60;
-  const horasAjustadas = Math.floor(totalMinutos / 60);
-
-  return `${String(horasAjustadas).padStart(2, "0")}:${String(totalMinutos % 60).padStart(2, "0")}`;
-};
-
 export const obtenerHorarioEfectivo = (persona, configTurno = obtenerConfiguracionTurno()) => {
   const horario = configTurno.horarios[persona?.horario] || configTurno.horarios.normal;
   const horarioEspecial = persona?.horario === "entraAntes" || persona?.horario === "entraDespues";
+  const inicioNormal = configTurno.horarios.normal.entrada;
+  const intervalo = crearIntervaloRelativo(horario, inicioNormal);
+  const finRelativo = intervalo.finRelativo - (persona?.maternal ? 60 : 0);
+  const salidaEfectiva = minutosAHora(horaAMinutos(inicioNormal) + finRelativo);
 
   return {
     entrada: horario.entrada,
-    salida: persona?.maternal ? restarUnaHora(horario.salida) : horario.salida,
+    salida: salidaEfectiva,
     entradaEspecial: horarioEspecial,
-    salidaEspecial: horarioEspecial || Boolean(persona?.maternal)
+    salidaEspecial: horarioEspecial || Boolean(persona?.maternal),
+    inicioRelativo: intervalo.inicioRelativo,
+    finRelativo,
+    duracion: finRelativo - intervalo.inicioRelativo,
+    cruzaMedianoche: horaAMinutos(salidaEfectiva) <= horaAMinutos(horario.entrada)
   };
 };
 
@@ -99,39 +100,38 @@ const listarNombres = (personas) => {
   return nombres[0];
 };
 
-const minutosDesdeMedianoche = (hora) => {
-  const [horas, minutos] = hora.split(":").map(Number);
-  return horas * 60 + minutos;
-};
-
 const generarAlertaGrupo = (grupo, personas, configTurno) => {
   const horaCierre = configTurno.horarios.normal.salida;
-  const minutosCierre = minutosDesdeMedianoche(horaCierre);
+  const inicioNormal = configTurno.horarios.normal.entrada;
+  const finCierre = crearIntervaloRelativo(
+    configTurno.horarios.normal,
+    inicioNormal
+  ).finRelativo;
   const salidasAnticipadas = personas
-    .map((persona) => ({ persona, salida: obtenerHorarioEfectivo(persona, configTurno).salida }))
-    .filter(({ salida }) => minutosDesdeMedianoche(salida) < minutosCierre);
+    .map((persona) => ({ persona, ...obtenerHorarioEfectivo(persona, configTurno) }))
+    .filter(({ finRelativo }) => finRelativo < finCierre);
 
   const salidasPorHora = new Map();
-  salidasAnticipadas.forEach(({ persona, salida }) => {
-    const personasEnHora = salidasPorHora.get(salida) || [];
-    personasEnHora.push(persona);
-    salidasPorHora.set(salida, personasEnHora);
+  salidasAnticipadas.forEach(({ persona, salida, finRelativo }) => {
+    const salidaAgrupada = salidasPorHora.get(finRelativo) || { hora: salida, personas: [] };
+    salidaAgrupada.personas.push(persona);
+    salidasPorHora.set(finRelativo, salidaAgrupada);
   });
 
   const momentosCriticos = [...salidasPorHora.entries()]
-    .map(([hora, personasQueSalen]) => {
+    .map(([finRelativo, { hora, personas: personasQueSalen }]) => {
       const personasRestantes = personas.filter(
-        (persona) => minutosDesdeMedianoche(obtenerHorarioEfectivo(persona, configTurno).salida) > minutosDesdeMedianoche(hora)
+        (persona) => obtenerHorarioEfectivo(persona, configTurno).finRelativo > finRelativo
       ).length;
 
-      return { hora, personasQueSalen, personasRestantes };
+      return { hora, finRelativo, personasQueSalen, personasRestantes };
     })
     .filter(({ personasQueSalen, personasRestantes }) =>
       personasQueSalen.length >= 2 || personasRestantes === 0
     )
     .sort((a, b) =>
       a.personasRestantes - b.personasRestantes ||
-      minutosDesdeMedianoche(a.hora) - minutosDesdeMedianoche(b.hora)
+      a.finRelativo - b.finRelativo
     );
 
   const momentoCritico = momentosCriticos[0];

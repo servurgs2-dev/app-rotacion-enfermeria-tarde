@@ -9,7 +9,12 @@ import {
 } from "../../utils/fechas";
 import { normalizar } from "../../utils/texto";
 import { crearIdPersonaNueva } from "../../utils/identidadPersonas.js";
-import { resolverPersonaDesdeReferencia } from "../../utils/referenciasPersonas.js";
+import {
+  agregarPersonaAListaReferencias,
+  quitarPersonaDeListaReferencias,
+  referenciaCorrespondeAPersona,
+  resolverPersonaDesdeReferencia
+} from "../../utils/referenciasPersonas.js";
 
 function CalendarioDiario({
   personal,
@@ -125,7 +130,9 @@ const certificados = useMemo(
 );
 
   const estaNoDisponible = useCallback(
-    (e) => e && (noDisponibles[keyDia] || []).includes(e.nombre),
+    (e) => e && (noDisponibles[keyDia] || []).some(
+      (referencia) => referenciaCorrespondeAPersona(referencia, e)
+    ),
     [keyDia, noDisponibles]
   );
 
@@ -906,7 +913,9 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
 
 <div className="flex flex-wrap gap-2">
   {personalFiltrado.map((e) => {
-    const activo = (noDisponibles[keyDia] || []).includes(e.nombre);
+    const activo = (noDisponibles[keyDia] || []).some(
+      (referencia) => referenciaCorrespondeAPersona(referencia, e)
+    );
 
     return (
       <button
@@ -919,8 +928,8 @@ nuevo[normalizar(seleccionado.nombre)] = item.enfermero.nombre;
           const lista = noDisponibles[keyDia] || [];
 
           const nueva = activo
-            ? lista.filter((n) => n !== e.nombre)
-            : [...lista, e.nombre];
+            ? quitarPersonaDeListaReferencias(lista, e, personal)
+            : agregarPersonaAListaReferencias(lista, e, personal);
 
           setCalendario((prev) => ({
   ...prev,

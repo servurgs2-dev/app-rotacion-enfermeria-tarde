@@ -1,5 +1,8 @@
 import { normalizar } from "./texto.js";
-import { referenciaCorrespondeAPersona } from "./referenciasPersonas.js";
+import {
+  quitarPersonaDeListaReferencias,
+  referenciaCorrespondeAPersona
+} from "./referenciasPersonas.js";
 
 const esObjetoPlano = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -98,7 +101,7 @@ const limpiarExtrasPorDia = (extrasPorDia, persona) => {
   return huboCambios ? extrasLimpios : extrasPorDia;
 };
 
-const limpiarNoDisponiblesPorDia = (noDisponiblesPorDia, persona) => {
+const limpiarNoDisponiblesPorDia = (noDisponiblesPorDia, persona, personal) => {
   if (!esObjetoPlano(noDisponiblesPorDia)) return noDisponiblesPorDia;
 
   let huboCambios = false;
@@ -110,7 +113,7 @@ const limpiarNoDisponiblesPorDia = (noDisponiblesPorDia, persona) => {
       return;
     }
 
-    const nombresDelDia = nombres.filter((nombre) => !coincidePersona(nombre, persona));
+    const nombresDelDia = quitarPersonaDeListaReferencias(nombres, persona, personal);
     if (nombresDelDia.length !== nombres.length) huboCambios = true;
 
     if (nombresDelDia.length > 0) {
@@ -123,13 +126,17 @@ const limpiarNoDisponiblesPorDia = (noDisponiblesPorDia, persona) => {
   return huboCambios ? noDisponiblesLimpios : noDisponiblesPorDia;
 };
 
-export const limpiarPersonaDeCalendario = (calendario, persona) => {
+export const limpiarPersonaDeCalendario = (calendario, persona, personal = []) => {
   if (!esObjetoPlano(calendario)) return calendario;
 
   const cambiosDia = limpiarCambiosPorDia(calendario.cambiosDia, persona);
   const cambiosParoDia = limpiarCambiosPorDia(calendario.cambiosParoDia, persona);
   const extras = limpiarExtrasPorDia(calendario.extras, persona);
-  const noDisponibles = limpiarNoDisponiblesPorDia(calendario.noDisponibles, persona);
+  const noDisponibles = limpiarNoDisponiblesPorDia(
+    calendario.noDisponibles,
+    persona,
+    personal
+  );
 
   if (
     cambiosDia === calendario.cambiosDia &&
@@ -161,7 +168,11 @@ export const limpiarReferenciasDeCategoria = (mesData, categoria, persona) => {
   const planillas = mesData.planillas || {};
   const calendario = mesData.calendario || {};
   const planillaLimpia = limpiarPersonaDePlanilla(planillas[claveCategoria], persona);
-  const calendarioLimpio = limpiarPersonaDeCalendario(calendario[claveCategoria], persona);
+  const calendarioLimpio = limpiarPersonaDeCalendario(
+    calendario[claveCategoria],
+    persona,
+    mesData.personal || []
+  );
 
   if (
     planillaLimpia === planillas[claveCategoria] &&

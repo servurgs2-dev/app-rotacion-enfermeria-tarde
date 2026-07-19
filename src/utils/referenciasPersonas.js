@@ -57,7 +57,7 @@ export const obtenerNombreDesdeReferencia = (referencia, personal) => {
   return typeof referencia === "string" ? referencia : "";
 };
 
-export const normalizarReferenciaPlanilla = (referencia, personal) => {
+export const normalizarReferenciaPersona = (referencia, personal) => {
   if (referencia === "" || referencia === null || referencia === undefined) {
     return referencia;
   }
@@ -80,6 +80,8 @@ export const normalizarReferenciaPlanilla = (referencia, personal) => {
   return esObjeto(referencia) ? { ...referencia } : referencia;
 };
 
+export const normalizarReferenciaPlanilla = normalizarReferenciaPersona;
+
 export const referenciaCorrespondeAPersona = (referencia, persona) => {
   const personaId = obtenerId(persona?.id);
   if (esObjeto(referencia) && obtenerId(referencia.personaId)) {
@@ -93,4 +95,53 @@ export const referenciaCorrespondeAPersona = (referencia, persona) => {
   const nombreNormalizado = normalizarNombreReferencia(nombreReferencia);
   return Boolean(nombreNormalizado) &&
     nombreNormalizado === normalizarNombreReferencia(persona?.nombre);
+};
+
+export const normalizarListaReferenciasPersonas = (lista, personal) => {
+  if (!Array.isArray(lista)) return lista;
+
+  const idsResueltos = new Set();
+  const normalizada = [];
+
+  lista.forEach((referencia) => {
+    const referenciaNormalizada = normalizarReferenciaPersona(referencia, personal);
+    const persona = resolverPersonaDesdeReferencia(referenciaNormalizada, personal);
+    const personaId = obtenerId(persona?.id);
+
+    if (personaId && idsResueltos.has(personaId)) return;
+    if (personaId) idsResueltos.add(personaId);
+    normalizada.push(referenciaNormalizada);
+  });
+
+  return normalizada;
+};
+
+export const agregarPersonaAListaReferencias = (lista, persona, personal) => {
+  const referencias = Array.isArray(lista) ? lista : [];
+  const personaId = obtenerId(persona?.id);
+  const yaExiste = referencias.some((referencia) => {
+    const resuelta = resolverPersonaDesdeReferencia(referencia, personal);
+    return personaId && obtenerId(resuelta?.id) === personaId;
+  });
+
+  if (yaExiste) return referencias;
+  const referencia = crearReferenciaPersona(persona);
+  return referencia ? [...referencias, referencia] : referencias;
+};
+
+export const quitarPersonaDeListaReferencias = (lista, persona, personal) => {
+  if (!Array.isArray(lista)) return lista;
+
+  const personaId = obtenerId(persona?.id);
+  const hayPersonalParaResolver = Array.isArray(personal) && personal.length > 0;
+  return lista.filter((referencia) => {
+    const resuelta = resolverPersonaDesdeReferencia(referencia, personal);
+    if (resuelta) return obtenerId(resuelta.id) !== personaId;
+
+    if (esReferenciaPersona(referencia)) {
+      return obtenerId(referencia.personaId) !== personaId;
+    }
+
+    return hayPersonalParaResolver || !referenciaCorrespondeAPersona(referencia, persona);
+  });
 };

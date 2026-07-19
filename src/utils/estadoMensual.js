@@ -1,6 +1,9 @@
 import { normalizarMaternal } from "./maternal.js";
 import { asegurarIdPersona } from "./identidadPersonas.js";
-import { normalizarReferenciaPlanilla } from "./referenciasPersonas.js";
+import {
+  normalizarListaReferenciasPersonas,
+  normalizarReferenciaPlanilla
+} from "./referenciasPersonas.js";
 
 const esObjetoValido = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -47,6 +50,16 @@ const normalizarExtrasPorDia = (extrasPorDia) => Object.fromEntries(
   ])
 );
 
+const normalizarNoDisponiblesPorDia = (noDisponiblesPorDia, personal) =>
+  Object.fromEntries(
+    Object.entries(noDisponiblesPorDia).map(([fecha, referencias]) => [
+      fecha,
+      Array.isArray(referencias)
+        ? normalizarListaReferenciasPersonas(referencias, personal)
+        : referencias
+    ])
+  );
+
 export const crearEstadoMensualVacio = () => ({
   personal: [],
   planillas: {
@@ -85,7 +98,7 @@ const normalizarPlanilla = (planilla, personal) => {
   return normalizada;
 };
 
-const normalizarCalendarioCategoria = (calendario) => {
+const normalizarCalendarioCategoria = (calendario, personal) => {
   const normalizado = esObjetoValido(calendario) ? clonarValor(calendario) : {};
 
   Object.keys(crearCalendarioCategoriaVacio()).forEach((clave) => {
@@ -93,6 +106,10 @@ const normalizarCalendarioCategoria = (calendario) => {
   });
 
   normalizado.extras = normalizarExtrasPorDia(normalizado.extras);
+  normalizado.noDisponibles = normalizarNoDisponiblesPorDia(
+    normalizado.noDisponibles,
+    personal
+  );
 
   return normalizado;
 };
@@ -121,8 +138,14 @@ export const normalizarEstadoMensual = (estado) => {
   normalizado.calendario = {
     ...calendario,
     diasParo: esObjetoValido(calendario.diasParo) ? calendario.diasParo : {},
-    enfermeros: normalizarCalendarioCategoria(calendario.enfermeros),
-    licenciados: normalizarCalendarioCategoria(calendario.licenciados)
+    enfermeros: normalizarCalendarioCategoria(
+      calendario.enfermeros,
+      normalizado.personal
+    ),
+    licenciados: normalizarCalendarioCategoria(
+      calendario.licenciados,
+      normalizado.personal
+    )
   };
 
   return normalizado;

@@ -28,6 +28,16 @@ import {
   limpiarReferenciasDePersona
 } from "./utils/integridadPersonas";
 import { renombrarPersonaEnEstado } from "./utils/renombrarPersona.js";
+import {
+  existeFuncionarioDuplicado,
+  obtenerIdsPersonalDuplicados
+} from "./utils/validacionPersonal.js";
+import {
+  clasificarResultadoCarga,
+  continuarPlanillasDesdeMesAnterior,
+  esCargaVigente,
+  hayCambiosLocalesPendientes
+} from "./utils/proteccionDatos.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
@@ -36,6 +46,7 @@ function App() {
  const [turnoActivo, setTurnoActivo] = useState(null);
  const configTurno = turnoActivo ? obtenerConfiguracionTurno(turnoActivo) : null;
  const [estadoPorTurnoMes, setEstadoPorTurnoMes] = useState({});
+ const estadoPorTurnoMesRef = useRef(estadoPorTurnoMes);
   const [mesActivo, setMesActivo] = useState(() => {
   const hoy = new Date();
   return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
@@ -53,6 +64,7 @@ const colaGuardadoRef = useRef(new Map());
 const versionesGuardadoRef = useRef(new Map());
 const mesesConErrorGuardadoRef = useRef(new Set());
 const guardadoEnCursoRef = useRef(false);
+const claveGuardadoEnCursoRef = useRef(null);
 const procesarColaGuardadoRef = useRef(null);
 const referenciasEstadoRef = useRef(new Map());
 const identidadesEstadoRef = useRef(new Map());
@@ -61,9 +73,16 @@ const cargandoRef = useRef(true);
 const cargaActualRef = useRef({ id: 0, clave: null });
 const [cargando, setCargando] = useState(true);
 const [estadoGuardado, setEstadoGuardado] = useState("loading");
+const [erroresCargaPorClave, setErroresCargaPorClave] = useState({});
+const erroresCargaRef = useRef(new Set());
+const [intentoCarga, setIntentoCarga] = useState(0);
 
 const [dataPDFEnf, setDataPDFEnf] = useState({ asignaciones: [], libres: [] });
 const [dataPDFLic, setDataPDFLic] = useState({ asignaciones: [], libres: [] });
+
+useEffect(() => {
+  estadoPorTurnoMesRef.current = estadoPorTurnoMes;
+}, [estadoPorTurnoMes]);
 
 //console.log("🔁 TAB ACTUAL:", tabCalendario);
 
@@ -105,7 +124,8 @@ const alertasHorarios = useMemo(() => {
 
 const setDiaParo = (keyDia, activo) => {
   setEstadoPorTurnoMes(prev => {
-    const actual = prev[claveActiva] || getMesData(mesActivo);
+    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    const actual = prev[claveActiva] || crearEstadoMensualVacio();
     const diasActuales = actual.calendario?.diasParo || {};
     const nuevosDiasParo = { ...diasActuales };
 
@@ -160,7 +180,9 @@ const actualizarEstadoGuardadoDesdeCola = useCallback(() => {
 
   if (colaGuardadoRef.current.size > 0) {
     const hayPendientesReintentables = [...colaGuardadoRef.current.keys()].some(
-      (clave) => !mesesConErrorGuardadoRef.current.has(clave)
+      (clave) =>
+        !mesesConErrorGuardadoRef.current.has(clave) &&
+        !erroresCargaRef.current.has(clave)
     );
     setEstadoGuardado(hayPendientesReintentables ? "saving" : "error");
     return;
@@ -176,6 +198,8 @@ const actualizarEstadoGuardadoDesdeCola = useCallback(() => {
 }, []);
 
 const encolarGuardado = useCallback(({ clave, turnoId, mes, data }) => {
+  if (erroresCargaRef.current.has(clave)) return;
+
   const version = (versionesGuardadoRef.current.get(clave) || 0) + 1;
   versionesGuardadoRef.current.set(clave, version);
   colaGuardadoRef.current.set(clave, {
@@ -194,7 +218,9 @@ const procesarColaGuardado = useCallback(async () => {
   if (guardadoEnCursoRef.current) return;
 
   const siguiente = [...colaGuardadoRef.current.entries()].find(
-    ([clave]) => !mesesConErrorGuardadoRef.current.has(clave)
+    ([clave]) =>
+      !mesesConErrorGuardadoRef.current.has(clave) &&
+      !erroresCargaRef.current.has(clave)
   );
 
   if (!siguiente) {
@@ -205,6 +231,7 @@ const procesarColaGuardado = useCallback(async () => {
   const [clave, pendiente] = siguiente;
   colaGuardadoRef.current.delete(clave);
   guardadoEnCursoRef.current = true;
+  claveGuardadoEnCursoRef.current = clave;
   setEstadoGuardado("saving");
 
   let error;
@@ -214,6 +241,7 @@ const procesarColaGuardado = useCallback(async () => {
     error = new Error("No se pudo guardar el estado mensual.");
   } finally {
     guardadoEnCursoRef.current = false;
+    claveGuardadoEnCursoRef.current = null;
   }
 
   if (error) {
@@ -240,11 +268,14 @@ useEffect(() => {
   if (cargando) return;
 
   Object.entries(estadoPorTurnoMes).forEach(([clave, data]) => {
+    if (erroresCargaRef.current.has(clave)) return;
+    if (mesesCargadosRef.current.delete(clave)) {
+      referenciasEstadoRef.current.set(clave, data);
+      return;
+    }
     if (referenciasEstadoRef.current.get(clave) === data) return;
 
     referenciasEstadoRef.current.set(clave, data);
-
-    if (mesesCargadosRef.current.delete(clave)) return;
 
     const identidad = identidadesEstadoRef.current.get(clave);
     if (!identidad) return;
@@ -268,7 +299,8 @@ useEffect(() => () => {
 
 const setPlanillaEnfermeros = (nueva) => {
   setEstadoPorTurnoMes(prev => {
-    const actual = getMesData(mesActivo);
+    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    const actual = prev[claveActiva] || crearEstadoMensualVacio();
 
     return {
       ...prev,
@@ -288,7 +320,8 @@ const setPlanillaEnfermeros = (nueva) => {
 
 const setPlanillaLicenciados = (nueva) => {
   setEstadoPorTurnoMes(prev => {
-    const actual = getMesData(mesActivo);
+    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    const actual = prev[claveActiva] || crearEstadoMensualVacio();
 
     return {
       ...prev,
@@ -308,11 +341,23 @@ const setPlanillaLicenciados = (nueva) => {
 
 const actualizarPersona = (personaAnterior, personaNueva) => {
   setEstadoPorTurnoMes((prev) => {
-    const actual = prev[claveActiva] || getMesData(mesActivo);
+    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    const actual = prev[claveActiva] || crearEstadoMensualVacio();
     const personaId = String(personaAnterior?.id ?? "").trim();
-    const indicePersona = actual.personal?.findIndex(
+    const coincidencias = actual.personal?.filter(
       (persona) => String(persona?.id ?? "").trim() === personaId
-    ) ?? -1;
+    ) || [];
+    if (coincidencias.length !== 1) return prev;
+    if (
+      existeFuncionarioDuplicado(
+        actual.personal,
+        personaNueva?.funcionario,
+        personaId
+      )
+    ) return prev;
+    const indicePersona = actual.personal.findIndex(
+      (persona) => String(persona?.id ?? "").trim() === personaId
+    );
 
     if (indicePersona === -1) return prev;
 
@@ -335,11 +380,13 @@ const actualizarPersona = (personaAnterior, personaNueva) => {
 
 const renombrarPersona = (persona, nombreNuevo) => {
   setEstadoPorTurnoMes((prev) => {
-    const actual = prev[claveActiva] || getMesData(mesActivo);
+    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    const actual = prev[claveActiva] || crearEstadoMensualVacio();
     const personaId = String(persona?.id ?? "").trim();
-    if (!personaId || !actual.personal?.some(
+    const coincidencias = actual.personal?.filter(
       (item) => String(item?.id ?? "").trim() === personaId
-    )) return prev;
+    ) || [];
+    if (!personaId || coincidencias.length !== 1) return prev;
 
     return {
       ...prev,
@@ -350,12 +397,14 @@ const renombrarPersona = (persona, nombreNuevo) => {
 
 const eliminarPersona = (persona) => {
   setEstadoPorTurnoMes((prev) => {
-    const actual = prev[claveActiva] || getMesData(mesActivo);
+    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    const actual = prev[claveActiva] || crearEstadoMensualVacio();
     const personaId = String(persona?.id ?? "").trim();
-    const personaActual = actual.personal?.find(
+    const coincidencias = actual.personal?.filter(
       (item) => String(item?.id ?? "").trim() === personaId
-    );
-    if (!personaActual) return prev;
+    ) || [];
+    if (coincidencias.length !== 1) return prev;
+    const [personaActual] = coincidencias;
 
     return {
       ...prev,
@@ -366,7 +415,9 @@ const eliminarPersona = (persona) => {
 
 const limpiarPersonal = () => {
   setEstadoPorTurnoMes((prev) => {
-    const actual = prev[claveActiva] || getMesData(mesActivo);
+    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    const actual = prev[claveActiva] || crearEstadoMensualVacio();
+    if (obtenerIdsPersonalDuplicados(actual.personal).size > 0) return prev;
     const nuevoMes = (actual.personal || []).reduce(
       (mes, persona) => limpiarReferenciasDePersona(mes, persona),
       actual
@@ -455,6 +506,12 @@ useEffect(() => {
     cargandoRef.current = true;
     setCargando(true); // 👈 empieza carga
     setEstadoGuardado("loading");
+    setErroresCargaPorClave((prev) => {
+      if (!prev[claveCarga]) return prev;
+      const siguiente = { ...prev };
+      delete siguiente[claveCarga];
+      return siguiente;
+    });
 
     let resultado;
     let error;
@@ -465,30 +522,86 @@ useEffect(() => {
       error = errorCarga;
     }
 
-    if (
-      cargaId !== cargaActualRef.current.id ||
-      claveCarga !== cargaActualRef.current.clave
-    ) return;
+    if (!esCargaVigente(
+      { id: cargaId, clave: claveCarga },
+      cargaActualRef.current
+    )) return;
 
-    if (resultado?.existe) {
-      setEstadoPorTurnoMes(prev => {
-        if (prev[claveCarga]) return prev;
+    const clasificacion = clasificarResultadoCarga({ error, resultado });
 
-        mesesCargadosRef.current.add(claveCarga);
-        return {
-          ...prev,
-          [claveCarga]: resultado.estado
-        };
+    if (clasificacion.tipo === "error") {
+      console.error("No se pudo cargar el estado del turno y mes.", error);
+      erroresCargaRef.current.add(claveCarga);
+      setErroresCargaPorClave((prev) => ({
+        ...prev,
+        [claveCarga]: {
+          mensaje: "No se pudo cargar este turno y mes. Tus datos no fueron reemplazados. Reintentá la carga."
+        }
+      }));
+      cargandoRef.current = false;
+      setCargando(false);
+      setEstadoGuardado("error");
+      procesarColaGuardadoRef.current?.();
+      return;
+    }
+
+    if (clasificacion.tipo === "existente") {
+      const estadoPrevio = estadoPorTurnoMesRef.current[claveCarga];
+      const hayPendientes = hayCambiosLocalesPendientes({
+        clave: claveCarga,
+        estadoPrevio,
+        referenciaConocida: referenciasEstadoRef.current.get(claveCarga),
+        cola: colaGuardadoRef.current,
+        debounces: debouncesGuardadoRef.current,
+        erroresGuardado: mesesConErrorGuardadoRef.current,
+        claveGuardadoEnCurso: claveGuardadoEnCursoRef.current
       });
+
+      if (hayPendientes) {
+        erroresCargaRef.current.add(claveCarga);
+        setErroresCargaPorClave((prev) => ({
+          ...prev,
+          [claveCarga]: {
+            mensaje: "Se recuperó la conexión, pero hay cambios locales pendientes. No se reemplazaron ni guardaron datos automáticamente."
+          }
+        }));
+        cargandoRef.current = false;
+        setCargando(false);
+        setEstadoGuardado("error");
+        procesarColaGuardadoRef.current?.();
+        return;
+      }
+
+      erroresCargaRef.current.delete(claveCarga);
+      mesesCargadosRef.current.add(claveCarga);
+      referenciasEstadoRef.current.set(claveCarga, clasificacion.estado);
+      setEstadoPorTurnoMes(prev => ({
+        ...prev,
+        [claveCarga]: clasificacion.estado
+      }));
+    } else {
+      erroresCargaRef.current.delete(claveCarga);
     }
 
     cargandoRef.current = false;
     setCargando(false); // 👈 termina carga
-    if (!error) actualizarEstadoGuardadoDesdeCola();
+    actualizarEstadoGuardadoDesdeCola();
+    procesarColaGuardadoRef.current?.();
   };
 
   cargar();
-}, [mesActivo, turnoActivo, actualizarEstadoGuardadoDesdeCola]);
+}, [intentoCarga, mesActivo, turnoActivo, actualizarEstadoGuardadoDesdeCola]);
+
+const reintentarCarga = () => {
+  if (!claveActiva) return;
+  cargaActualRef.current = {
+    id: cargaActualRef.current.id + 1,
+    clave: claveActiva
+  };
+  cargandoRef.current = true;
+  setCargando(true);
+  setIntentoCarga((actual) => actual + 1);
+};
 
 const copiarMesAnterior = async () => {
   const [year, month] = mesActivo.split("-").map(Number);
@@ -532,10 +645,10 @@ const copiarMesAnterior = async () => {
     return;
   }
 
-  setEstadoPorTurnoMes(prev => ({
-    ...prev,
-    [claveActiva]: resultado.estado
-  }));
+  setEstadoPorTurnoMes(prev => {
+    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    return { ...prev, [claveActiva]: resultado.estado };
+  });
 };
 
 const hoy = new Date();
@@ -576,6 +689,36 @@ if (!turnoActivo) {
 
 if (cargando) {
   return <div>Cargando datos...</div>;
+}
+
+const errorCargaActivo = claveActiva ? erroresCargaPorClave[claveActiva] : null;
+if (errorCargaActivo) {
+  return (
+    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+      <div className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
+        <h1 className="text-xl font-semibold text-slate-800">Error de carga</h1>
+        <p className="mt-2 text-sm text-red-700" role="alert">
+          {errorCargaActivo.mensaje}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={reintentarCarga}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Reintentar
+          </button>
+          <button
+            type="button"
+            onClick={cambiarTurno}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+          >
+            Cambiar turno
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 
@@ -665,13 +808,11 @@ return (
           onLimpiarPersonal={limpiarPersonal}
           onValidarExclusividadTurno={validarPersonaDisponibleEnOtrosTurnos}
           setPersonal={(nuevo) => {
-            setEstadoPorTurnoMes(prev => ({
-              ...prev,
-              [claveActiva]: {
-                ...getMesData(mesActivo),
-                personal: nuevo
-              }
-            }));
+            setEstadoPorTurnoMes(prev => {
+              if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+              const actual = prev[claveActiva] || crearEstadoMensualVacio();
+              return { ...prev, [claveActiva]: { ...actual, personal: nuevo } };
+            });
           }}
         />
         <button
@@ -788,19 +929,18 @@ return (
                 return;
               }
 
-              if (baseEnf) {
-                setPlanillaEnfermeros({
-                  ...crearPlanillaMensualVacia(),
-                  semana1: { ...baseEnf }
-                });
-              }
-
-              if (baseLic) {
-                setPlanillaLicenciados({
-                  ...crearPlanillaMensualVacia(),
-                  semana1: { ...baseLic }
-                });
-              }
+              setEstadoPorTurnoMes((prev) => {
+                if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+                const actual = prev[claveActiva] || crearEstadoMensualVacio();
+                return {
+                  ...prev,
+                  [claveActiva]: continuarPlanillasDesdeMesAnterior(actual, {
+                    planillaVacia: crearPlanillaMensualVacia,
+                    baseEnfermeros: baseEnf,
+                    baseLicenciados: baseLic
+                  })
+                };
+              });
             }}
           >
             ⚡ <span>Continuar desde mes anterior</span>
@@ -815,13 +955,11 @@ return (
           personal={personal}
           licencias={licenciasMes}
           setLicencias={(nueva) => {
-            setEstadoPorTurnoMes(prev => ({
-              ...prev,
-              [claveActiva]: {
-                ...getMesData(mesActivo),
-                licencias: nueva
-              }
-            }));
+            setEstadoPorTurnoMes(prev => {
+              if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+              const actual = prev[claveActiva] || crearEstadoMensualVacio();
+              return { ...prev, [claveActiva]: { ...actual, licencias: nueva } };
+            });
           }}
         />
       </Seccion>
@@ -831,13 +969,11 @@ return (
           personal={personal}
           certificaciones={certificacionesMes}
           setCertificaciones={(nuevas) => {
-            setEstadoPorTurnoMes(prev => ({
-              ...prev,
-              [claveActiva]: {
-                ...getMesData(mesActivo),
-                certificaciones: nuevas
-              }
-            }));
+            setEstadoPorTurnoMes(prev => {
+              if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+              const actual = prev[claveActiva] || crearEstadoMensualVacio();
+              return { ...prev, [claveActiva]: { ...actual, certificaciones: nuevas } };
+            });
           }}
         />
       </Seccion>
@@ -913,7 +1049,8 @@ return (
     setFecha={setFecha}
     setCalendario={(update) => {
       setEstadoPorTurnoMes(prev => {
-        const actual = prev[claveActiva] || getMesData(mesActivo);
+        if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+        const actual = prev[claveActiva] || crearEstadoMensualVacio();
         const calendarioActual = actual.calendario?.enfermeros || {};
 
         const nuevoCalendario =
@@ -956,7 +1093,8 @@ return (
     setFecha={setFecha}
     setCalendario={(update) => {
       setEstadoPorTurnoMes(prev => {
-        const actual = prev[claveActiva] || getMesData(mesActivo);
+        if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+        const actual = prev[claveActiva] || crearEstadoMensualVacio();
         const calendarioActual = actual.calendario?.licenciados || {};
 
         const nuevoCalendario =

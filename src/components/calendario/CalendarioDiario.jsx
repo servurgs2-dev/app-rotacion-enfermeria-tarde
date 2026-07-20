@@ -22,6 +22,10 @@ import {
   personasCompartenId
 } from "../../utils/extrasPersonas.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
+import {
+  obtenerClaveRenderPersona,
+  obtenerIdsPersonalDuplicados
+} from "../../utils/validacionPersonal.js";
 
 function CalendarioDiario({
   personal,
@@ -41,6 +45,10 @@ function CalendarioDiario({
   const personalFiltrado = useMemo(
     () => personal.filter((p) => p?.categoria === tipo),
     [personal, tipo]
+  );
+  const idsPersonalDuplicados = useMemo(
+    () => obtenerIdsPersonalDuplicados(personal),
+    [personal]
   );
 
 const {
@@ -780,14 +788,14 @@ useEffect(() => {
 <h4 className="text-sm font-semibold text-slate-700">Libres</h4>
 
 <div className="flex flex-wrap gap-2">
-  {libres.map((e) => {
+  {libres.map((e, indice) => {
     const yaEsta = extrasDia.some(
       (ex) => personasCompartenId(ex, e)
     );
 
     return (
       <button
-        key={e.id}
+        key={obtenerClaveRenderPersona(e, indice, idsPersonalDuplicados)}
         className={`px-3 py-1.5 rounded-lg text-sm text-white transition
           ${yaEsta ? "bg-green-600" : "bg-green-400 hover:bg-green-500"}`}
         onClick={() => {
@@ -814,9 +822,9 @@ useEffect(() => {
 <h4 className="text-sm font-semibold text-slate-700">Certificados</h4>
 
 <div className="flex flex-wrap gap-2">
-  {certificados.length > 0 ? certificados.map((persona) => (
+  {certificados.length > 0 ? certificados.map((persona, indice) => (
     <span
-      key={persona.id}
+      key={obtenerClaveRenderPersona(persona, indice, idsPersonalDuplicados)}
       className="bg-rose-100 px-3 py-1.5 rounded-lg text-sm text-rose-800"
     >
       {obtenerEtiquetaPersona(persona, personal)}
@@ -894,14 +902,14 @@ useEffect(() => {
 </h4>
 
 <div className="flex flex-wrap gap-2">
-  {personalFiltrado.map((e) => {
+  {personalFiltrado.map((e, indice) => {
     const activo = (noDisponibles[keyDia] || []).some(
       (referencia) => referenciaCorrespondeAPersona(referencia, e)
     );
 
     return (
       <button
-        key={e.id}
+        key={obtenerClaveRenderPersona(e, indice, idsPersonalDuplicados)}
         className={`px-3 py-1.5 rounded-lg text-sm transition
           ${activo
             ? "bg-red-500 text-white"

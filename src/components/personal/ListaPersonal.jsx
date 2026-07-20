@@ -11,9 +11,18 @@ import {
   limpiarNombrePersona,
   obtenerNombresDuplicados
 } from "../../utils/nombresPersonas.js";
+import {
+  existeFuncionarioDuplicado,
+  obtenerClaveRenderPersona,
+  obtenerIdsPersonalDuplicados
+} from "../../utils/validacionPersonal.js";
 
 const MENSAJE_NOMBRE_DUPLICADO =
   "Ya existe una persona con ese nombre. Agregá el segundo apellido para poder diferenciarla.";
+const MENSAJE_FUNCIONARIO_DUPLICADO =
+  "Ya existe una persona con ese número de funcionario en este turno y mes.";
+const MENSAJE_IDENTIDAD_DUPLICADA =
+  "Hay registros con la misma identidad interna. Revisá los números de funcionario antes de eliminar o modificar estas personas.";
 
 function ListaPersonal({
   personal,
@@ -35,6 +44,7 @@ function ListaPersonal({
   const [funcionario, setFuncionario] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [errorNombre, setErrorNombre] = useState("");
+  const [errorIdentidad, setErrorIdentidad] = useState("");
   const [personaEditandoId, setPersonaEditandoId] = useState("");
   const [nombreEdicion, setNombreEdicion] = useState("");
   const [errorEdicion, setErrorEdicion] = useState("");
@@ -69,7 +79,26 @@ function ListaPersonal({
     return nombreMes ? `${nombreMes}: ${formatearDias(dias)}` : "";
   };
 
+  const idsDuplicados = obtenerIdsPersonalDuplicados(personal);
+
   const actualizarPersona = (personaAnterior, cambios) => {
+    if (idsDuplicados.has(String(personaAnterior?.id ?? "").trim())) {
+      setErrorIdentidad(MENSAJE_IDENTIDAD_DUPLICADA);
+      return;
+    }
+    if (
+      Object.hasOwn(cambios, "funcionario") &&
+      existeFuncionarioDuplicado(
+        personal,
+        cambios.funcionario,
+        personaAnterior.id
+      )
+    ) {
+      setErrorIdentidad(MENSAJE_FUNCIONARIO_DUPLICADO);
+      return;
+    }
+
+    setErrorIdentidad("");
     onActualizarPersona(personaAnterior, { ...personaAnterior, ...cambios });
   };
 
@@ -85,6 +114,10 @@ function ListaPersonal({
 
     if (existeNombrePersona(personal, nombreLimpio)) {
       setErrorNombre(MENSAJE_NOMBRE_DUPLICADO);
+      return;
+    }
+    if (existeFuncionarioDuplicado(personal, funcionario)) {
+      setErrorNombre(MENSAJE_FUNCIONARIO_DUPLICADO);
       return;
     }
 
@@ -155,12 +188,20 @@ function ListaPersonal({
   
 
   const limpiarTodo = () => {
+    if (idsDuplicados.size > 0) {
+      setErrorIdentidad(MENSAJE_IDENTIDAD_DUPLICADA);
+      return;
+    }
     if (confirm("¿Seguro querés borrar todo?")) {
       onLimpiarPersonal();
     }
   };
 
   const iniciarEdicionNombre = (persona) => {
+    if (idsDuplicados.has(String(persona?.id ?? "").trim())) {
+      setErrorIdentidad(MENSAJE_IDENTIDAD_DUPLICADA);
+      return;
+    }
     setPersonaEditandoId(String(persona.id));
     setNombreEdicion(persona.nombre);
     setErrorEdicion("");
@@ -295,6 +336,17 @@ function ListaPersonal({
         </p>
       )}
 
+      {idsDuplicados.size > 0 && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+          {MENSAJE_IDENTIDAD_DUPLICADA}
+        </p>
+      )}
+      {errorIdentidad && errorIdentidad !== MENSAJE_IDENTIDAD_DUPLICADA && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+          {errorIdentidad}
+        </p>
+      )}
+
     <div className="overflow-x-auto">
   <table className="w-full text-sm">
     
@@ -312,8 +364,13 @@ function ListaPersonal({
     </thead>
 
     <tbody className="divide-y divide-slate-100">
-      {filtrados.map((p) => (
-        <tr key={p.id} className="hover:bg-slate-50 transition">
+      {filtrados.map((p) => {
+        const indicePersonal = personal.indexOf(p);
+        return (
+        <tr
+          key={obtenerClaveRenderPersona(p, indicePersonal, idsDuplicados)}
+          className="hover:bg-slate-50 transition"
+        >
           <td className="px-3 py-2 font-medium text-slate-700">
   {personaEditandoId === String(p.id) ? (
     <div className="min-w-56 space-y-1">
@@ -429,6 +486,10 @@ function ListaPersonal({
   <button
     className="text-red-500 hover:text-red-700 transition"
     onClick={() => {
+      if (idsDuplicados.has(String(p?.id ?? "").trim())) {
+        setErrorIdentidad(MENSAJE_IDENTIDAD_DUPLICADA);
+        return;
+      }
       onEliminarPersona(p);
     }}
   >
@@ -436,7 +497,7 @@ function ListaPersonal({
   </button>
 </td>
         </tr>
-      ))}
+      );})}
     </tbody>
   </table>
 </div>

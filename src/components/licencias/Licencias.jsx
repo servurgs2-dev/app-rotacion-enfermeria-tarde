@@ -4,8 +4,13 @@ import {
   obtenerNombreDeLicencia
 } from "../../utils/licenciasPersonas.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
+import {
+  obtenerClaveRenderPersona,
+  obtenerIdsPersonalDuplicados
+} from "../../utils/validacionPersonal.js";
 
 function Licencias({ personal, licencias, setLicencias }) {
+  const idsDuplicados = obtenerIdsPersonalDuplicados(personal);
   const [persona, setPersona] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -66,8 +71,11 @@ function Licencias({ personal, licencias, setLicencias }) {
             className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
           >
             <option value="">Seleccionar persona</option>
-            {personal.map((p) => (
-              <option key={p.id} value={p.id}>
+            {personal.map((p, indice) => (
+              <option
+                key={obtenerClaveRenderPersona(p, indice, idsDuplicados)}
+                value={p.id}
+              >
                 {obtenerEtiquetaPersona(p, personal)}
               </option>
             ))}

@@ -8,9 +8,14 @@ import {
 } from "../../utils/referenciasPersonas.js";
 import { generarRotacionMensual } from "../../utils/rotacionPlanilla.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
+import {
+  obtenerClaveRenderPersona,
+  obtenerIdsPersonalDuplicados
+} from "../../utils/validacionPersonal.js";
 
 function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mesActivo }) {
   const personalFiltrado = personal.filter((p) => p.categoria === tipo);
+  const idsDuplicados = obtenerIdsPersonalDuplicados(personal);
   const { sectoresFijos, turnantes, posicionesTurnantes } = configuracionSectores[tipo];
   const semanas = obtenerSemanasDelMes(mesActivo);
 
@@ -121,8 +126,11 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
 
                             return disponible && noLicencia;
                           })
-                          .map((persona) => (
-                            <option key={persona.id} value={persona.id}>
+                          .map((persona, indice) => (
+                            <option
+                              key={obtenerClaveRenderPersona(persona, indice, idsDuplicados)}
+                              value={persona.id}
+                            >
                               {obtenerEtiquetaPersona(persona, personal)}
                             </option>
                           ))}

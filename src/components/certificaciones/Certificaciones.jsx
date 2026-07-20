@@ -1,4 +1,8 @@
 import { useState } from "react";
+import {
+  crearCertificacionPersona,
+  obtenerNombreDeCertificacion
+} from "../../utils/certificacionesPersonas.js";
 
 function Certificaciones({ personal, certificaciones, setCertificaciones }) {
   const [persona, setPersona] = useState("");
@@ -22,10 +26,17 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
       return;
     }
 
-    setCertificaciones([
-      ...certificaciones,
-      { nombre: persona, desde, hasta }
-    ]);
+    const personaSeleccionada = personal.find((actual) => actual.id === persona);
+    const nuevaCertificacion = crearCertificacionPersona(personaSeleccionada, {
+      desde,
+      hasta
+    });
+    if (!nuevaCertificacion) {
+      setError("No se pudo identificar a la persona seleccionada.");
+      return;
+    }
+
+    setCertificaciones([...certificaciones, nuevaCertificacion]);
 
     setPersona("");
     setDesde("");
@@ -33,14 +44,10 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
     setError("");
   };
 
-  const eliminarCertificacion = (certificacion) => {
-    setCertificaciones(certificaciones.filter(
-      (actual) => !(
-        actual.nombre === certificacion.nombre &&
-        actual.desde === certificacion.desde &&
-        actual.hasta === certificacion.hasta
-      )
-    ));
+  const eliminarCertificacion = (indice) => {
+    setCertificaciones(
+      certificaciones.filter((_, posicion) => posicion !== indice)
+    );
   };
 
   return (
@@ -61,7 +68,7 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
           >
             <option value="">Seleccionar persona</option>
             {personal.map((p) => (
-              <option key={p.nombre} value={p.nombre}>
+              <option key={p.id} value={p.id}>
                 {p.nombre}
               </option>
             ))}
@@ -114,27 +121,33 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
           </thead>
 
           <tbody className="divide-y divide-slate-100">
-            {certificaciones.map((certificacion) => (
-              <tr
-                key={`${certificacion.nombre}-${certificacion.desde}-${certificacion.hasta}`}
-                className="hover:bg-slate-50"
-              >
-                <td className="px-3 py-2 font-medium text-slate-700">
-                  {certificacion.nombre}
-                </td>
-                <td className="px-3 py-2 text-slate-500">{certificacion.desde}</td>
-                <td className="px-3 py-2 text-slate-500">{certificacion.hasta}</td>
-                <td className="px-3 py-2">
-                  <button
-                    onClick={() => eliminarCertificacion(certificacion)}
-                    className="text-red-500 hover:text-red-700"
-                    aria-label={`Eliminar certificación de ${certificacion.nombre}`}
-                  >
-                    ❌
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {certificaciones.map((certificacion, indice) => {
+              const nombreVisible = obtenerNombreDeCertificacion(
+                certificacion,
+                personal
+              );
+              return (
+                <tr
+                  key={`${certificacion.personaId || certificacion.nombre}-${certificacion.desde}-${certificacion.hasta}-${indice}`}
+                  className="hover:bg-slate-50"
+                >
+                  <td className="px-3 py-2 font-medium text-slate-700">
+                    {nombreVisible}
+                  </td>
+                  <td className="px-3 py-2 text-slate-500">{certificacion.desde}</td>
+                  <td className="px-3 py-2 text-slate-500">{certificacion.hasta}</td>
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => eliminarCertificacion(indice)}
+                      className="text-red-500 hover:text-red-700"
+                      aria-label={`Eliminar certificación de ${nombreVisible}`}
+                    >
+                      ❌
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

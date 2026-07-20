@@ -5,6 +5,7 @@ import {
   referenciaCorrespondeAPersona
 } from "./referenciasPersonas.js";
 import { licenciaCorrespondeAPersona } from "./licenciasPersonas.js";
+import { certificacionCorrespondeAPersona } from "./certificacionesPersonas.js";
 
 const esObjetoPlano = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -238,7 +239,11 @@ export const limpiarReferenciasDePersona = (mesData, persona) => {
     : sinReferenciasDiarias.licencias;
   const certificaciones = Array.isArray(sinReferenciasDiarias.certificaciones)
     ? sinReferenciasDiarias.certificaciones.filter(
-      (certificacion) => !coincidePersona(certificacion?.nombre, persona)
+      (certificacion) => !certificacionCorrespondeAPersona(
+        certificacion,
+        persona,
+        sinReferenciasDiarias.personal || []
+      )
     )
     : sinReferenciasDiarias.certificaciones;
 

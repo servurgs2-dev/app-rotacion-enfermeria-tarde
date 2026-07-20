@@ -118,8 +118,8 @@ const estaDeLicenciaHoy = useCallback(
 );
 
 const estaCertificadoHoy = useCallback(
-  (e) => e && estaCertificado(certificaciones, e.nombre, fecha),
-  [certificaciones, fecha]
+  (e) => e && estaCertificado(certificaciones, e, fecha, personal),
+  [certificaciones, fecha, personal]
 );
 
 const certificados = useMemo(

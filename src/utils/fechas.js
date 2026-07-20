@@ -1,4 +1,5 @@
 import { licenciaCorrespondeAPersona } from "./licenciasPersonas.js";
+import { certificacionCorrespondeAPersona } from "./certificacionesPersonas.js";
 
 export const parsearFechaLocal = (fechaStr) => {
   const [y, m, d] = fechaStr.split("-");
@@ -69,9 +70,13 @@ export const estaDeLicencia = (licencias, persona, fecha, personal = []) =>
     return fecha >= desde && fecha <= hasta;
   });
 
-export const estaCertificado = (certificaciones, nombre, fecha) =>
+export const estaCertificado = (certificaciones, persona, fecha, personal = []) =>
   (certificaciones || []).some((certificacion) => {
-    if (certificacion.nombre !== nombre) return false;
+    if (!certificacionCorrespondeAPersona(
+      certificacion,
+      persona,
+      personal
+    )) return false;
 
     const desde = parsearFechaLocal(certificacion.desde);
     const hasta = parsearFechaLocal(certificacion.hasta);

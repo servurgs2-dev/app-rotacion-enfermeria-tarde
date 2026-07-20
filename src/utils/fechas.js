@@ -1,3 +1,5 @@
+import { licenciaCorrespondeAPersona } from "./licenciasPersonas.js";
+
 export const parsearFechaLocal = (fechaStr) => {
   const [y, m, d] = fechaStr.split("-");
   return new Date(Number(y), Number(m) - 1, Number(d), 12);
@@ -57,9 +59,9 @@ export const semanaKeyFromDate = (fecha, mesActivo) => {
   return semana?.clave || null;
 };
 
-export const estaDeLicencia = (licencias, nombre, fecha) =>
+export const estaDeLicencia = (licencias, persona, fecha, personal = []) =>
   (licencias || []).some((l) => {
-    if (l.nombre !== nombre) return false;
+    if (!licenciaCorrespondeAPersona(l, persona, personal)) return false;
 
     const desde = parsearFechaLocal(l.desde);
     const hasta = parsearFechaLocal(l.hasta);

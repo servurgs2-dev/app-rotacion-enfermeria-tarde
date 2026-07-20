@@ -5,6 +5,7 @@ import {
   normalizarListaReferenciasPersonas,
   normalizarReferenciaPlanilla
 } from "./referenciasPersonas.js";
+import { normalizarLicenciasPersonas } from "./licenciasPersonas.js";
 
 const esObjetoValido = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -135,7 +136,9 @@ export const normalizarEstadoMensual = (estado) => {
   normalizado.personal = Array.isArray(normalizado.personal)
     ? normalizado.personal.map(normalizarPersona)
     : [];
-  normalizado.licencias = Array.isArray(normalizado.licencias) ? normalizado.licencias : [];
+  normalizado.licencias = Array.isArray(normalizado.licencias)
+    ? normalizarLicenciasPersonas(normalizado.licencias, normalizado.personal)
+    : [];
   normalizado.certificaciones = Array.isArray(normalizado.certificaciones)
     ? normalizado.certificaciones
     : [];

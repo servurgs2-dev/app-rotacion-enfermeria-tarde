@@ -113,8 +113,8 @@ const estaLibre = useCallback(
 );
 
 const estaDeLicenciaHoy = useCallback(
-  (e) => e && estaDeLicencia(licencias, e.nombre, fecha),
-  [fecha, licencias]
+  (e) => e && estaDeLicencia(licencias, e, fecha, personal),
+  [fecha, licencias, personal]
 );
 
 const estaCertificadoHoy = useCallback(

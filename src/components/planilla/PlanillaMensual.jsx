@@ -113,8 +113,9 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                             );
                             const noLicencia = !estaDeLicencia(
                               licencias,
-                              persona.nombre,
-                              semana.desde
+                              persona,
+                              semana.desde,
+                              personal
                             );
 
                             return disponible && noLicencia;

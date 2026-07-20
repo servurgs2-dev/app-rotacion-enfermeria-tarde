@@ -1,4 +1,8 @@
 import { useState } from "react";
+import {
+  crearLicenciaPersona,
+  obtenerNombreDeLicencia
+} from "../../utils/licenciasPersonas.js";
 
 function Licencias({ personal, licencias, setLicencias }) {
   const [persona, setPersona] = useState("");
@@ -22,14 +26,14 @@ function Licencias({ personal, licencias, setLicencias }) {
       return;
     }
 
-    setLicencias([
-      ...licencias,
-      {
-        nombre: persona,
-        desde,
-        hasta
-      }
-    ]);
+    const personaSeleccionada = personal.find((actual) => actual.id === persona);
+    const nuevaLicencia = crearLicenciaPersona(personaSeleccionada, desde, hasta);
+    if (!nuevaLicencia) {
+      setError("No se pudo identificar a la persona seleccionada.");
+      return;
+    }
+
+    setLicencias([...licencias, nuevaLicencia]);
 
     setPersona("");
     setDesde("");
@@ -37,16 +41,8 @@ function Licencias({ personal, licencias, setLicencias }) {
     setError("");
   };
 
-  const eliminarLicencia = (licencia) => {
-    const nueva = licencias.filter(
-      (l) =>
-        !(
-          l.nombre === licencia.nombre &&
-          l.desde === licencia.desde &&
-          l.hasta === licencia.hasta
-        )
-    );
-    setLicencias(nueva);
+  const eliminarLicencia = (indice) => {
+    setLicencias(licencias.filter((_, posicion) => posicion !== indice));
   };
 
   return (
@@ -70,7 +66,7 @@ function Licencias({ personal, licencias, setLicencias }) {
           >
             <option value="">Seleccionar persona</option>
             {personal.map((p) => (
-              <option key={p.nombre} value={p.nombre}>
+              <option key={p.id} value={p.id}>
                 {p.nombre}
               </option>
             ))}
@@ -125,11 +121,11 @@ function Licencias({ personal, licencias, setLicencias }) {
           </thead>
 
           <tbody className="divide-y divide-slate-100">
-            {licencias.map((l) => (
-              <tr key={`${l.nombre}-${l.desde}-${l.hasta}`} className="hover:bg-slate-50">
+            {licencias.map((l, indice) => (
+              <tr key={`${l.personaId || l.nombre}-${l.desde}-${l.hasta}-${indice}`} className="hover:bg-slate-50">
                 
                 <td className="px-3 py-2 font-medium text-slate-700">
-                  {l.nombre}
+                  {obtenerNombreDeLicencia(l, personal)}
                 </td>
 
                 <td className="px-3 py-2 text-slate-500">
@@ -142,7 +138,7 @@ function Licencias({ personal, licencias, setLicencias }) {
 
                 <td className="px-3 py-2">
                   <button
-                    onClick={() => eliminarLicencia(l)}
+                    onClick={() => eliminarLicencia(indice)}
                     className="text-red-500 hover:text-red-700"
                   >
                     ❌

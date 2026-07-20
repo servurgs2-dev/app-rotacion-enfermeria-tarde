@@ -1,6 +1,4 @@
-import { normalizar } from "./texto.js";
 import {
-  obtenerNombreDesdeReferencia,
   referenciaCorrespondeAPersona,
   resolverPersonaDesdeReferencia
 } from "./referenciasPersonas.js";
@@ -23,16 +21,10 @@ export const generarRotacionMensual = ({
   const tieneAsignacionFija = Object.prototype.hasOwnProperty.call(semana1, filaFija);
   const referenciaFija = tieneAsignacionFija ? semana1[filaFija] : "";
   const personaFija = resolverPersonaDesdeReferencia(referenciaFija, personal);
-  const nombreFijo = obtenerNombreDesdeReferencia(referenciaFija, personal);
-  const nombreFijoNormalizado = (normalizar(nombreFijo) || "").replace(/\s+/g, " ");
-  const referenciaFijaOcupada = Boolean(personaFija || nombreFijoNormalizado);
 
   const correspondeAFija = (referencia) => {
-    if (!referenciaFijaOcupada) return false;
-    if (personaFija) return referenciaCorrespondeAPersona(referencia, personaFija);
-
-    const nombre = obtenerNombreDesdeReferencia(referencia, personal);
-    return (normalizar(nombre) || "").replace(/\s+/g, " ") === nombreFijoNormalizado;
+    if (!personaFija) return false;
+    return referenciaCorrespondeAPersona(referencia, personaFija, personal);
   };
 
   const rotar = (array, pasos) => {
@@ -66,4 +58,3 @@ export const generarRotacionMensual = ({
 
   return nuevaPlanilla;
 };
-

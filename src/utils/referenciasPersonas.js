@@ -7,24 +7,39 @@ const obtenerId = (valor) => String(valor ?? "").trim();
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
 
-const buscarUnicoPorNombre = (nombre, personal) => {
+const elegirRepresentanteCanonico = (identidad, candidatos, personalCanonico) => {
+  const porId = (lista) => (Array.isArray(lista) ? lista : []).find(
+    (persona) => obtenerId(persona?.id) === identidad
+  );
+  return porId(personalCanonico) ||
+    (Array.isArray(candidatos) ? candidatos : []).find(
+      (persona) => obtenerId(persona?.id) === identidad && !persona?.temporal
+    ) ||
+    porId(candidatos) ||
+    null;
+};
+
+const buscarUnicoPorNombre = (
+  nombre,
+  candidatos,
+  personalCanonico = candidatos
+) => {
   const nombreNormalizado = normalizarNombreReferencia(nombre);
   if (!nombreNormalizado) return null;
 
-  const coincidencias = (Array.isArray(personal) ? personal : []).filter(
+  const coincidencias = (Array.isArray(candidatos) ? candidatos : []).filter(
     (persona) => normalizarNombreReferencia(persona?.nombre) === nombreNormalizado
   );
-  const identidades = [];
-  const idsEncontrados = new Set();
+  const identidades = new Set(
+    coincidencias.map((persona, indice) =>
+      obtenerId(persona?.id) || `sin-id-${indice}`
+    )
+  );
+  if (identidades.size !== 1) return null;
 
-  coincidencias.forEach((persona) => {
-    const personaId = obtenerId(persona?.id);
-    if (personaId && idsEncontrados.has(personaId)) return;
-    if (personaId) idsEncontrados.add(personaId);
-    identidades.push(persona);
-  });
-
-  return identidades.length === 1 ? identidades[0] : null;
+  const [identidad] = identidades;
+  if (identidad.startsWith("sin-id-")) return coincidencias[0] || null;
+  return elegirRepresentanteCanonico(identidad, candidatos, personalCanonico);
 };
 
 export const esReferenciaPersona = (valor) =>
@@ -36,8 +51,12 @@ export const crearReferenciaPersona = (persona) => {
   return { personaId, nombre: String(persona?.nombre ?? "").trim() };
 };
 
-export const resolverPersonaDesdeReferencia = (referencia, personal) => {
-  const lista = Array.isArray(personal) ? personal : [];
+export const resolverPersonaDesdeReferencia = (
+  referencia,
+  candidatos,
+  { personalCanonico = candidatos } = {}
+) => {
+  const lista = Array.isArray(candidatos) ? candidatos : [];
   const personaId = esObjeto(referencia)
     ? obtenerId(referencia.personaId)
     : typeof referencia === "string"
@@ -45,7 +64,7 @@ export const resolverPersonaDesdeReferencia = (referencia, personal) => {
       : "";
 
   if (personaId) {
-    const porId = lista.find((persona) => obtenerId(persona?.id) === personaId);
+    const porId = elegirRepresentanteCanonico(personaId, lista, personalCanonico);
     if (porId) return porId;
     if (esObjeto(referencia)) return null;
   }
@@ -55,7 +74,7 @@ export const resolverPersonaDesdeReferencia = (referencia, personal) => {
     : typeof referencia === "string"
       ? referencia
       : "";
-  return buscarUnicoPorNombre(nombreHistorico, lista);
+  return buscarUnicoPorNombre(nombreHistorico, lista, personalCanonico);
 };
 
 export const obtenerNombreDesdeReferencia = (referencia, personal) => {
@@ -92,7 +111,11 @@ export const normalizarReferenciaPersona = (referencia, personal) => {
 
 export const normalizarReferenciaPlanilla = normalizarReferenciaPersona;
 
-export const referenciaCorrespondeAPersona = (referencia, persona) => {
+export const referenciaCorrespondeAPersona = (
+  referencia,
+  persona,
+  candidatos = []
+) => {
   const personaId = obtenerId(persona?.id);
   if (esObjeto(referencia) && obtenerId(referencia.personaId)) {
     return Boolean(personaId) && obtenerId(referencia.personaId) === personaId;
@@ -101,10 +124,9 @@ export const referenciaCorrespondeAPersona = (referencia, persona) => {
     return true;
   }
 
-  const nombreReferencia = esObjeto(referencia) ? referencia.nombre : referencia;
-  const nombreNormalizado = normalizarNombreReferencia(nombreReferencia);
-  return Boolean(nombreNormalizado) &&
-    nombreNormalizado === normalizarNombreReferencia(persona?.nombre);
+  if (!Array.isArray(candidatos) || candidatos.length === 0) return false;
+  const resuelta = resolverPersonaDesdeReferencia(referencia, candidatos);
+  return Boolean(personaId) && obtenerId(resuelta?.id) === personaId;
 };
 
 export const normalizarListaReferenciasPersonas = (lista, personal) => {
@@ -129,7 +151,8 @@ export const normalizarListaReferenciasPersonas = (lista, personal) => {
 export const normalizarCambiosPersonasPorDia = (
   cambiosPorDia,
   personal,
-  extrasPorDia
+  extrasPorDia,
+  aliasesExtrasPorDia = {}
 ) => {
   if (!esObjeto(cambiosPorDia)) return cambiosPorDia;
 
@@ -140,13 +163,24 @@ export const normalizarCambiosPersonasPorDia = (
       const extras = Array.isArray(extrasPorDia?.[fecha])
         ? extrasPorDia[fecha]
         : [];
-      const candidatos = [...(Array.isArray(personal) ? personal : []), ...extras];
+      const aliases = Array.isArray(aliasesExtrasPorDia?.[fecha])
+        ? aliasesExtrasPorDia[fecha]
+        : [];
+      const candidatos = [
+        ...(Array.isArray(personal) ? personal : []),
+        ...extras,
+        ...aliases
+      ];
       return [
         fecha,
         Object.fromEntries(
           Object.entries(cambios).map(([sector, referencia]) => [
             sector,
-            normalizarReferenciaPersona(referencia, candidatos)
+            normalizarReferenciaPersonaConCanonico(
+              referencia,
+              candidatos,
+              personal
+            )
           ])
         )
       ];
@@ -154,16 +188,32 @@ export const normalizarCambiosPersonasPorDia = (
   );
 };
 
+const normalizarReferenciaPersonaConCanonico = (
+  referencia,
+  candidatos,
+  personalCanonico
+) => {
+  if (referencia === "" || referencia === null || referencia === undefined) {
+    return referencia;
+  }
+  const persona = resolverPersonaDesdeReferencia(
+    referencia,
+    candidatos,
+    { personalCanonico }
+  );
+  if (persona) {
+    const canonica = crearReferenciaPersona(persona);
+    return esObjeto(referencia) ? { ...referencia, ...canonica } : canonica;
+  }
+  return normalizarReferenciaPersona(referencia, candidatos);
+};
+
 export const referenciaIdentificaPersona = (referencia, persona, personal) => {
   const personaId = obtenerId(persona?.id);
+  if (referenciaCorrespondeAPersona(referencia, persona)) return true;
   const resuelta = resolverPersonaDesdeReferencia(referencia, personal);
   if (resuelta) return Boolean(personaId) && obtenerId(resuelta.id) === personaId;
-  if (esReferenciaPersona(referencia)) {
-    return Boolean(personaId) && obtenerId(referencia.personaId) === personaId;
-  }
-
-  const hayPersonalParaResolver = Array.isArray(personal) && personal.length > 0;
-  return !hayPersonalParaResolver && referenciaCorrespondeAPersona(referencia, persona);
+  return false;
 };
 
 export const agregarPersonaAListaReferencias = (lista, persona, personal) => {

@@ -86,7 +86,7 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                   const referenciaActual = valoresSemana[sector] || "";
                   const personaActual = resolverPersonaDesdeReferencia(
                     referenciaActual,
-                    personalFiltrado
+                    personal
                   );
                   const nombreHistorico = obtenerNombreDesdeReferencia(
                     referenciaActual,
@@ -115,7 +115,11 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                             const disponible = !Object.entries(valoresSemana).some(
                               ([otroSector, referencia]) =>
                                 otroSector !== sector &&
-                                referenciaCorrespondeAPersona(referencia, persona)
+                                referenciaCorrespondeAPersona(
+                                  referencia,
+                                  persona,
+                                  personal
+                                )
                             );
                             const noLicencia = !estaDeLicencia(
                               licencias,

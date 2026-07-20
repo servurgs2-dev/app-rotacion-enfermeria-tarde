@@ -19,7 +19,7 @@ const coincidePersona = (nombre, persona) => {
     nombreNormalizado === personaNormalizada;
 };
 
-export const limpiarPersonaDePlanilla = (planilla, persona) => {
+export const limpiarPersonaDePlanilla = (planilla, persona, personal = []) => {
   if (!esObjetoPlano(planilla)) return planilla;
 
   let huboCambios = false;
@@ -35,7 +35,7 @@ export const limpiarPersonaDePlanilla = (planilla, persona) => {
     const semanaLimpia = {};
 
     Object.entries(semana).forEach(([sector, referencia]) => {
-      if (referenciaCorrespondeAPersona(referencia, persona)) {
+      if (referenciaCorrespondeAPersona(referencia, persona, personal)) {
         semanaLimpia[sector] = "";
         semanaCambio = true;
         huboCambios = true;
@@ -200,7 +200,11 @@ export const limpiarReferenciasDeCategoria = (mesData, categoria, persona) => {
 
   const planillas = mesData.planillas || {};
   const calendario = mesData.calendario || {};
-  const planillaLimpia = limpiarPersonaDePlanilla(planillas[claveCategoria], persona);
+  const planillaLimpia = limpiarPersonaDePlanilla(
+    planillas[claveCategoria],
+    persona,
+    mesData.personal || []
+  );
   const calendarioLimpio = limpiarPersonaDeCalendario(
     calendario[claveCategoria],
     persona,

@@ -146,9 +146,13 @@ const certificados = useMemo(
 
   const estaNoDisponible = useCallback(
     (e) => e && (noDisponibles[keyDia] || []).some(
-      (referencia) => referenciaCorrespondeAPersona(referencia, e)
+      (referencia) => referenciaCorrespondeAPersona(
+        referencia,
+        e,
+        personalFiltrado
+      )
     ),
-    [keyDia, noDisponibles]
+    [keyDia, noDisponibles, personalFiltrado]
   );
 
 const estaAusente = useCallback(
@@ -190,7 +194,7 @@ const asignacionCompleta = filas.map((fila) => {
   } else if (!override) {
     enfermero = resolverPersonaDesdeReferencia(
       planillaSemana[fila],
-      [...personalFiltrado, ...extrasDia]
+      personal
     );
   }
 
@@ -594,6 +598,7 @@ return resultadoOrdenado;
   filas,
   keyDia,
   ordenVisual,
+  personal,
   personalFiltrado,
   planillaSemana,
   sectoresBajaPrioridad,
@@ -904,7 +909,11 @@ useEffect(() => {
 <div className="flex flex-wrap gap-2">
   {personalFiltrado.map((e, indice) => {
     const activo = (noDisponibles[keyDia] || []).some(
-      (referencia) => referenciaCorrespondeAPersona(referencia, e)
+      (referencia) => referenciaCorrespondeAPersona(
+        referencia,
+        e,
+        personalFiltrado
+      )
     );
 
     return (
@@ -918,8 +927,8 @@ useEffect(() => {
           const lista = noDisponibles[keyDia] || [];
 
           const nueva = activo
-            ? quitarPersonaDeListaReferencias(lista, e, personal)
-            : agregarPersonaAListaReferencias(lista, e, personal);
+            ? quitarPersonaDeListaReferencias(lista, e, personalFiltrado)
+            : agregarPersonaAListaReferencias(lista, e, personalFiltrado);
 
           setCalendario((prev) => ({
   ...prev,

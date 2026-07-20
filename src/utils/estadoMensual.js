@@ -61,7 +61,20 @@ const normalizarExtrasPorDia = (extrasPorDia, categoria, personal) => Object.fro
             maternal: normalizarMaternal(extra.maternal)
           };
           if (String(extra.id ?? "").trim()) {
-            return asegurarIdPersona(extraNormalizado);
+            const extraConId = asegurarIdPersona(extraNormalizado);
+            if (extra.temporal === true) return extraConId;
+
+            const personaPermanente = resolverPersonaPermanenteParaExtra(
+              extraConId,
+              personal
+            );
+            return personaPermanente
+              ? {
+                  ...extraConId,
+                  id: personaPermanente.id,
+                  nombre: personaPermanente.nombre
+                }
+              : extraConId;
           }
           if (extra.temporal === true) {
             return asegurarIdExtraHistorico(
@@ -75,7 +88,11 @@ const normalizarExtrasPorDia = (extrasPorDia, categoria, personal) => Object.fro
             personal
           );
           return personaPermanente
-            ? { ...extraNormalizado, id: personaPermanente.id }
+            ? {
+                ...extraNormalizado,
+                id: personaPermanente.id,
+                nombre: personaPermanente.nombre
+              }
             : asegurarIdExtraHistorico(
                 extraNormalizado,
                 { fecha, categoria, indice }
@@ -84,6 +101,22 @@ const normalizarExtrasPorDia = (extrasPorDia, categoria, personal) => Object.fro
       : extras
   ])
 );
+
+const crearAliasesExtrasPorDia = (extrasOriginales, extrasNormalizados) =>
+  Object.fromEntries(
+    Object.entries(extrasOriginales).map(([fecha, extras]) => [
+      fecha,
+      Array.isArray(extras)
+        ? extras.map((extra, indice) => {
+            const extraNormalizado = extrasNormalizados?.[fecha]?.[indice];
+            if (!esObjetoValido(extra) || !esObjetoValido(extraNormalizado)) {
+              return extra;
+            }
+            return { ...extra, id: extraNormalizado.id };
+          })
+        : extras
+    ])
+  );
 
 const normalizarNoDisponiblesPorDia = (noDisponiblesPorDia, personal) =>
   Object.fromEntries(
@@ -140,20 +173,27 @@ const normalizarCalendarioCategoria = (calendario, personal, categoria) => {
     if (!esObjetoValido(normalizado[clave])) normalizado[clave] = {};
   });
 
+  const extrasOriginales = normalizado.extras;
   normalizado.extras = normalizarExtrasPorDia(
-    normalizado.extras,
+    extrasOriginales,
     categoria,
     personal
+  );
+  const aliasesExtras = crearAliasesExtrasPorDia(
+    extrasOriginales,
+    normalizado.extras
   );
   normalizado.cambiosDia = normalizarCambiosPersonasPorDia(
     normalizado.cambiosDia,
     personal,
-    normalizado.extras
+    normalizado.extras,
+    aliasesExtras
   );
   normalizado.cambiosParoDia = normalizarCambiosPersonasPorDia(
     normalizado.cambiosParoDia,
     personal,
-    normalizado.extras
+    normalizado.extras,
+    aliasesExtras
   );
   normalizado.noDisponibles = normalizarNoDisponiblesPorDia(
     normalizado.noDisponibles,

@@ -8,7 +8,10 @@ import {
   semanaKeyFromDate
 } from "../../utils/fechas";
 import { normalizar } from "../../utils/texto";
-import { crearIdPersonaNueva } from "../../utils/identidadPersonas.js";
+import {
+  obtenerClaveIdentidadPersona,
+  personasCompartenIdentidad
+} from "../../utils/identidadPersonas.js";
 import {
   agregarPersonaAListaReferencias,
   quitarPersonaDeListaReferencias,
@@ -18,8 +21,8 @@ import {
 import { aplicarMovimientosCalendario } from "../../utils/cambiosCalendario.js";
 import {
   agregarExtraALista,
-  eliminarExtraDelDia,
-  personasCompartenId
+  crearExtraTemporal,
+  eliminarExtraDelDia
 } from "../../utils/extrasPersonas.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 import {
@@ -59,8 +62,10 @@ const {
 } = calendario || {};
 
 const [nuevoNombre, setNuevoNombre] = useState("");
+  const [errorNuevoExtra, setErrorNuevoExtra] = useState("");
   const [seleccionado, setSeleccionado] = useState(null);
   const prevDataRef = useRef(null);
+  const altaExtraEnCursoRef = useRef(false);
 
   const {
     sectoresFijos,
@@ -107,6 +112,10 @@ const extrasDia = useMemo(
   [extras, keyDia]
 );
 
+useEffect(() => {
+  altaExtraEnCursoRef.current = false;
+}, [extrasDia]);
+
 const esLibreReal = useCallback(
   (e) => esDiaLibre(e, fecha, false),
   [fecha]
@@ -119,7 +128,7 @@ const libres = useMemo(
 
 const estaLibre = useCallback(
   (e) => {
-    const esExtraHoy = extrasDia.some((ex) => personasCompartenId(ex, e));
+    const esExtraHoy = extrasDia.some((ex) => personasCompartenIdentidad(ex, e));
     return esDiaLibre(e, fecha, esExtraHoy);
   },
   [fecha, extrasDia]
@@ -139,7 +148,8 @@ const certificados = useMemo(
   () => [...new Map(
     personalFiltrado
       .filter(estaCertificadoHoy)
-      .map((persona) => [normalizar(persona.nombre), persona])
+      .map((persona) => [obtenerClaveIdentidadPersona(persona), persona])
+      .filter(([clave]) => Boolean(clave))
   ).values()],
   [estaCertificadoHoy, personalFiltrado]
 );
@@ -159,7 +169,7 @@ const estaAusente = useCallback(
   (e) =>
     e &&
     (
-      (esLibreReal(e) && !extrasDia.some((ex) => personasCompartenId(ex, e))) ||
+      (esLibreReal(e) && !extrasDia.some((ex) => personasCompartenIdentidad(ex, e))) ||
       estaNoDisponible(e) ||
       estaDeLicenciaHoy(e) ||
       estaCertificadoHoy(e)
@@ -175,7 +185,7 @@ const borrarExtra = (extra) => {
     personal: personalFiltrado
   }));
 
-  if (personasCompartenId(seleccionado?.enfermero, extra)) {
+  if (personasCompartenIdentidad(seleccionado?.enfermero, extra)) {
     setSeleccionado(null);
   }
 };
@@ -215,11 +225,11 @@ const usadosSet = new Set();
 const usarEnfermero = (e) => {
   if (!e) return null;
 
-  const nombreNormalizado = normalizar(e.nombre);
+  const claveIdentidad = obtenerClaveIdentidadPersona(e);
 
-  if (usadosSet.has(nombreNormalizado)) return null;
+  if (!claveIdentidad || usadosSet.has(claveIdentidad)) return null;
 
-  usadosSet.add(nombreNormalizado);
+  usadosSet.add(claveIdentidad);
   return e;
 };
 const tomarTurnanteDisponible = () => {
@@ -316,18 +326,18 @@ asignacionBase.forEach((item) => {
 const hayHuecosFinal = asignacionFinal.some((a) => !a.enfermero);
 
 const usados = asignacionFinal
-  .map((a) => a.enfermero?.nombre)
+  .map((a) => obtenerClaveIdentidadPersona(a.enfermero))
   .filter(Boolean);
 
-const nombresSobrantes = new Set(usados.map(normalizar));
+const identidadesSobrantes = new Set(usados);
 const sobrantes = [...personalFiltrado, ...extrasDia].filter((e) => {
   if (!e || estaAusente(e)) return false;
 
-  const nombreNormalizado = normalizar(e.nombre);
+  const claveIdentidad = obtenerClaveIdentidadPersona(e);
 
-  if (nombresSobrantes.has(nombreNormalizado)) return false;
+  if (!claveIdentidad || identidadesSobrantes.has(claveIdentidad)) return false;
 
-  nombresSobrantes.add(nombreNormalizado);
+  identidadesSobrantes.add(claveIdentidad);
   return true;
 });
 
@@ -388,19 +398,19 @@ if (seDivideReanimacionSillones) {
       [...personalFiltrado, ...extrasDia]
     );
     const enfermero = asignacionParaMostrar.find(
-      (item) => item.enfermero?.id === personaSolicitada?.id
+      (item) => personasCompartenIdentidad(item.enfermero, personaSolicitada)
     )?.enfermero;
-    const nombreNormalizado = enfermero && normalizar(enfermero.nombre);
+    const claveIdentidad = obtenerClaveIdentidadPersona(enfermero);
 
-    if (!enfermero || personasSolicitadas.has(nombreNormalizado)) return;
+    if (!enfermero || !claveIdentidad || personasSolicitadas.has(claveIdentidad)) return;
 
     const fuente = asignacionParaMostrar.find(
-      (item) => normalizar(item.enfermero?.nombre) === nombreNormalizado
+      (item) => obtenerClaveIdentidadPersona(item.enfermero) === claveIdentidad
     );
 
     if (!fuente) return;
 
-    personasSolicitadas.add(nombreNormalizado);
+    personasSolicitadas.add(claveIdentidad);
     operaciones.push({ destino, fuente, enfermero, desplazado: destino.enfermero });
   });
 
@@ -419,26 +429,27 @@ if (seDivideReanimacionSillones) {
   const personasParaReubicar = operaciones
     .map(({ desplazado }) => desplazado)
     .filter((enfermero) =>
-      enfermero && !personasSolicitadas.has(normalizar(enfermero.nombre))
+      enfermero &&
+      !personasSolicitadas.has(obtenerClaveIdentidadPersona(enfermero))
     );
-  const nombresYaAsignados = new Set(
+  const identidadesYaAsignadas = new Set(
     asignacionParaMostrar
-      .map((item) => item.enfermero?.nombre)
+      .map((item) => obtenerClaveIdentidadPersona(item.enfermero))
       .filter(Boolean)
-      .map(normalizar)
   );
 
   operaciones.forEach(({ fuente }) => {
     if (destinosConCambio.has(normalizar(fuente.nombre)) || fuente.enfermero) return;
 
     const indiceReubicacion = personasParaReubicar.findIndex(
-      (enfermero) => !nombresYaAsignados.has(normalizar(enfermero.nombre))
+      (enfermero) =>
+        !identidadesYaAsignadas.has(obtenerClaveIdentidadPersona(enfermero))
     );
     const enfermero = personasParaReubicar[indiceReubicacion];
 
     if (enfermero) {
       fuente.enfermero = enfermero;
-      nombresYaAsignados.add(normalizar(enfermero.nombre));
+      identidadesYaAsignadas.add(obtenerClaveIdentidadPersona(enfermero));
     }
   });
 
@@ -467,10 +478,10 @@ if (esDiaParo) {
   const agregarCandidato = (enfermero) => {
     if (!enfermero || estaAusente(enfermero)) return;
 
-    const nombreNormalizado = normalizar(enfermero.nombre);
-    if (!nombreNormalizado || candidatosSet.has(nombreNormalizado)) return;
+    const claveIdentidad = obtenerClaveIdentidadPersona(enfermero);
+    if (!claveIdentidad || candidatosSet.has(claveIdentidad)) return;
 
-    candidatosSet.add(nombreNormalizado);
+    candidatosSet.add(claveIdentidad);
     candidatos.push(enfermero);
   };
 
@@ -481,10 +492,10 @@ if (esDiaParo) {
   const tomarCandidato = (enfermero) => {
     if (!enfermero) return null;
 
-    const nombreNormalizado = normalizar(enfermero.nombre);
-    if (usadosParo.has(nombreNormalizado)) return null;
+    const claveIdentidad = obtenerClaveIdentidadPersona(enfermero);
+    if (!claveIdentidad || usadosParo.has(claveIdentidad)) return null;
 
-    usadosParo.add(nombreNormalizado);
+    usadosParo.add(claveIdentidad);
     return enfermero;
   };
   const resolverCambioParo = (referencia) =>
@@ -493,7 +504,9 @@ if (esDiaParo) {
     const sectorNormalizado = normalizar(sectorActual);
 
     for (const candidato of candidatos) {
-      const sectorReservado = reservasParo.get(normalizar(candidato.nombre));
+      const sectorReservado = reservasParo.get(
+        obtenerClaveIdentidadPersona(candidato)
+      );
       if (sectorReservado && sectorReservado !== sectorNormalizado) {
         continue;
       }
@@ -512,10 +525,10 @@ if (esDiaParo) {
     const enfermero = override && override !== "__EMPTY__"
       ? resolverCambioParo(override)
       : null;
-    const nombreNormalizado = enfermero && normalizar(enfermero.nombre);
+    const claveIdentidad = obtenerClaveIdentidadPersona(enfermero);
 
-    if (nombreNormalizado && !reservasParo.has(nombreNormalizado)) {
-      reservasParo.set(nombreNormalizado, normalizar(sector));
+    if (claveIdentidad && !reservasParo.has(claveIdentidad)) {
+      reservasParo.set(claveIdentidad, normalizar(sector));
     }
   });
 
@@ -536,7 +549,7 @@ if (esDiaParo) {
         )?.enfermero;
 
         const sectorReservado = candidatoPrioritario &&
-          reservasParo.get(normalizar(candidatoPrioritario.nombre));
+          reservasParo.get(obtenerClaveIdentidadPersona(candidatoPrioritario));
 
         if (sectorReservado && sectorReservado !== normalizar(sector)) {
           continue;
@@ -795,7 +808,7 @@ useEffect(() => {
 <div className="flex flex-wrap gap-2">
   {libres.map((e, indice) => {
     const yaEsta = extrasDia.some(
-      (ex) => personasCompartenId(ex, e)
+      (ex) => personasCompartenIdentidad(ex, e)
     );
 
     return (
@@ -866,40 +879,49 @@ useEffect(() => {
 <div className="flex gap-2 mb-2">
   <input
     value={nuevoNombre}
-    onChange={(e) => setNuevoNombre(e.target.value)}
+    onChange={(e) => {
+      setNuevoNombre(e.target.value);
+      setErrorNuevoExtra("");
+    }}
     placeholder="Nombre extra"
     className="border px-2 py-1 rounded text-sm"
   />
 
   <button
     onClick={() => {
-      if (!nuevoNombre.trim()) return;
-
-      const lista = extrasDia;
-
-      const nuevoExtra = {
-        id: crearIdPersonaNueva({ nombre: nuevoNombre, funcionario: "" }),
+      if (altaExtraEnCursoRef.current) return;
+      const resultado = crearExtraTemporal({
         nombre: nuevoNombre,
         categoria: tipo,
-        libre: null,
-        temporal: true
-      };
+        personal,
+        extrasDia
+      });
+      if (!resultado.extra) {
+        setErrorNuevoExtra(resultado.error);
+        return;
+      }
 
+      altaExtraEnCursoRef.current = true;
       setCalendario((prev) => ({
   ...prev,
   extras: {
     ...prev.extras,
-    [keyDia]: agregarExtraALista(lista, nuevoExtra)
+    [keyDia]: agregarExtraALista(prev.extras?.[keyDia], resultado.extra)
   }
 }));
 
       setNuevoNombre("");
+      setErrorNuevoExtra("");
     }}
     className="bg-blue-500 text-white px-3 rounded"
   >
     + Agregar
   </button>
 </div>
+
+{errorNuevoExtra && (
+  <p className="text-sm text-red-600">{errorNuevoExtra}</p>
+)}
 
 
 <h4 className="text-sm font-semibold text-slate-700">

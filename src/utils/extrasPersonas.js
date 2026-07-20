@@ -3,10 +3,15 @@ import {
   resolverPersonaDesdeReferencia
 } from "./referenciasPersonas.js";
 import {
+  crearIdPersonaNueva,
   crearHashDeterministaIdentidad,
   normalizarFuncionarioIdentidad
 } from "./identidadPersonas.js";
 import { normalizar } from "./texto.js";
+import {
+  limpiarNombrePersona,
+  normalizarNombrePersona
+} from "./nombresPersonas.js";
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -36,6 +41,44 @@ export const personasCompartenId = (personaA, personaB) => {
   const idA = obtenerIdPersona(personaA);
   const idB = obtenerIdPersona(personaB);
   return Boolean(idA && idB && idA === idB);
+};
+
+export const crearExtraTemporal = ({
+  nombre,
+  categoria,
+  personal = [],
+  extrasDia = [],
+  crearId = crearIdPersonaNueva
+}) => {
+  const nombreLimpio = limpiarNombrePersona(nombre);
+  const nombreNormalizado = normalizarNombrePersona(nombreLimpio);
+  const candidatos = [
+    ...(Array.isArray(personal) ? personal : []),
+    ...(Array.isArray(extrasDia) ? extrasDia : [])
+  ];
+  const nombreRepetido = Boolean(nombreNormalizado) && candidatos.some(
+    (persona) => normalizarNombrePersona(persona?.nombre) === nombreNormalizado
+  );
+
+  if (!nombreNormalizado || nombreRepetido) {
+    return {
+      extra: null,
+      error: nombreRepetido
+        ? "Ya existe una persona con ese nombre para este día. Agregá el segundo apellido para diferenciarla."
+        : "Ingresá un nombre válido."
+    };
+  }
+
+  return {
+    extra: {
+      id: crearId({ nombre: nombreLimpio, funcionario: "" }),
+      nombre: nombreLimpio,
+      categoria,
+      libre: null,
+      temporal: true
+    },
+    error: ""
+  };
 };
 
 const obtenerCoincidenciaUnicaPorFuncionario = (funcionario, personal) => {

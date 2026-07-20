@@ -1,4 +1,6 @@
 import { normalizar } from "./texto.js";
+import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
+import { obtenerEtiquetaPersona } from "./nombresPersonas.js";
 import { obtenerConfiguracionTurno } from "../config/turnos.js";
 import { crearIntervaloRelativo, horaAMinutos, minutosAHora } from "./horarios.js";
 import {
@@ -98,7 +100,7 @@ const obtenerAsignados = (asignaciones, sectores) => {
       return;
     }
 
-    const clavePersona = normalizar(asignacion.enfermero.nombre);
+    const clavePersona = obtenerClaveIdentidadPersona(asignacion.enfermero);
     if (clavePersona && !personas.has(clavePersona)) {
       personas.set(clavePersona, asignacion.enfermero);
     }
@@ -107,8 +109,10 @@ const obtenerAsignados = (asignaciones, sectores) => {
   return [...personas.values()];
 };
 
-const listarNombres = (personas) => {
-  const nombres = personas.map((persona) => persona.nombre);
+const listarNombres = (personas, candidatosEtiqueta = personas) => {
+  const nombres = personas.map((persona) =>
+    obtenerEtiquetaPersona(persona, candidatosEtiqueta)
+  );
   if (nombres.length === 2) return `${nombres[0]} y ${nombres[1]}`;
   if (nombres.length > 2) return `${nombres.slice(0, -1).join(", ")} y ${nombres.at(-1)}`;
   return nombres[0];
@@ -156,7 +160,7 @@ const generarAlertaGrupo = (grupo, personas, configTurno) => {
     ? `a las ${momentoCritico.hora} se retiran las ${personas.length} personas asignadas.`
     : `a las ${momentoCritico.hora} ${
       momentoCritico.personasQueSalen.length === 1 ? "se retira" : "se retiran"
-    } ${listarNombres(momentoCritico.personasQueSalen)}.`;
+    } ${listarNombres(momentoCritico.personasQueSalen, personas)}.`;
 
   if (momentoCritico.personasRestantes === 0) {
     return `⚠️ ${grupo.nombre}: ${salidaDescripcion} El sector queda sin cobertura hasta las ${horaCierre}.`;
@@ -185,7 +189,9 @@ export const generarAlertasHorarios = ({
       ...obtenerAsignados(enfermeros, grupo.enfermeros)
     ];
     const personasUnicas = [...new Map(
-      personas.map((persona) => [normalizar(persona.nombre), persona])
+      personas
+        .map((persona) => [obtenerClaveIdentidadPersona(persona), persona])
+        .filter(([clave]) => Boolean(clave))
     ).values()];
     const alerta = generarAlertaGrupo(grupo, personasUnicas, configTurno);
 

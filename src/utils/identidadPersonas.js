@@ -6,6 +6,25 @@ export const normalizarFuncionarioIdentidad = (funcionario) =>
 const normalizarNombreIdentidad = (nombre) =>
   (normalizar(nombre) || "").replace(/\s+/g, " ");
 
+export const obtenerClaveIdentidadPersona = (persona) => {
+  if (!persona || typeof persona !== "object" || Array.isArray(persona)) return "";
+
+  const id = String(persona.id ?? "").trim();
+  if (id) return `id:${id}`;
+
+  const funcionario = normalizarFuncionarioIdentidad(persona.funcionario);
+  if (funcionario) return `funcionario:${funcionario}`;
+
+  const nombre = normalizarNombreIdentidad(persona.nombre);
+  return nombre ? `nombre:${nombre}` : "";
+};
+
+export const personasCompartenIdentidad = (personaA, personaB) => {
+  const claveA = obtenerClaveIdentidadPersona(personaA);
+  const claveB = obtenerClaveIdentidadPersona(personaB);
+  return Boolean(claveA && claveB && claveA === claveB);
+};
+
 export const crearHashDeterministaIdentidad = (texto) => {
   let hashA = 0xdeadbeef ^ texto.length;
   let hashB = 0x41c6ce57 ^ texto.length;

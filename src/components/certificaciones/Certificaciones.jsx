@@ -3,6 +3,7 @@ import {
   crearCertificacionPersona,
   obtenerNombreDeCertificacion
 } from "../../utils/certificacionesPersonas.js";
+import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 
 function Certificaciones({ personal, certificaciones, setCertificaciones }) {
   const [persona, setPersona] = useState("");
@@ -69,7 +70,7 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
             <option value="">Seleccionar persona</option>
             {personal.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.nombre}
+                {obtenerEtiquetaPersona(p, personal)}
               </option>
             ))}
           </select>

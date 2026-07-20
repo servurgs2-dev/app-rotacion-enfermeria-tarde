@@ -7,6 +7,7 @@ import {
   resolverPersonaDesdeReferencia
 } from "../../utils/referenciasPersonas.js";
 import { generarRotacionMensual } from "../../utils/rotacionPlanilla.js";
+import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 
 function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mesActivo }) {
   const personalFiltrado = personal.filter((p) => p.categoria === tipo);
@@ -122,7 +123,7 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                           })
                           .map((persona) => (
                             <option key={persona.id} value={persona.id}>
-                              {persona.nombre}
+                              {obtenerEtiquetaPersona(persona, personal)}
                             </option>
                           ))}
                       </select>

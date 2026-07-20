@@ -3,6 +3,7 @@ import {
   crearLicenciaPersona,
   obtenerNombreDeLicencia
 } from "../../utils/licenciasPersonas.js";
+import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 
 function Licencias({ personal, licencias, setLicencias }) {
   const [persona, setPersona] = useState("");
@@ -67,7 +68,7 @@ function Licencias({ personal, licencias, setLicencias }) {
             <option value="">Seleccionar persona</option>
             {personal.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.nombre}
+                {obtenerEtiquetaPersona(p, personal)}
               </option>
             ))}
           </select>

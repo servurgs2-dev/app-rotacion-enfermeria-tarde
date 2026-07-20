@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { normalizar } from "../../utils/texto";
 import { obtenerDiasLibresDelMes } from "../../utils/fechas";
 import {
   TIPOS_MATERNAL,
@@ -7,6 +6,14 @@ import {
   obtenerEtiquetaMaternal
 } from "../../utils/maternal.js";
 import { crearIdPersonaNueva } from "../../utils/identidadPersonas.js";
+import {
+  existeNombrePersona,
+  limpiarNombrePersona,
+  obtenerNombresDuplicados
+} from "../../utils/nombresPersonas.js";
+
+const MENSAJE_NOMBRE_DUPLICADO =
+  "Ya existe una persona con ese nombre. Agregá el segundo apellido para poder diferenciarla.";
 
 function ListaPersonal({
   personal,
@@ -14,6 +21,7 @@ function ListaPersonal({
   mesActivo,
   configTurno,
   onActualizarPersona,
+  onRenombrarPersona,
   onEliminarPersona,
   onLimpiarPersonal,
   onValidarExclusividadTurno
@@ -27,6 +35,9 @@ function ListaPersonal({
   const [funcionario, setFuncionario] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [errorNombre, setErrorNombre] = useState("");
+  const [personaEditandoId, setPersonaEditandoId] = useState("");
+  const [nombreEdicion, setNombreEdicion] = useState("");
+  const [errorEdicion, setErrorEdicion] = useState("");
   const [verificandoExclusividad, setVerificandoExclusividad] = useState(false);
   const validacionNombreIdRef = useRef(0);
   const validacionEnCursoRef = useRef(false);
@@ -65,20 +76,15 @@ function ListaPersonal({
   const agregar = async () => {
     if (validacionEnCursoRef.current) return;
 
-    const nombreLimpio = nombre.trim();
+    const nombreLimpio = limpiarNombrePersona(nombre);
 
     if (!nombreLimpio) {
       setErrorNombre("Ingresá un nombre.");
       return;
     }
 
-    // 🔴 evitar duplicados por nombre
-    const existe = personal.some(
-      (p) => normalizar(p.nombre) === normalizar(nombreLimpio)
-    );
-
-    if (existe) {
-      setErrorNombre("Ya existe una persona con ese nombre.");
+    if (existeNombrePersona(personal, nombreLimpio)) {
+      setErrorNombre(MENSAJE_NOMBRE_DUPLICADO);
       return;
     }
 
@@ -154,9 +160,37 @@ function ListaPersonal({
     }
   };
 
+  const iniciarEdicionNombre = (persona) => {
+    setPersonaEditandoId(String(persona.id));
+    setNombreEdicion(persona.nombre);
+    setErrorEdicion("");
+  };
+
+  const cancelarEdicionNombre = () => {
+    setPersonaEditandoId("");
+    setNombreEdicion("");
+    setErrorEdicion("");
+  };
+
+  const guardarEdicionNombre = (persona) => {
+    const nombreLimpio = limpiarNombrePersona(nombreEdicion);
+    if (!nombreLimpio) {
+      setErrorEdicion("Ingresá un nombre.");
+      return;
+    }
+    if (existeNombrePersona(personal, nombreLimpio, persona.id)) {
+      setErrorEdicion(MENSAJE_NOMBRE_DUPLICADO);
+      return;
+    }
+
+    onRenombrarPersona(persona, nombreLimpio);
+    cancelarEdicionNombre();
+  };
+
   const filtrados = personal.filter((p) =>
     p.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
+  const hayNombresDuplicados = obtenerNombresDuplicados(personal).size > 0;
 
   const horariosTurno = configTurno.horarios;
   const opcionesHorario = Object.values(horariosTurno);
@@ -255,6 +289,12 @@ function ListaPersonal({
         🗑 Limpiar lista
       </button>
 
+      {hayNombresDuplicados && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="alert">
+          Hay personas con el mismo nombre. Agregá el segundo apellido para diferenciarlas.
+        </p>
+      )}
+
     <div className="overflow-x-auto">
   <table className="w-full text-sm">
     
@@ -273,12 +313,31 @@ function ListaPersonal({
 
     <tbody className="divide-y divide-slate-100">
       {filtrados.map((p) => (
-        <tr key={p.nombre} className="hover:bg-slate-50 transition">
+        <tr key={p.id} className="hover:bg-slate-50 transition">
           <td className="px-3 py-2 font-medium text-slate-700">
-  {p.nombre}
-  <span className="text-slate-400 text-xs ml-1">
-    ({textoHorario(p.horario)})
-  </span>
+  {personaEditandoId === String(p.id) ? (
+    <div className="min-w-56 space-y-1">
+      <input
+        className="w-full border border-slate-200 rounded px-2 py-1 text-xs"
+        value={nombreEdicion}
+        onChange={(e) => {
+          setNombreEdicion(e.target.value);
+          setErrorEdicion("");
+        }}
+      />
+      <div className="flex gap-2">
+        <button type="button" className="text-xs text-blue-600" onClick={() => guardarEdicionNombre(p)}>Guardar</button>
+        <button type="button" className="text-xs text-slate-500" onClick={cancelarEdicionNombre}>Cancelar</button>
+      </div>
+      {errorEdicion && <p className="text-xs text-red-600" role="alert">{errorEdicion}</p>}
+    </div>
+  ) : (
+    <>
+      {p.nombre}
+      <span className="text-slate-400 text-xs ml-1">({textoHorario(p.horario)})</span>
+      <button type="button" className="ml-2 text-xs text-blue-600 hover:text-blue-800" onClick={() => iniciarEdicionNombre(p)}>Editar</button>
+    </>
+  )}
 </td>
 
 <td className="px-3 py-2">

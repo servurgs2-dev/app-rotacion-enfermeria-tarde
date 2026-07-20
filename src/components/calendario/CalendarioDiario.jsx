@@ -21,6 +21,7 @@ import {
   eliminarExtraDelDia,
   personasCompartenId
 } from "../../utils/extrasPersonas.js";
+import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 
 function CalendarioDiario({
   personal,
@@ -815,10 +816,10 @@ useEffect(() => {
 <div className="flex flex-wrap gap-2">
   {certificados.length > 0 ? certificados.map((persona) => (
     <span
-      key={persona.nombre}
+      key={persona.id}
       className="bg-rose-100 px-3 py-1.5 rounded-lg text-sm text-rose-800"
     >
-      {persona.nombre}
+      {obtenerEtiquetaPersona(persona, personal)}
     </span>
   )) : (
     <span className="text-sm text-slate-500">Ninguno</span>
@@ -900,7 +901,7 @@ useEffect(() => {
 
     return (
       <button
-        key={e.nombre}
+        key={e.id}
         className={`px-3 py-1.5 rounded-lg text-sm transition
           ${activo
             ? "bg-red-500 text-white"
@@ -921,7 +922,7 @@ useEffect(() => {
 }));
         }}
       >
-        {e.nombre}
+        {obtenerEtiquetaPersona(e, personal)}
       </button>
     );
   })}

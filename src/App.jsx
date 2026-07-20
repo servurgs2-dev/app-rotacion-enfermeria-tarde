@@ -27,6 +27,7 @@ import {
   limpiarReferenciasDeCategoria,
   limpiarReferenciasDePersona
 } from "./utils/integridadPersonas";
+import { renombrarPersonaEnEstado } from "./utils/renombrarPersona.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
@@ -308,7 +309,10 @@ const setPlanillaLicenciados = (nueva) => {
 const actualizarPersona = (personaAnterior, personaNueva) => {
   setEstadoPorTurnoMes((prev) => {
     const actual = prev[claveActiva] || getMesData(mesActivo);
-    const indicePersona = actual.personal?.indexOf(personaAnterior) ?? -1;
+    const personaId = String(personaAnterior?.id ?? "").trim();
+    const indicePersona = actual.personal?.findIndex(
+      (persona) => String(persona?.id ?? "").trim() === personaId
+    ) ?? -1;
 
     if (indicePersona === -1) return prev;
 
@@ -329,15 +333,33 @@ const actualizarPersona = (personaAnterior, personaNueva) => {
   });
 };
 
-const eliminarPersona = (persona) => {
+const renombrarPersona = (persona, nombreNuevo) => {
   setEstadoPorTurnoMes((prev) => {
     const actual = prev[claveActiva] || getMesData(mesActivo);
-
-    if (!actual.personal?.includes(persona)) return prev;
+    const personaId = String(persona?.id ?? "").trim();
+    if (!personaId || !actual.personal?.some(
+      (item) => String(item?.id ?? "").trim() === personaId
+    )) return prev;
 
     return {
       ...prev,
-      [claveActiva]: limpiarReferenciasDePersona(actual, persona)
+      [claveActiva]: renombrarPersonaEnEstado(actual, personaId, nombreNuevo)
+    };
+  });
+};
+
+const eliminarPersona = (persona) => {
+  setEstadoPorTurnoMes((prev) => {
+    const actual = prev[claveActiva] || getMesData(mesActivo);
+    const personaId = String(persona?.id ?? "").trim();
+    const personaActual = actual.personal?.find(
+      (item) => String(item?.id ?? "").trim() === personaId
+    );
+    if (!personaActual) return prev;
+
+    return {
+      ...prev,
+      [claveActiva]: limpiarReferenciasDePersona(actual, personaActual)
     };
   });
 };
@@ -638,6 +660,7 @@ return (
           mesActivo={mesActivo}
           configTurno={configTurno}
           onActualizarPersona={actualizarPersona}
+          onRenombrarPersona={renombrarPersona}
           onEliminarPersona={eliminarPersona}
           onLimpiarPersonal={limpiarPersonal}
           onValidarExclusividadTurno={validarPersonaDisponibleEnOtrosTurnos}

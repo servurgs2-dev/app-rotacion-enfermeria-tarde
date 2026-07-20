@@ -14,7 +14,17 @@ const buscarUnicoPorNombre = (nombre, personal) => {
   const coincidencias = (Array.isArray(personal) ? personal : []).filter(
     (persona) => normalizarNombreReferencia(persona?.nombre) === nombreNormalizado
   );
-  return coincidencias.length === 1 ? coincidencias[0] : null;
+  const identidades = [];
+  const idsEncontrados = new Set();
+
+  coincidencias.forEach((persona) => {
+    const personaId = obtenerId(persona?.id);
+    if (personaId && idsEncontrados.has(personaId)) return;
+    if (personaId) idsEncontrados.add(personaId);
+    identidades.push(persona);
+  });
+
+  return identidades.length === 1 ? identidades[0] : null;
 };
 
 export const esReferenciaPersona = (valor) =>

@@ -13,10 +13,14 @@ import {
   agregarPersonaAListaReferencias,
   quitarPersonaDeListaReferencias,
   referenciaCorrespondeAPersona,
-  referenciaIdentificaPersona,
   resolverPersonaDesdeReferencia
 } from "../../utils/referenciasPersonas.js";
 import { aplicarMovimientosCalendario } from "../../utils/cambiosCalendario.js";
+import {
+  agregarExtraALista,
+  eliminarExtraDelDia,
+  personasCompartenId
+} from "../../utils/extrasPersonas.js";
 
 function CalendarioDiario({
   personal,
@@ -106,7 +110,7 @@ const libres = useMemo(
 
 const estaLibre = useCallback(
   (e) => {
-    const esExtraHoy = extrasDia.some((ex) => ex?.nombre === e?.nombre);
+    const esExtraHoy = extrasDia.some((ex) => personasCompartenId(ex, e));
     return esDiaLibre(e, fecha, esExtraHoy);
   },
   [fecha, extrasDia]
@@ -142,7 +146,7 @@ const estaAusente = useCallback(
   (e) =>
     e &&
     (
-      (esLibreReal(e) && !extrasDia.some((ex) => ex?.nombre === e.nombre)) ||
+      (esLibreReal(e) && !extrasDia.some((ex) => personasCompartenId(ex, e))) ||
       estaNoDisponible(e) ||
       estaDeLicenciaHoy(e) ||
       estaCertificadoHoy(e)
@@ -150,40 +154,17 @@ const estaAusente = useCallback(
   [esLibreReal, estaCertificadoHoy, estaDeLicenciaHoy, estaNoDisponible, extrasDia]
 );
 
-const borrarExtra = (nombre) => {
-  const lista = extrasDia;
-  const extraEliminado = lista.find((extra) => extra?.nombre === nombre);
-  const nuevaLista = lista.filter((e) => e?.nombre !== nombre);
-  const limpiarCambios = (cambiosPorDia) => {
-    const cambios = { ...(cambiosPorDia[keyDia] || {}) };
+const borrarExtra = (extra) => {
+  setCalendario((prev) => eliminarExtraDelDia({
+    calendarioCategoria: prev,
+    fecha: keyDia,
+    extra,
+    personal: personalFiltrado
+  }));
 
-    Object.keys(cambios).forEach((sector) => {
-      const corresponde = extraEliminado
-        ? referenciaIdentificaPersona(
-            cambios[sector],
-            extraEliminado,
-            [...personalFiltrado, ...extrasDia]
-          )
-        : false;
-      if (corresponde) {
-        delete cambios[sector];
-      }
-    });
-
-    return {
-      ...cambiosPorDia,
-      [keyDia]: cambios
-    };
-  };
-
-  setCalendario({
-    extras: {
-      ...extras,
-      [keyDia]: nuevaLista
-    },
-    cambiosDia: limpiarCambios(cambiosDia),
-    cambiosParoDia: limpiarCambios(cambiosParoDia)
-  });
+  if (personasCompartenId(seleccionado?.enfermero, extra)) {
+    setSeleccionado(null);
+  }
 };
 
 const asignacionOrdenada = useMemo(() => {
@@ -800,28 +781,27 @@ useEffect(() => {
 <div className="flex flex-wrap gap-2">
   {libres.map((e) => {
     const yaEsta = extrasDia.some(
-      (ex) => ex?.nombre === e.nombre
+      (ex) => personasCompartenId(ex, e)
     );
 
     return (
       <button
-        key={e.nombre}
+        key={e.id}
         className={`px-3 py-1.5 rounded-lg text-sm text-white transition
           ${yaEsta ? "bg-green-600" : "bg-green-400 hover:bg-green-500"}`}
         onClick={() => {
-          const lista = extrasDia;
-
-          const nueva = yaEsta
-  ? lista.filter((ex) => ex.nombre !== e.nombre)
-  : [...lista, { ...e }];
+          if (yaEsta) {
+            borrarExtra(e);
+            return;
+          }
 
           setCalendario((prev) => ({
-  ...prev,
-  extras: {
-    ...prev.extras,
-    [keyDia]: nueva
-  }
-}));
+            ...prev,
+            extras: {
+              ...prev.extras,
+              [keyDia]: agregarExtraALista(prev.extras?.[keyDia], e)
+            }
+          }));
         }}
       >
         {e.nombre}
@@ -852,14 +832,14 @@ useEffect(() => {
 <div className="flex flex-wrap gap-2">
   {extrasDia.map((e) => (
     <div
-      key={e.nombre}
+      key={e.id}
       className="flex items-center gap-2 bg-blue-100 px-3 py-1.5 rounded-lg text-sm"
     >
       <span>{e.nombre}</span>
 
       {e.temporal && (
         <button
-          onClick={() => borrarExtra(e.nombre)}
+          onClick={() => borrarExtra(e)}
           className="text-red-500"
         >
           ❌
@@ -895,7 +875,7 @@ useEffect(() => {
   ...prev,
   extras: {
     ...prev.extras,
-    [keyDia]: [...lista, nuevoExtra]
+    [keyDia]: agregarExtraALista(lista, nuevoExtra)
   }
 }));
 

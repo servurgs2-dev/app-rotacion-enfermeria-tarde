@@ -6,7 +6,7 @@ export const normalizarFuncionarioIdentidad = (funcionario) =>
 const normalizarNombreIdentidad = (nombre) =>
   (normalizar(nombre) || "").replace(/\s+/g, " ");
 
-const hashDeterminista = (texto) => {
+export const crearHashDeterministaIdentidad = (texto) => {
   let hashA = 0xdeadbeef ^ texto.length;
   let hashB = 0x41c6ce57 ^ texto.length;
 
@@ -32,7 +32,7 @@ export const crearIdDeterministaPersona = (persona) => {
     ? `funcionario:${funcionario}`
     : `nombre:${normalizarNombreIdentidad(persona?.nombre)}`;
 
-  return `persona-h-${hashDeterminista(fuente)}`;
+  return `persona-h-${crearHashDeterministaIdentidad(fuente)}`;
 };
 
 const crearUuidSeguro = () => {
@@ -79,4 +79,3 @@ export const asegurarIdPersona = (persona) => {
     id: idExistente || crearIdDeterministaPersona(persona)
   };
 };
-

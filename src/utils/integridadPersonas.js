@@ -6,6 +6,7 @@ import {
 } from "./referenciasPersonas.js";
 import { licenciaCorrespondeAPersona } from "./licenciasPersonas.js";
 import { certificacionCorrespondeAPersona } from "./certificacionesPersonas.js";
+import { personasCompartenId } from "./extrasPersonas.js";
 
 const esObjetoPlano = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -53,7 +54,8 @@ const limpiarCambiosPorDia = (
   cambiosPorDia,
   persona,
   personal,
-  usarReferencias = false
+  usarReferencias = false,
+  extrasPorDia = {}
 ) => {
   if (!esObjetoPlano(cambiosPorDia)) return cambiosPorDia;
 
@@ -66,10 +68,13 @@ const limpiarCambiosPorDia = (
       return;
     }
 
+    const candidatos = usarReferencias && Array.isArray(extrasPorDia?.[fecha])
+      ? [...personal, ...extrasPorDia[fecha]]
+      : personal;
     const cambiosDelDia = Object.fromEntries(
       Object.entries(cambiosDia).filter(([, referencia]) =>
         usarReferencias
-          ? !referenciaIdentificaPersona(referencia, persona, personal)
+          ? !referenciaIdentificaPersona(referencia, persona, candidatos)
           : !coincidePersona(referencia, persona)
       )
     );
@@ -100,7 +105,11 @@ const limpiarExtrasPorDia = (extrasPorDia, persona) => {
       return;
     }
 
-    const extrasDelDia = extras.filter((extra) => !coincidePersona(extra?.nombre, persona));
+    const personaId = String(persona?.id ?? "").trim();
+    const extrasDelDia = extras.filter((extra) => {
+      const extraId = String(extra?.id ?? "").trim();
+      return extra?.temporal || !personaId || extraId !== personaId;
+    });
     if (extrasDelDia.length !== extras.length) huboCambios = true;
 
     if (extrasDelDia.length > 0) {
@@ -145,13 +154,15 @@ export const limpiarPersonaDeCalendario = (calendario, persona, personal = []) =
     calendario.cambiosDia,
     persona,
     personal,
-    true
+    true,
+    calendario.extras
   );
   const cambiosParoDia = limpiarCambiosPorDia(
     calendario.cambiosParoDia,
     persona,
     personal,
-    true
+    true,
+    calendario.extras
   );
   const extras = limpiarExtrasPorDia(calendario.extras, persona);
   const noDisponibles = limpiarNoDisponiblesPorDia(
@@ -250,7 +261,7 @@ export const limpiarReferenciasDePersona = (mesData, persona) => {
   return {
     ...sinReferenciasDiarias,
     personal: (sinReferenciasDiarias.personal || []).filter(
-      (actual) => actual !== persona
+      (actual) => !personasCompartenId(actual, persona)
     ),
     ...(licencias !== sinReferenciasDiarias.licencias ? { licencias } : {}),
     ...(certificaciones !== sinReferenciasDiarias.certificaciones ? { certificaciones } : {})

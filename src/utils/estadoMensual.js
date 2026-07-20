@@ -7,6 +7,10 @@ import {
 } from "./referenciasPersonas.js";
 import { normalizarLicenciasPersonas } from "./licenciasPersonas.js";
 import { normalizarCertificacionesPersonas } from "./certificacionesPersonas.js";
+import {
+  asegurarIdExtraHistorico,
+  resolverPersonaPermanenteParaExtra
+} from "./extrasPersonas.js";
 
 const esObjetoValido = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -46,10 +50,38 @@ const normalizarPersona = (persona) => esObjetoValido(persona)
     })
   : persona;
 
-const normalizarExtrasPorDia = (extrasPorDia) => Object.fromEntries(
+const normalizarExtrasPorDia = (extrasPorDia, categoria, personal) => Object.fromEntries(
   Object.entries(extrasPorDia).map(([fecha, extras]) => [
     fecha,
-    Array.isArray(extras) ? extras.map(normalizarPersona) : extras
+    Array.isArray(extras)
+      ? extras.map((extra, indice) => {
+          if (!esObjetoValido(extra)) return extra;
+          const extraNormalizado = {
+            ...extra,
+            maternal: normalizarMaternal(extra.maternal)
+          };
+          if (String(extra.id ?? "").trim()) {
+            return asegurarIdPersona(extraNormalizado);
+          }
+          if (extra.temporal === true) {
+            return asegurarIdExtraHistorico(
+              extraNormalizado,
+              { fecha, categoria, indice }
+            );
+          }
+
+          const personaPermanente = resolverPersonaPermanenteParaExtra(
+            extra,
+            personal
+          );
+          return personaPermanente
+            ? { ...extraNormalizado, id: personaPermanente.id }
+            : asegurarIdExtraHistorico(
+                extraNormalizado,
+                { fecha, categoria, indice }
+              );
+        })
+      : extras
   ])
 );
 
@@ -101,14 +133,18 @@ const normalizarPlanilla = (planilla, personal) => {
   return normalizada;
 };
 
-const normalizarCalendarioCategoria = (calendario, personal) => {
+const normalizarCalendarioCategoria = (calendario, personal, categoria) => {
   const normalizado = esObjetoValido(calendario) ? clonarValor(calendario) : {};
 
   Object.keys(crearCalendarioCategoriaVacio()).forEach((clave) => {
     if (!esObjetoValido(normalizado[clave])) normalizado[clave] = {};
   });
 
-  normalizado.extras = normalizarExtrasPorDia(normalizado.extras);
+  normalizado.extras = normalizarExtrasPorDia(
+    normalizado.extras,
+    categoria,
+    personal
+  );
   normalizado.cambiosDia = normalizarCambiosPersonasPorDia(
     normalizado.cambiosDia,
     personal,
@@ -158,11 +194,13 @@ export const normalizarEstadoMensual = (estado) => {
     diasParo: esObjetoValido(calendario.diasParo) ? calendario.diasParo : {},
     enfermeros: normalizarCalendarioCategoria(
       calendario.enfermeros,
-      normalizado.personal.filter((persona) => persona?.categoria === "enfermero")
+      normalizado.personal.filter((persona) => persona?.categoria === "enfermero"),
+      "enfermero"
     ),
     licenciados: normalizarCalendarioCategoria(
       calendario.licenciados,
-      normalizado.personal.filter((persona) => persona?.categoria === "licenciado")
+      normalizado.personal.filter((persona) => persona?.categoria === "licenciado"),
+      "licenciado"
     )
   };
 

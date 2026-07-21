@@ -14,6 +14,9 @@ begin
         ('estado_por_turno_mes', 'authenticated_insert_estado_por_turno_mes'),
         ('estado_por_turno_mes', 'authenticated_update_estado_por_turno_mes'),
         ('estado_por_turno_mes', 'authenticated_delete_estado_por_turno_mes'),
+        ('estado_por_turno_mes', 'allow insert turno mes'),
+        ('estado_por_turno_mes', 'allow select turno mes'),
+        ('estado_por_turno_mes', 'allow update turno mes'),
         ('estado_por_turno_mes', 'roles_select_estado_por_turno_mes'),
         ('estado_por_turno_mes', 'roles_insert_estado_por_turno_mes'),
         ('estado_por_turno_mes', 'roles_update_estado_por_turno_mes'),
@@ -22,6 +25,10 @@ begin
         ('estado_por_mes', 'authenticated_insert_estado_por_mes'),
         ('estado_por_mes', 'authenticated_update_estado_por_mes'),
         ('estado_por_mes', 'authenticated_delete_estado_por_mes'),
+        ('estado_por_mes', 'allow delete'),
+        ('estado_por_mes', 'allow insert'),
+        ('estado_por_mes', 'allow select'),
+        ('estado_por_mes', 'allow update'),
         ('estado_por_mes', 'roles_select_estado_por_mes'),
         ('estado_por_mes', 'roles_insert_estado_por_mes'),
         ('estado_por_mes', 'roles_update_estado_por_mes'),
@@ -39,6 +46,9 @@ revoke all privileges on table public.estado_por_mes from anon;
 grant select, insert, update, delete on table public.estado_por_turno_mes to authenticated;
 grant select, insert, update, delete on table public.estado_por_mes to authenticated;
 
+drop policy if exists "allow insert turno mes" on public.estado_por_turno_mes;
+drop policy if exists "allow select turno mes" on public.estado_por_turno_mes;
+drop policy if exists "allow update turno mes" on public.estado_por_turno_mes;
 drop policy if exists authenticated_select_estado_por_turno_mes on public.estado_por_turno_mes;
 drop policy if exists authenticated_insert_estado_por_turno_mes on public.estado_por_turno_mes;
 drop policy if exists authenticated_update_estado_por_turno_mes on public.estado_por_turno_mes;
@@ -51,7 +61,7 @@ drop policy if exists roles_delete_estado_por_turno_mes on public.estado_por_tur
 create policy roles_select_estado_por_turno_mes on public.estado_por_turno_mes
 for select to authenticated using ((select private.usuario_app_activo()));
 create policy roles_insert_estado_por_turno_mes on public.estado_por_turno_mes
-for insert to authenticated with check ((select private.usuario_app_puede_editar_turno(turno))));
+for insert to authenticated with check ((select private.usuario_app_puede_editar_turno(turno)));
 create policy roles_update_estado_por_turno_mes on public.estado_por_turno_mes
 for update to authenticated
 using ((select private.usuario_app_puede_editar_turno(turno)))
@@ -59,6 +69,10 @@ with check ((select private.usuario_app_puede_editar_turno(turno)));
 create policy roles_delete_estado_por_turno_mes on public.estado_por_turno_mes
 for delete to authenticated using ((select private.usuario_app_puede_editar_turno(turno)));
 
+drop policy if exists "allow delete" on public.estado_por_mes;
+drop policy if exists "allow insert" on public.estado_por_mes;
+drop policy if exists "allow select" on public.estado_por_mes;
+drop policy if exists "allow update" on public.estado_por_mes;
 drop policy if exists authenticated_select_estado_por_mes on public.estado_por_mes;
 drop policy if exists authenticated_insert_estado_por_mes on public.estado_por_mes;
 drop policy if exists authenticated_update_estado_por_mes on public.estado_por_mes;

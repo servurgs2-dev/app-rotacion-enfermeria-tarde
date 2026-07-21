@@ -29,6 +29,15 @@ import {
   obtenerClaveRenderPersona,
   obtenerIdsPersonalDuplicados
 } from "../../utils/validacionPersonal.js";
+import {
+  ESTADOS_ASISTENCIA,
+  actualizarAsistenciaPersona,
+  limpiarAsistenciaFecha,
+  marcarPersonasPresentes,
+  obtenerEstadoAsistencia,
+  obtenerPersonasPrevistas,
+  resumirAsistencia
+} from "../../utils/asistenciaPersonas.js";
 
 function CalendarioDiario({
   personal,
@@ -59,7 +68,8 @@ const {
   cambiosDia = {},
   cambiosParoDia = {},
   noDisponibles = {},
-  extras = {}
+  extras = {},
+  asistenciaDia = {}
 } = calendario || {};
 
 const [nuevoNombre, setNuevoNombre] = useState("");
@@ -642,6 +652,44 @@ useEffect(() => {
   }
 }, [asignacionOrdenada, keyDia, libres, onDataReady]);
 
+  const personasPrevistas = useMemo(
+    () => obtenerPersonasPrevistas(asignacionOrdenada),
+    [asignacionOrdenada]
+  );
+  const asistenciaFecha = useMemo(
+    () => asistenciaDia[keyDia] || {},
+    [asistenciaDia, keyDia]
+  );
+  const resumenAsistencia = useMemo(
+    () => resumirAsistencia(personasPrevistas, asistenciaFecha),
+    [asistenciaFecha, personasPrevistas]
+  );
+
+  const cambiarAsistencia = (persona, estado) => {
+    if (soloLectura) return;
+    setCalendario((prev) => ({
+      ...prev,
+      asistenciaDia: actualizarAsistenciaPersona(prev.asistenciaDia, keyDia, persona, estado)
+    }));
+  };
+
+  const marcarTodosPresentes = () => {
+    if (soloLectura || personasPrevistas.length === 0) return;
+    setCalendario((prev) => ({
+      ...prev,
+      asistenciaDia: marcarPersonasPresentes(prev.asistenciaDia, keyDia, personasPrevistas)
+    }));
+  };
+
+  const limpiarAsistencia = () => {
+    if (soloLectura || !Object.hasOwn(asistenciaDia, keyDia)) return;
+    if (!confirm("¿Limpiar la asistencia de esta fecha y categoría?")) return;
+    setCalendario((prev) => ({
+      ...prev,
+      asistenciaDia: limpiarAsistenciaFecha(prev.asistenciaDia, keyDia)
+    }));
+  };
+
   const handleClick = (item) => {
     if (soloLectura) return;
     const guardarMovimientos = (movimientos) => {
@@ -769,6 +817,32 @@ useEffect(() => {
 
       <h3>Día {fecha.getDate()}</h3>
 
+      <div className="my-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-medium text-slate-700">
+            Previstos: {resumenAsistencia.previstos} | Presentes: {resumenAsistencia.presente} | Ausentes: {resumenAsistencia.ausente} | Pendientes: {resumenAsistencia.pendiente}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={soloLectura || personasPrevistas.length === 0}
+              onClick={marcarTodosPresentes}
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Marcar todos presentes
+            </button>
+            <button
+              type="button"
+              disabled={soloLectura || !Object.hasOwn(asistenciaDia, keyDia)}
+              onClick={limpiarAsistencia}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Limpiar asistencia
+            </button>
+          </div>
+        </div>
+      </div>
+
 <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
   {asignacionOrdenada.map((item, i) => {
 
@@ -799,9 +873,34 @@ useEffect(() => {
           {item.nombre}
         </span>
 
-        <span className="text-sm text-slate-600">
-          {item.enfermero ? item.enfermero.nombre : "Sin cobertura"}
-        </span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="text-sm text-slate-600">
+            {item.enfermero ? item.enfermero.nombre : "Sin cobertura"}
+          </span>
+          {item.enfermero && (
+            <select
+              aria-label={`Asistencia de ${item.enfermero.nombre}`}
+              value={obtenerEstadoAsistencia(asistenciaFecha, item.enfermero)}
+              disabled={soloLectura}
+              onClick={(evento) => evento.stopPropagation()}
+              onChange={(evento) => {
+                evento.stopPropagation();
+                cambiarAsistencia(item.enfermero, evento.target.value);
+              }}
+              className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                obtenerEstadoAsistencia(asistenciaFecha, item.enfermero) === ESTADOS_ASISTENCIA.PRESENTE
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                  : obtenerEstadoAsistencia(asistenciaFecha, item.enfermero) === ESTADOS_ASISTENCIA.AUSENTE
+                    ? "border-red-300 bg-red-50 text-red-800"
+                    : "border-slate-300 bg-white text-slate-600"
+              }`}
+            >
+              <option value={ESTADOS_ASISTENCIA.PENDIENTE}>Pendiente</option>
+              <option value={ESTADOS_ASISTENCIA.PRESENTE}>✓ Presente</option>
+              <option value={ESTADOS_ASISTENCIA.AUSENTE}>✕ Ausente</option>
+            </select>
+          )}
+        </div>
       </div>
     );
   })}

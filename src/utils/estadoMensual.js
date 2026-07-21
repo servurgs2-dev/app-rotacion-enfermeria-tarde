@@ -40,7 +40,8 @@ const crearCalendarioCategoriaVacio = () => ({
   cambiosDia: {},
   cambiosParoDia: {},
   extras: {},
-  noDisponibles: {}
+  noDisponibles: {},
+  asistenciaDia: {}
 });
 
 const normalizarPersona = (persona) => esObjetoValido(persona)

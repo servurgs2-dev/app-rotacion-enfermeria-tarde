@@ -45,6 +45,7 @@ import {
   puedeCubrirLibreSaludMental,
   resolverCoberturaSemanalSaludMental
 } from "../../utils/coberturaSaludMental.js";
+import { crearResumenTurno } from "../../utils/resumenTurno.js";
 
 function CalendarioDiario({
   personal,
@@ -82,6 +83,7 @@ const {
 const [nuevoNombre, setNuevoNombre] = useState("");
   const [errorNuevoExtra, setErrorNuevoExtra] = useState("");
   const [seleccionado, setSeleccionado] = useState(null);
+  const [alertasAbiertas, setAlertasAbiertas] = useState(true);
   const prevDataRef = useRef(null);
   const altaExtraEnCursoRef = useRef(false);
 
@@ -721,6 +723,54 @@ useEffect(() => {
     () => resumirAsistencia(personasPrevistas, asistenciaFecha),
     [asistenciaFecha, personasPrevistas]
   );
+  const resumenTurno = useMemo(() => {
+    const hayFilasDivididas = tipo === "licenciado" &&
+      asignacionOrdenada.some((item) => normalizar(item?.nombre) === "REANIMACION") &&
+      asignacionOrdenada.some((item) => normalizar(item?.nombre) === "SILLONES");
+    const expandirReanimacion = (sectores) => sectores.flatMap((sector) =>
+      hayFilasDivididas && normalizar(sector) === "REANIMACION + SILLONES"
+        ? ["Reanimación", "Sillones"]
+        : [sector]
+    );
+    const sectoresReales = expandirReanimacion(
+      esDiaParo ? sectoresParo : sectoresFijos
+    );
+    const criticosPanel = expandirReanimacion(sectoresCriticos);
+    const personasConLicencia = personalFiltrado.filter(estaDeLicenciaHoy);
+    const personasNoDisponibles = personalFiltrado.filter(estaNoDisponible);
+    const sectoresSaludMental = tipo === "enfermero"
+      ? ["SM"]
+      : esDiaParo
+        ? ["SM + Preinternación"]
+        : ["Salud Mental"];
+
+    return crearResumenTurno({
+      asignaciones: asignacionOrdenada,
+      asistencia: asistenciaFecha,
+      libres,
+      licencias: personasConLicencia,
+      certificaciones: certificados,
+      noDisponibles: personasNoDisponibles,
+      extras: extrasDia,
+      sectoresReales,
+      sectoresCriticos: criticosPanel,
+      sectoresSaludMental
+    });
+  }, [
+    asignacionOrdenada,
+    asistenciaFecha,
+    certificados,
+    esDiaParo,
+    estaDeLicenciaHoy,
+    estaNoDisponible,
+    extrasDia,
+    libres,
+    personalFiltrado,
+    sectoresCriticos,
+    sectoresFijos,
+    sectoresParo,
+    tipo
+  ]);
 
   const cambiarAsistencia = (persona, estado) => {
     if (soloLectura) return;
@@ -873,6 +923,69 @@ useEffect(() => {
       </div>
 
       <h3>Día {fecha.getDate()}</h3>
+
+      <section className="my-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="font-semibold text-slate-800">Resumen del turno</h4>
+          <span className="text-xs font-medium text-slate-500">
+            {tipo === "enfermero" ? "Enfermeros" : "Licenciados"}
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {[
+            ["Previstos", resumenTurno.conteos.previstos],
+            ["Presentes", resumenTurno.conteos.presentes],
+            ["Ausentes", resumenTurno.conteos.ausentes],
+            ["Pendientes", resumenTurno.conteos.pendientes],
+            ["Libres", resumenTurno.conteos.libres],
+            ["Licencias", resumenTurno.conteos.licencias],
+            ["Certificados", resumenTurno.conteos.certificaciones],
+            ["Extras registrados", resumenTurno.conteos.extras],
+            ["Sin cobertura", resumenTurno.conteos.sectoresSinCobertura]
+          ].map(([etiqueta, valor]) => (
+            <div key={etiqueta} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">{etiqueta}</p>
+              <p className="text-xl font-bold text-slate-800">{valor}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          {resumenTurno.alertas.length === 0 ? (
+            <p className="text-sm font-medium text-emerald-700">✓ Sin alertas para revisar</p>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setAlertasAbiertas((actual) => !actual)}
+                className="flex w-full items-center justify-between text-left text-sm font-semibold text-amber-800"
+                aria-expanded={alertasAbiertas}
+              >
+                <span>⚠ {resumenTurno.alertas.length} situaciones para revisar</span>
+                <span>{alertasAbiertas ? "Ocultar" : "Mostrar"}</span>
+              </button>
+              {alertasAbiertas && (
+                <ul className="mt-2 space-y-2">
+                  {resumenTurno.alertas.map((alerta) => (
+                    <li
+                      key={alerta.id}
+                      className={`rounded-lg border px-3 py-2 text-sm ${
+                        alerta.nivel === "critica"
+                          ? "border-red-200 bg-red-50 text-red-800"
+                          : alerta.nivel === "advertencia"
+                            ? "border-amber-200 bg-amber-50 text-amber-900"
+                            : "border-blue-200 bg-blue-50 text-blue-800"
+                      }`}
+                    >
+                      <strong>{alerta.nivel.toUpperCase()}:</strong> {alerta.mensaje}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+      </section>
 
       <div className="my-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">

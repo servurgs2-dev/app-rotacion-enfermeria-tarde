@@ -33,7 +33,8 @@ function ListaPersonal({
   onRenombrarPersona,
   onEliminarPersona,
   onLimpiarPersonal,
-  onValidarExclusividadTurno
+  onValidarExclusividadTurno,
+  soloLectura = false
 }) {
   const [nombre, setNombre] = useState("");
   const [categoria, setCategoria] = useState("enfermero");
@@ -82,6 +83,7 @@ function ListaPersonal({
   const idsDuplicados = obtenerIdsPersonalDuplicados(personal);
 
   const actualizarPersona = (personaAnterior, cambios) => {
+    if (soloLectura) return;
     if (idsDuplicados.has(String(personaAnterior?.id ?? "").trim())) {
       setErrorIdentidad(MENSAJE_IDENTIDAD_DUPLICADA);
       return;
@@ -103,6 +105,7 @@ function ListaPersonal({
   };
 
   const agregar = async () => {
+    if (soloLectura) return;
     if (validacionEnCursoRef.current) return;
 
     const nombreLimpio = limpiarNombrePersona(nombre);
@@ -188,6 +191,7 @@ function ListaPersonal({
   
 
   const limpiarTodo = () => {
+    if (soloLectura) return;
     if (idsDuplicados.size > 0) {
       setErrorIdentidad(MENSAJE_IDENTIDAD_DUPLICADA);
       return;
@@ -198,6 +202,7 @@ function ListaPersonal({
   };
 
   const iniciarEdicionNombre = (persona) => {
+    if (soloLectura) return;
     if (idsDuplicados.has(String(persona?.id ?? "").trim())) {
       setErrorIdentidad(MENSAJE_IDENTIDAD_DUPLICADA);
       return;
@@ -214,6 +219,7 @@ function ListaPersonal({
   };
 
   const guardarEdicionNombre = (persona) => {
+    if (soloLectura) return;
     const nombreLimpio = limpiarNombrePersona(nombreEdicion);
     if (!nombreLimpio) {
       setErrorEdicion("Ingresá un nombre.");
@@ -309,7 +315,7 @@ function ListaPersonal({
         <button
   type="button"
   onClick={agregar}
-  disabled={verificandoExclusividad}
+  disabled={soloLectura || verificandoExclusividad}
   className="bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 text-white px-3 py-1.5 rounded-lg text-sm transition"
 >
   {verificandoExclusividad ? "Verificando…" : "Agregar"}
@@ -325,6 +331,7 @@ function ListaPersonal({
       {/* 🧹 LIMPIAR */}
       <button
         onClick={limpiarTodo}
+        disabled={soloLectura}
         className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm transition"
       >
         🗑 Limpiar lista
@@ -383,7 +390,7 @@ function ListaPersonal({
         }}
       />
       <div className="flex gap-2">
-        <button type="button" className="text-xs text-blue-600" onClick={() => guardarEdicionNombre(p)}>Guardar</button>
+      <button type="button" disabled={soloLectura} className="text-xs text-blue-600" onClick={() => guardarEdicionNombre(p)}>Guardar</button>
         <button type="button" className="text-xs text-slate-500" onClick={cancelarEdicionNombre}>Cancelar</button>
       </div>
       {errorEdicion && <p className="text-xs text-red-600" role="alert">{errorEdicion}</p>}
@@ -392,7 +399,7 @@ function ListaPersonal({
     <>
       {p.nombre}
       <span className="text-slate-400 text-xs ml-1">({textoHorario(p.horario)})</span>
-      <button type="button" className="ml-2 text-xs text-blue-600 hover:text-blue-800" onClick={() => iniciarEdicionNombre(p)}>Editar</button>
+      <button type="button" disabled={soloLectura} className="ml-2 text-xs text-blue-600 hover:text-blue-800" onClick={() => iniciarEdicionNombre(p)}>Editar</button>
     </>
   )}
 </td>
@@ -400,6 +407,7 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <select
     className="border border-slate-200 rounded px-2 py-1 text-xs"
+    disabled={soloLectura}
     value={p.categoria}
     onChange={(e) => {
       actualizarPersona(p, { categoria: e.target.value });
@@ -413,6 +421,7 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <select
     className="border border-slate-200 rounded px-2 py-1 text-xs"
+    disabled={soloLectura}
     value={p.rol}
     onChange={(e) => {
       actualizarPersona(p, { rol: e.target.value });
@@ -426,6 +435,7 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <select
     className="border border-slate-200 rounded px-2 py-1 text-xs"
+    disabled={soloLectura}
     value={p.libre}
     onChange={(e) => {
       actualizarPersona(p, { libre: Number(e.target.value) });
@@ -443,6 +453,7 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <select
     className="border border-slate-200 rounded px-2 py-1 text-xs"
+    disabled={soloLectura}
     value={p.horario}
     onChange={(e) => {
       actualizarPersona(p, { horario: e.target.value });
@@ -459,6 +470,7 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <select
     className="border border-slate-200 rounded px-2 py-1 text-xs"
+    disabled={soloLectura}
     value={normalizarMaternal(p.maternal)}
     onChange={(e) => {
       actualizarPersona(p, { maternal: normalizarMaternal(e.target.value) });
@@ -475,6 +487,7 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <input
     className="w-20 border border-slate-200 rounded px-2 py-1 text-xs"
+    disabled={soloLectura}
     value={p.funcionario || ""}
     onChange={(e) => {
       actualizarPersona(p, { funcionario: e.target.value });
@@ -484,6 +497,7 @@ function ListaPersonal({
 
 <td className="px-3 py-2">
   <button
+    disabled={soloLectura}
     className="text-red-500 hover:text-red-700 transition"
     onClick={() => {
       if (idsDuplicados.has(String(p?.id ?? "").trim())) {

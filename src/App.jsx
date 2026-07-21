@@ -38,11 +38,36 @@ import {
   esCargaVigente,
   hayCambiosLocalesPendientes
 } from "./utils/proteccionDatos.js";
+import {
+  crearBloqueoSolicitud,
+  ejecutarSolicitudProtegida,
+  evaluarCierreSesion
+} from "./utils/auth.js";
+import {
+  esSoloLectura,
+  obtenerEtiquetaPerfil,
+  obtenerMensajeSoloLectura,
+  puedeEditarTurno
+} from "./utils/permisos.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
+const ControlSesion = ({ etiqueta, cerrando, error, onCerrar }) => (
+  <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
+    {etiqueta && <span className="text-slate-600">{etiqueta}</span>}
+    <button
+      type="button"
+      onClick={onCerrar}
+      disabled={cerrando}
+      className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+    >
+      {cerrando ? "Cerrando..." : "Cerrar sesión"}
+    </button>
+    {error && <p className="w-full text-right text-sm text-red-600" role="alert">{error}</p>}
+  </div>
+);
 
-function App() {
+function App({ perfil, onSignOut }) {
  const [turnoActivo, setTurnoActivo] = useState(null);
  const configTurno = turnoActivo ? obtenerConfiguracionTurno(turnoActivo) : null;
  const [estadoPorTurnoMes, setEstadoPorTurnoMes] = useState({});
@@ -59,11 +84,15 @@ const [fecha, setFecha] = useState(new Date());
 const claveActiva = turnoActivo
   ? crearClaveTurnoMes(turnoActivo, mesActivo)
   : null;
+const puedeEditarActivo = puedeEditarTurno(perfil, turnoActivo);
+const modoSoloLectura = esSoloLectura(perfil, turnoActivo);
 const debouncesGuardadoRef = useRef(new Map());
 const colaGuardadoRef = useRef(new Map());
 const versionesGuardadoRef = useRef(new Map());
 const mesesConErrorGuardadoRef = useRef(new Set());
 const guardadoEnCursoRef = useRef(false);
+const appMontadaRef = useRef(true);
+const bloqueoCierreSesionRef = useRef(crearBloqueoSolicitud());
 const claveGuardadoEnCursoRef = useRef(null);
 const procesarColaGuardadoRef = useRef(null);
 const referenciasEstadoRef = useRef(new Map());
@@ -76,6 +105,8 @@ const [estadoGuardado, setEstadoGuardado] = useState("loading");
 const [erroresCargaPorClave, setErroresCargaPorClave] = useState({});
 const erroresCargaRef = useRef(new Set());
 const [intentoCarga, setIntentoCarga] = useState(0);
+const [cerrandoSesion, setCerrandoSesion] = useState(false);
+const [errorCierreSesion, setErrorCierreSesion] = useState("");
 
 const [dataPDFEnf, setDataPDFEnf] = useState({ asignaciones: [], libres: [] });
 const [dataPDFLic, setDataPDFLic] = useState({ asignaciones: [], libres: [] });
@@ -124,7 +155,7 @@ const alertasHorarios = useMemo(() => {
 
 const setDiaParo = (keyDia, activo) => {
   setEstadoPorTurnoMes(prev => {
-    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
     const actual = prev[claveActiva] || crearEstadoMensualVacio();
     const diasActuales = actual.calendario?.diasParo || {};
     const nuevosDiasParo = { ...diasActuales };
@@ -162,7 +193,7 @@ const certificacionesMes = mesData.certificaciones || [];
 const semanas = obtenerSemanasDelMes(mesActivo);
 
 const guardarMes = useCallback(async (turnoId, mes, data) => {
-  if (!data) return null;
+  if (!data || !puedeEditarTurno(perfil, turnoId)) return null;
 
   try {
     await guardarEstadoTurnoMes(turnoId, mes, data);
@@ -170,7 +201,7 @@ const guardarMes = useCallback(async (turnoId, mes, data) => {
   } catch (error) {
     return error;
   }
-}, []);
+}, [perfil]);
 
 const actualizarEstadoGuardadoDesdeCola = useCallback(() => {
   if (guardadoEnCursoRef.current) {
@@ -198,7 +229,10 @@ const actualizarEstadoGuardadoDesdeCola = useCallback(() => {
 }, []);
 
 const encolarGuardado = useCallback(({ clave, turnoId, mes, data }) => {
-  if (erroresCargaRef.current.has(clave)) return;
+  if (
+    erroresCargaRef.current.has(clave) ||
+    !puedeEditarTurno(perfil, turnoId)
+  ) return;
 
   const version = (versionesGuardadoRef.current.get(clave) || 0) + 1;
   versionesGuardadoRef.current.set(clave, version);
@@ -212,9 +246,10 @@ const encolarGuardado = useCallback(({ clave, turnoId, mes, data }) => {
   mesesConErrorGuardadoRef.current.delete(clave);
   setEstadoGuardado("saving");
   procesarColaGuardadoRef.current?.();
-}, []);
+}, [perfil]);
 
 const procesarColaGuardado = useCallback(async () => {
+  if (!appMontadaRef.current) return;
   if (guardadoEnCursoRef.current) return;
 
   const siguiente = [...colaGuardadoRef.current.entries()].find(
@@ -243,6 +278,8 @@ const procesarColaGuardado = useCallback(async () => {
     guardadoEnCursoRef.current = false;
     claveGuardadoEnCursoRef.current = null;
   }
+
+  if (!appMontadaRef.current) return;
 
   if (error) {
     const pendienteMasNuevo = colaGuardadoRef.current.get(clave);
@@ -279,6 +316,10 @@ useEffect(() => {
 
     const identidad = identidadesEstadoRef.current.get(clave);
     if (!identidad) return;
+    if (!puedeEditarTurno(perfil, identidad.turnoId)) {
+      referenciasEstadoRef.current.set(clave, data);
+      return;
+    }
 
     clearTimeout(debouncesGuardadoRef.current.get(clave));
     const timeout = setTimeout(() => {
@@ -291,15 +332,25 @@ useEffect(() => {
 
     debouncesGuardadoRef.current.set(clave, timeout);
   });
-}, [estadoPorTurnoMes, cargando, encolarGuardado]);
+}, [estadoPorTurnoMes, cargando, encolarGuardado, perfil]);
 
-useEffect(() => () => {
-  debouncesGuardadoRef.current.forEach((timeout) => clearTimeout(timeout));
+useEffect(() => {
+  appMontadaRef.current = true;
+  const debounces = debouncesGuardadoRef.current;
+  return () => {
+    appMontadaRef.current = false;
+    cargaActualRef.current = {
+      id: cargaActualRef.current.id + 1,
+      clave: null
+    };
+    procesarColaGuardadoRef.current = null;
+    debounces.forEach((timeout) => clearTimeout(timeout));
+  };
 }, []);
 
 const setPlanillaEnfermeros = (nueva) => {
   setEstadoPorTurnoMes(prev => {
-    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
     const actual = prev[claveActiva] || crearEstadoMensualVacio();
 
     return {
@@ -320,7 +371,7 @@ const setPlanillaEnfermeros = (nueva) => {
 
 const setPlanillaLicenciados = (nueva) => {
   setEstadoPorTurnoMes(prev => {
-    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
     const actual = prev[claveActiva] || crearEstadoMensualVacio();
 
     return {
@@ -341,7 +392,7 @@ const setPlanillaLicenciados = (nueva) => {
 
 const actualizarPersona = (personaAnterior, personaNueva) => {
   setEstadoPorTurnoMes((prev) => {
-    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
     const actual = prev[claveActiva] || crearEstadoMensualVacio();
     const personaId = String(personaAnterior?.id ?? "").trim();
     const coincidencias = actual.personal?.filter(
@@ -380,7 +431,7 @@ const actualizarPersona = (personaAnterior, personaNueva) => {
 
 const renombrarPersona = (persona, nombreNuevo) => {
   setEstadoPorTurnoMes((prev) => {
-    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
     const actual = prev[claveActiva] || crearEstadoMensualVacio();
     const personaId = String(persona?.id ?? "").trim();
     const coincidencias = actual.personal?.filter(
@@ -397,7 +448,7 @@ const renombrarPersona = (persona, nombreNuevo) => {
 
 const eliminarPersona = (persona) => {
   setEstadoPorTurnoMes((prev) => {
-    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
     const actual = prev[claveActiva] || crearEstadoMensualVacio();
     const personaId = String(persona?.id ?? "").trim();
     const coincidencias = actual.personal?.filter(
@@ -415,7 +466,7 @@ const eliminarPersona = (persona) => {
 
 const limpiarPersonal = () => {
   setEstadoPorTurnoMes((prev) => {
-    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
     const actual = prev[claveActiva] || crearEstadoMensualVacio();
     if (obtenerIdsPersonalDuplicados(actual.personal).size > 0) return prev;
     const nuevoMes = (actual.personal || []).reduce(
@@ -646,7 +697,7 @@ const copiarMesAnterior = async () => {
   }
 
   setEstadoPorTurnoMes(prev => {
-    if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
     return { ...prev, [claveActiva]: resultado.estado };
   });
 };
@@ -683,18 +734,74 @@ const cambiarTurno = () => {
   setTurnoActivo(null);
 };
 
+const cerrarSesion = async () => {
+  const cambiosSinProgramar = Object.entries(estadoPorTurnoMes).some(
+    ([clave, data]) =>
+      !erroresCargaRef.current.has(clave) &&
+      !mesesCargadosRef.current.has(clave) &&
+      referenciasEstadoRef.current.get(clave) !== data
+  );
+  const evaluacion = evaluarCierreSesion({
+    guardadoEnCurso: guardadoEnCursoRef.current,
+    cantidadDebounces: debouncesGuardadoRef.current.size,
+    cantidadEnCola: colaGuardadoRef.current.size,
+    cantidadErroresGuardado: mesesConErrorGuardadoRef.current.size,
+    cambiosSinProgramar
+  });
+
+  if (!evaluacion.permitido) {
+    setErrorCierreSesion(evaluacion.mensaje);
+    return;
+  }
+
+  const solicitud = ejecutarSolicitudProtegida(
+    bloqueoCierreSesionRef.current,
+    onSignOut
+  );
+  if (!solicitud) return;
+
+  setCerrandoSesion(true);
+  setErrorCierreSesion("");
+  try {
+    await solicitud;
+  } catch {
+    setErrorCierreSesion("No se pudo cerrar sesión. Intentá nuevamente.");
+    setCerrandoSesion(false);
+  }
+};
+
+const controlSesion = (
+  <ControlSesion
+    etiqueta={obtenerEtiquetaPerfil(perfil)}
+    cerrando={cerrandoSesion}
+    error={errorCierreSesion}
+    onCerrar={cerrarSesion}
+  />
+);
+
 if (!turnoActivo) {
-  return <SelectorTurno turnos={TURNOS} onSeleccionar={seleccionarTurno} />;
+  return (
+    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+      {controlSesion}
+      <SelectorTurno turnos={TURNOS} onSeleccionar={seleccionarTurno} />
+    </div>
+  );
 }
 
 if (cargando) {
-  return <div>Cargando datos...</div>;
+  return (
+    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+      {controlSesion}
+      <p className="mt-6 text-slate-600">Cargando datos...</p>
+    </div>
+  );
 }
 
 const errorCargaActivo = claveActiva ? erroresCargaPorClave[claveActiva] : null;
 if (errorCargaActivo) {
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+      {controlSesion}
       <div className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
         <h1 className="text-xl font-semibold text-slate-800">Error de carga</h1>
         <p className="mt-2 text-sm text-red-700" role="alert">
@@ -749,7 +856,8 @@ return (
   </div>
 
   <div className="flex flex-wrap items-center gap-3">
-    {textoEstadoGuardado && (
+    {controlSesion}
+    {!modoSoloLectura && textoEstadoGuardado && (
       <span
         className={`text-sm ${
           estadoGuardado === "error" ? "text-red-600" : "text-slate-500"
@@ -798,7 +906,13 @@ return (
       
 
       <Seccion titulo="👥 Personal" className="order-3">
+        {modoSoloLectura && (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+            {obtenerMensajeSoloLectura(perfil)}
+          </p>
+        )}
         <ListaPersonal
+          soloLectura={modoSoloLectura}
           personal={personal}
           mesActivo={mesActivo}
           configTurno={configTurno}
@@ -809,7 +923,7 @@ return (
           onValidarExclusividadTurno={validarPersonaDisponibleEnOtrosTurnos}
           setPersonal={(nuevo) => {
             setEstadoPorTurnoMes(prev => {
-              if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+              if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
               const actual = prev[claveActiva] || crearEstadoMensualVacio();
               return { ...prev, [claveActiva]: { ...actual, personal: nuevo } };
             });
@@ -818,6 +932,7 @@ return (
         <button
   className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
   onClick={copiarMesAnterior}
+  disabled={!puedeEditarActivo}
 >
   🔁 <span>Copiar mes anterior</span>
 </button>
@@ -870,6 +985,7 @@ return (
   {/* CONTENIDO */}
   {tabPlanilla === "enfermeros" && (
     <PlanillaMensual
+      soloLectura={modoSoloLectura}
       personal={personal}
       planilla={planillaEnfermeros}
       setPlanilla={setPlanillaEnfermeros}
@@ -881,6 +997,7 @@ return (
 
   {tabPlanilla === "licenciados" && (
     <PlanillaMensual
+      soloLectura={modoSoloLectura}
       personal={personal}
       planilla={planillaLicenciados}
       setPlanilla={setPlanillaLicenciados}
@@ -892,7 +1009,7 @@ return (
 
 
 
-      {mesActivo === mesSiguiente && (
+      {puedeEditarActivo && mesActivo === mesSiguiente && (
         <div className="mb-4">
           <button
   className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
@@ -930,7 +1047,7 @@ return (
               }
 
               setEstadoPorTurnoMes((prev) => {
-                if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+                if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
                 const actual = prev[claveActiva] || crearEstadoMensualVacio();
                 return {
                   ...prev,
@@ -952,11 +1069,12 @@ return (
 
       <Seccion titulo="🏖 Licencias" className="order-4">
         <Licencias
+          soloLectura={modoSoloLectura}
           personal={personal}
           licencias={licenciasMes}
           setLicencias={(nueva) => {
             setEstadoPorTurnoMes(prev => {
-              if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+              if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
               const actual = prev[claveActiva] || crearEstadoMensualVacio();
               return { ...prev, [claveActiva]: { ...actual, licencias: nueva } };
             });
@@ -966,11 +1084,12 @@ return (
 
       <Seccion titulo="🩺 Certificaciones médicas" className="order-4">
         <Certificaciones
+          soloLectura={modoSoloLectura}
           personal={personal}
           certificaciones={certificacionesMes}
           setCertificaciones={(nuevas) => {
             setEstadoPorTurnoMes(prev => {
-              if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+              if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
               const actual = prev[claveActiva] || crearEstadoMensualVacio();
               return { ...prev, [claveActiva]: { ...actual, certificaciones: nuevas } };
             });
@@ -1034,6 +1153,7 @@ return (
 
 <div className={tabCalendario === "enfermeros" ? "" : "hidden"}>
   <CalendarioDiario
+    soloLectura={modoSoloLectura}
   key="enfermeros"
     personal={personal}
     planilla={planillaEnfermeros}
@@ -1049,7 +1169,7 @@ return (
     setFecha={setFecha}
     setCalendario={(update) => {
       setEstadoPorTurnoMes(prev => {
-        if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+        if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
         const actual = prev[claveActiva] || crearEstadoMensualVacio();
         const calendarioActual = actual.calendario?.enfermeros || {};
 
@@ -1078,6 +1198,7 @@ return (
 
 <div className={tabCalendario === "licenciados" ? "" : "hidden"}>
   <CalendarioDiario
+    soloLectura={modoSoloLectura}
   key="licenciados"
     personal={personal}
     planilla={planillaLicenciados}
@@ -1093,7 +1214,7 @@ return (
     setFecha={setFecha}
     setCalendario={(update) => {
       setEstadoPorTurnoMes(prev => {
-        if (!claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+        if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
         const actual = prev[claveActiva] || crearEstadoMensualVacio();
         const calendarioActual = actual.calendario?.licenciados || {};
 

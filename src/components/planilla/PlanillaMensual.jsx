@@ -13,7 +13,7 @@ import {
   obtenerIdsPersonalDuplicados
 } from "../../utils/validacionPersonal.js";
 
-function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mesActivo }) {
+function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mesActivo, soloLectura = false }) {
   const personalFiltrado = personal.filter((p) => p.categoria === tipo);
   const idsDuplicados = obtenerIdsPersonalDuplicados(personal);
   const { sectoresFijos, turnantes, posicionesTurnantes } = configuracionSectores[tipo];
@@ -31,6 +31,7 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
   });
 
   function generarMes() {
+    if (soloLectura) return;
     setPlanilla(generarRotacionMensual({
       planilla,
       filas,
@@ -41,6 +42,7 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
   }
 
   function actualizarCelda(semana, sector, personaId) {
+    if (soloLectura) return;
     const persona = personalFiltrado.find((item) => item.id === personaId);
     const valor = personaId ? crearReferenciaPersona(persona) : "";
     if (personaId && !valor) return;
@@ -98,6 +100,7 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                   return (
                     <td key={semana.clave} className="px-3 py-2 min-w-[140px]">
                       <select
+                        disabled={soloLectura}
                         className="w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                         value={valorSelect}
                         onChange={(evento) =>
@@ -149,6 +152,7 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
       </div>
 
       <button
+        disabled={soloLectura}
         onClick={generarMes}
         className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
       >

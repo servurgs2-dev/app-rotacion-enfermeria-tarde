@@ -9,7 +9,7 @@ import {
   obtenerIdsPersonalDuplicados
 } from "../../utils/validacionPersonal.js";
 
-function Licencias({ personal, licencias, setLicencias }) {
+function Licencias({ personal, licencias, setLicencias, soloLectura = false }) {
   const idsDuplicados = obtenerIdsPersonalDuplicados(personal);
   const [persona, setPersona] = useState("");
   const [desde, setDesde] = useState("");
@@ -17,6 +17,7 @@ function Licencias({ personal, licencias, setLicencias }) {
   const [error, setError] = useState("");
 
   const agregarLicencia = () => {
+    if (soloLectura) return;
     if (!persona) {
       setError("Seleccioná una persona.");
       return;
@@ -48,6 +49,7 @@ function Licencias({ personal, licencias, setLicencias }) {
   };
 
   const eliminarLicencia = (indice) => {
+    if (soloLectura) return;
     setLicencias(licencias.filter((_, posicion) => posicion !== indice));
   };
 
@@ -63,6 +65,7 @@ function Licencias({ personal, licencias, setLicencias }) {
         <div className="flex flex-wrap gap-2">
           
           <select
+            disabled={soloLectura}
             value={persona}
             onChange={(e) => {
               setPersona(e.target.value);
@@ -82,6 +85,7 @@ function Licencias({ personal, licencias, setLicencias }) {
           </select>
 
           <input
+            disabled={soloLectura}
             type="date"
             value={desde}
             onChange={(e) => {
@@ -92,6 +96,7 @@ function Licencias({ personal, licencias, setLicencias }) {
           />
 
           <input
+            disabled={soloLectura}
             type="date"
             value={hasta}
             onChange={(e) => {
@@ -102,6 +107,7 @@ function Licencias({ personal, licencias, setLicencias }) {
           />
 
           <button
+            disabled={soloLectura}
             onClick={agregarLicencia}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition"
           >
@@ -147,6 +153,7 @@ function Licencias({ personal, licencias, setLicencias }) {
 
                 <td className="px-3 py-2">
                   <button
+                    disabled={soloLectura}
                     onClick={() => eliminarLicencia(indice)}
                     className="text-red-500 hover:text-red-700"
                   >

@@ -43,7 +43,8 @@ function CalendarioDiario({
   setDiaParo,
   onDataReady,
   fecha,
-  setFecha
+  setFecha,
+  soloLectura = false
 }) {
   const personalFiltrado = useMemo(
     () => personal.filter((p) => p?.categoria === tipo),
@@ -178,6 +179,7 @@ const estaAusente = useCallback(
 );
 
 const borrarExtra = (extra) => {
+  if (soloLectura) return;
   setCalendario((prev) => eliminarExtraDelDia({
     calendarioCategoria: prev,
     fecha: keyDia,
@@ -641,6 +643,7 @@ useEffect(() => {
 }, [asignacionOrdenada, keyDia, libres, onDataReady]);
 
   const handleClick = (item) => {
+    if (soloLectura) return;
     const guardarMovimientos = (movimientos) => {
       const nuevo = aplicarMovimientosCalendario({
         cambios: cambiosActivos[keyDia],
@@ -749,6 +752,7 @@ useEffect(() => {
 />
       <button
         type="button"
+        disabled={soloLectura}
         onClick={() => {
           setSeleccionado(null);
           setDiaParo(keyDia, !esDiaParo);
@@ -813,6 +817,7 @@ useEffect(() => {
 
     return (
       <button
+        disabled={soloLectura}
         key={obtenerClaveRenderPersona(e, indice, idsPersonalDuplicados)}
         className={`px-3 py-1.5 rounded-lg text-sm text-white transition
           ${yaEsta ? "bg-green-600" : "bg-green-400 hover:bg-green-500"}`}
@@ -866,6 +871,7 @@ useEffect(() => {
 
       {e.temporal && (
         <button
+          disabled={soloLectura}
           onClick={() => borrarExtra(e)}
           className="text-red-500"
         >
@@ -878,6 +884,7 @@ useEffect(() => {
 
 <div className="flex gap-2 mb-2">
   <input
+    disabled={soloLectura}
     value={nuevoNombre}
     onChange={(e) => {
       setNuevoNombre(e.target.value);
@@ -888,6 +895,7 @@ useEffect(() => {
   />
 
   <button
+    disabled={soloLectura}
     onClick={() => {
       if (altaExtraEnCursoRef.current) return;
       const resultado = crearExtraTemporal({
@@ -940,6 +948,7 @@ useEffect(() => {
 
     return (
       <button
+        disabled={soloLectura}
         key={obtenerClaveRenderPersona(e, indice, idsPersonalDuplicados)}
         className={`px-3 py-1.5 rounded-lg text-sm transition
           ${activo

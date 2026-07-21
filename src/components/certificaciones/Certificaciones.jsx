@@ -9,7 +9,7 @@ import {
   obtenerIdsPersonalDuplicados
 } from "../../utils/validacionPersonal.js";
 
-function Certificaciones({ personal, certificaciones, setCertificaciones }) {
+function Certificaciones({ personal, certificaciones, setCertificaciones, soloLectura = false }) {
   const idsDuplicados = obtenerIdsPersonalDuplicados(personal);
   const [persona, setPersona] = useState("");
   const [desde, setDesde] = useState("");
@@ -17,6 +17,7 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
   const [error, setError] = useState("");
 
   const agregarCertificacion = () => {
+    if (soloLectura) return;
     if (!persona) {
       setError("Seleccioná una persona.");
       return;
@@ -51,6 +52,7 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
   };
 
   const eliminarCertificacion = (indice) => {
+    if (soloLectura) return;
     setCertificaciones(
       certificaciones.filter((_, posicion) => posicion !== indice)
     );
@@ -65,6 +67,7 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
 
         <div className="flex flex-wrap gap-2">
           <select
+            disabled={soloLectura}
             value={persona}
             onChange={(e) => {
               setPersona(e.target.value);
@@ -84,6 +87,7 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
           </select>
 
           <input
+            disabled={soloLectura}
             type="date"
             value={desde}
             onChange={(e) => {
@@ -94,6 +98,7 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
           />
 
           <input
+            disabled={soloLectura}
             type="date"
             value={hasta}
             onChange={(e) => {
@@ -104,6 +109,7 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
           />
 
           <button
+            disabled={soloLectura}
             onClick={agregarCertificacion}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition"
           >
@@ -147,6 +153,7 @@ function Certificaciones({ personal, certificaciones, setCertificaciones }) {
                   <td className="px-3 py-2 text-slate-500">{certificacion.hasta}</td>
                   <td className="px-3 py-2">
                     <button
+                      disabled={soloLectura}
                       onClick={() => eliminarCertificacion(indice)}
                       className="text-red-500 hover:text-red-700"
                       aria-label={`Eliminar certificación de ${nombreVisible}`}

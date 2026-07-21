@@ -38,6 +38,13 @@ import {
   obtenerPersonasPrevistas,
   resumirAsistencia
 } from "../../utils/asistenciaPersonas.js";
+import {
+  aplicarCoberturaLibreSaludMental,
+  obtenerSectorSaludMental,
+  obtenerTitularSaludMental,
+  puedeCubrirLibreSaludMental,
+  resolverCoberturaSemanalSaludMental
+} from "../../utils/coberturaSaludMental.js";
 
 function CalendarioDiario({
   personal,
@@ -112,6 +119,10 @@ const planillaSemana = useMemo(
   [planilla, semanaKey]
 );
 const keyDia = keyDiaFromDate(fecha);
+const asistenciaFecha = useMemo(
+  () => asistenciaDia[keyDia] || {},
+  [asistenciaDia, keyDia]
+);
 const cambiosActivos = esDiaParo ? cambiosParoDia : cambiosDia;
 const claveCambiosActivos = esDiaParo ? "cambiosParoDia" : "cambiosDia";
 const fechaMinima = `${mesActivo}-01`;
@@ -203,7 +214,7 @@ const borrarExtra = (extra) => {
 };
 
 const asignacionOrdenada = useMemo(() => {
-const asignacionCompleta = filas.map((fila) => {
+let asignacionCompleta = filas.map((fila) => {
   const override = cambiosDia[keyDia]?.[normalizar(fila)];
 
   let enfermero;
@@ -225,6 +236,48 @@ const asignacionCompleta = filas.map((fila) => {
     enfermero: enfermero || null,
     tipo: turnantesLabels.includes(fila) ? "turnante" : "sector"
   };
+});
+
+const sectorSaludMental = obtenerSectorSaludMental(tipo);
+const titularSaludMental = obtenerTitularSaludMental({
+  planillaSemana,
+  personal: personalFiltrado,
+  tipo
+});
+const coberturaSaludMental = resolverCoberturaSemanalSaludMental({
+  planilla,
+  semana: semanaKey,
+  personal: personalFiltrado
+});
+const cambiosActivosDia = cambiosActivos[keyDia] || {};
+const existeCambioManualSaludMental = Object.hasOwn(
+  cambiosActivosDia,
+  normalizar(sectorSaludMental)
+);
+const coberturaDisponible = puedeCubrirLibreSaludMental({
+  persona: coberturaSaludMental,
+  tipo,
+  estaLibre: esLibreReal(coberturaSaludMental),
+  estaDeLicencia: estaDeLicenciaHoy(coberturaSaludMental),
+  estaCertificada: estaCertificadoHoy(coberturaSaludMental),
+  estaNoDisponible: estaNoDisponible(coberturaSaludMental)
+});
+
+asignacionCompleta = aplicarCoberturaLibreSaludMental({
+  asignaciones: asignacionCompleta,
+  sector: sectorSaludMental,
+  titular: titularSaludMental,
+  cobertura: coberturaSaludMental,
+  titularLibre: Boolean(
+    titularSaludMental &&
+    esLibreReal(titularSaludMental) &&
+    !estaDeLicenciaHoy(titularSaludMental) &&
+    !estaCertificadoHoy(titularSaludMental) &&
+    !estaNoDisponible(titularSaludMental) &&
+    obtenerEstadoAsistencia(asistenciaFecha, titularSaludMental) !== ESTADOS_ASISTENCIA.AUSENTE
+  ),
+  coberturaDisponible,
+  existeCambioManual: existeCambioManualSaludMental
 });
 
   let turnantesDisponibles = asignacionCompleta
@@ -615,9 +668,15 @@ ordenVisualActivo.forEach((item) => {
 
 return resultadoOrdenado;
 }, [
+  cambiosActivos,
   cambiosDia,
   cambiosParoDia,
+  asistenciaFecha,
   esDiaParo,
+  esLibreReal,
+  estaCertificadoHoy,
+  estaDeLicenciaHoy,
+  estaNoDisponible,
   estaAusente,
   extrasDia,
   filas,
@@ -625,7 +684,9 @@ return resultadoOrdenado;
   ordenVisual,
   personal,
   personalFiltrado,
+  planilla,
   planillaSemana,
+  semanaKey,
   sectoresBajaPrioridad,
   sectoresCriticos,
   prioridadSectores,
@@ -655,10 +716,6 @@ useEffect(() => {
   const personasPrevistas = useMemo(
     () => obtenerPersonasPrevistas(asignacionOrdenada),
     [asignacionOrdenada]
-  );
-  const asistenciaFecha = useMemo(
-    () => asistenciaDia[keyDia] || {},
-    [asistenciaDia, keyDia]
   );
   const resumenAsistencia = useMemo(
     () => resumirAsistencia(personasPrevistas, asistenciaFecha),

@@ -56,6 +56,21 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
     }));
   }
 
+  function actualizarCoberturaLibreSM(semana, personaId) {
+    if (soloLectura) return;
+    const persona = personalFiltrado.find((item) => item.id === personaId);
+    const valor = personaId ? crearReferenciaPersona(persona) : "";
+    if (personaId && !valor) return;
+
+    setPlanilla((prev) => ({
+      ...prev,
+      coberturaLibreSM: {
+        ...(prev?.coberturaLibreSM || {}),
+        [semana]: valor
+      }
+    }));
+  }
+
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-slate-800">Planilla Mensual</h2>
@@ -147,6 +162,55 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                 })}
               </tr>
             ))}
+            <tr className="border-t-2 border-blue-100 bg-blue-50/60">
+              <td className="px-4 py-3 font-semibold text-blue-900 min-w-[180px] whitespace-nowrap">
+                {tipo === "enfermero"
+                  ? "Cubre libre de SM"
+                  : "Cubre libre de Salud Mental"}
+              </td>
+              {semanas.map((semana) => {
+                const sectorSM = tipo === "enfermero" ? "SM" : "Salud Mental";
+                const titular = resolverPersonaDesdeReferencia(
+                  planilla?.[semana.clave]?.[sectorSM],
+                  personalFiltrado
+                );
+                const referencia = planilla?.coberturaLibreSM?.[semana.clave] || "";
+                const cobertura = resolverPersonaDesdeReferencia(referencia, personalFiltrado);
+                const nombreHistorico = obtenerNombreDesdeReferencia(referencia, personalFiltrado);
+                const valor = cobertura?.id || (nombreHistorico ? "__REFERENCIA_NO_RESUELTA__" : "");
+                const opciones = [...personalFiltrado]
+                  .filter((persona) => persona.id !== titular?.id)
+                  .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+                return (
+                  <td key={semana.clave} className="px-3 py-2 min-w-[140px]">
+                    <select
+                      disabled={soloLectura}
+                      value={valor}
+                      onChange={(evento) =>
+                        actualizarCoberturaLibreSM(semana.clave, evento.target.value)
+                      }
+                      className="w-full rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-slate-700"
+                    >
+                      <option value="">Sin cobertura asignada</option>
+                      {!cobertura && nombreHistorico && (
+                        <option value="__REFERENCIA_NO_RESUELTA__" disabled>
+                          {nombreHistorico}
+                        </option>
+                      )}
+                      {opciones.map((persona, indice) => (
+                        <option
+                          key={obtenerClaveRenderPersona(persona, indice, idsDuplicados)}
+                          value={persona.id}
+                        >
+                          {obtenerEtiquetaPersona(persona, personal)}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                );
+              })}
+            </tr>
           </tbody>
         </table>
       </div>

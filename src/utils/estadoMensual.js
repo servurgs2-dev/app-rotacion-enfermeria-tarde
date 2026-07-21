@@ -33,7 +33,8 @@ export const crearPlanillaMensualVacia = () => ({
   semana3: {},
   semana4: {},
   semana5: {},
-  semana6: {}
+  semana6: {},
+  coberturaLibreSM: {}
 });
 
 const crearCalendarioCategoriaVacio = () => ({
@@ -163,6 +164,13 @@ const normalizarPlanilla = (planilla, personal) => {
   Object.keys(crearPlanillaMensualVacia()).forEach((clave) => {
     if (!esObjetoValido(normalizada[clave])) normalizada[clave] = {};
   });
+
+  normalizada.coberturaLibreSM = Object.fromEntries(
+    Object.entries(normalizada.coberturaLibreSM).map(([semana, referencia]) => [
+      semana,
+      normalizarReferenciaPlanilla(referencia, personal)
+    ])
+  );
 
   return normalizada;
 };

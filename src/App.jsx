@@ -1040,6 +1040,10 @@ return (
               const baseLic =
                 estadoAnterior?.planillas.licenciados[ultimaSemanaAnterior] ||
                 estadoAnterior?.planillas.licenciados.semana5;
+              const coberturaEnf =
+                estadoAnterior?.planillas.enfermeros.coberturaLibreSM?.[ultimaSemanaAnterior];
+              const coberturaLic =
+                estadoAnterior?.planillas.licenciados.coberturaLibreSM?.[ultimaSemanaAnterior];
 
               if (!baseEnf && !baseLic) {
                 alert("No hay planilla anterior");
@@ -1054,7 +1058,9 @@ return (
                   [claveActiva]: continuarPlanillasDesdeMesAnterior(actual, {
                     planillaVacia: crearPlanillaMensualVacia,
                     baseEnfermeros: baseEnf,
-                    baseLicenciados: baseLic
+                    baseLicenciados: baseLic,
+                    coberturaEnfermeros: coberturaEnf,
+                    coberturaLicenciados: coberturaLic
                   })
                 };
               });

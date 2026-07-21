@@ -1,3 +1,8 @@
+const clonarReferencia = (referencia) =>
+  referencia && typeof referencia === "object" && !Array.isArray(referencia)
+    ? { ...referencia }
+    : referencia;
+
 const clonarReferencias = (semana) => {
   if (!semana || typeof semana !== "object" || Array.isArray(semana)) {
     return semana;
@@ -6,16 +11,20 @@ const clonarReferencias = (semana) => {
   return Object.fromEntries(
     Object.entries(semana).map(([sector, referencia]) => [
       sector,
-      referencia && typeof referencia === "object" && !Array.isArray(referencia)
-        ? { ...referencia }
-        : referencia
+      clonarReferencia(referencia)
     ])
   );
 };
 
 export const continuarPlanillasDesdeMesAnterior = (
   estadoActual,
-  { planillaVacia, baseEnfermeros, baseLicenciados }
+  {
+    planillaVacia,
+    baseEnfermeros,
+    baseLicenciados,
+    coberturaEnfermeros,
+    coberturaLicenciados
+  }
 ) => ({
   ...estadoActual,
   planillas: {
@@ -24,7 +33,10 @@ export const continuarPlanillasDesdeMesAnterior = (
       ? {
           enfermeros: {
             ...planillaVacia(),
-            semana1: clonarReferencias(baseEnfermeros)
+            semana1: clonarReferencias(baseEnfermeros),
+            coberturaLibreSM: coberturaEnfermeros
+              ? { semana1: clonarReferencia(coberturaEnfermeros) }
+              : {}
           }
         }
       : {}),
@@ -32,7 +44,10 @@ export const continuarPlanillasDesdeMesAnterior = (
       ? {
           licenciados: {
             ...planillaVacia(),
-            semana1: clonarReferencias(baseLicenciados)
+            semana1: clonarReferencias(baseLicenciados),
+            coberturaLibreSM: coberturaLicenciados
+              ? { semana1: clonarReferencia(coberturaLicenciados) }
+              : {}
           }
         }
       : {})

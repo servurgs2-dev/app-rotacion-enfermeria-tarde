@@ -947,12 +947,14 @@ return (
 
 <button
   onClick={() =>
-    exportarPlanillaPDF(
+    exportarPlanillaPDF({
       planillaEnfermeros,
       planillaLicenciados,
       semanas,
-      personal
-    )
+      personal,
+      turnoId: turnoActivo,
+      mesActivo
+    })
   }
   className="mb-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
 >

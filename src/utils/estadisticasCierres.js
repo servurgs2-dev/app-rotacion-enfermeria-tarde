@@ -6,6 +6,7 @@ const CATEGORIAS = Object.freeze({
 });
 const numeroSeguro = (valor) => Number.isFinite(Number(valor)) ? Number(valor) : 0;
 const listaSegura = (valor) => Array.isArray(valor) ? valor : [];
+const esFechaIso = (valor) => /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(String(valor || ""));
 
 export const calcularPorcentajeAsistencia = (presentes, previstos) => {
   const total = numeroSeguro(previstos);
@@ -57,6 +58,35 @@ export const obtenerCierresEstadisticos = ({ calendario, categoria = "ambas" }) 
   }
   return filas.sort((a, b) => b.fecha.localeCompare(a.fecha) || a.tipo.localeCompare(b.tipo));
 };
+
+export const esRangoFechasInvalido = ({ fechaDesde = "", fechaHasta = "" } = {}) =>
+  esFechaIso(fechaDesde) && esFechaIso(fechaHasta) && fechaDesde > fechaHasta;
+
+export const filtrarCierresPorFecha = (filas, { fechaDesde = "", fechaHasta = "" } = {}) => {
+  const desde = esFechaIso(fechaDesde) ? fechaDesde : "";
+  const hasta = esFechaIso(fechaHasta) ? fechaHasta : "";
+  if (desde && hasta && desde > hasta) return [];
+  return listaSegura(filas).filter((fila) => {
+    const fecha = String(fila?.fecha || "");
+    return (!desde || fecha >= desde) && (!hasta || fecha <= hasta);
+  });
+};
+
+export const crearSerieTemporalEstadisticas = (filas) =>
+  listaSegura(filas)
+    .map((fila) => ({
+      fecha: fila.fecha,
+      categoria: fila.categoria,
+      previstos: numeroSeguro(fila.conteos?.previstos),
+      presentes: numeroSeguro(fila.conteos?.presentes),
+      ausentes: numeroSeguro(fila.conteos?.ausentes),
+      pendientes: numeroSeguro(fila.conteos?.pendientes),
+      porcentajeAsistencia: numeroSeguro(fila.porcentajeAsistencia),
+      sectoresSinCobertura: numeroSeguro(fila.sectoresSinCobertura),
+      alertasCriticas: numeroSeguro(fila.alertasCriticas),
+      coberturasSaludMental: numeroSeguro(fila.coberturasSaludMental)
+    }))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.categoria.localeCompare(b.categoria, "es"));
 
 const agrupar = (filas, campo) => {
   const conteos = new Map();

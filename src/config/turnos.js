@@ -7,9 +7,37 @@ const crearHorario = (id, nombre, entrada, salida, cruzaMedianoche = false) => (
   cruzaMedianoche
 });
 
+const ROTACION_SEMANAL = { tipo: "semanal" };
+const ROTACION_NOCTURNA_ENFERMEROS = {
+  tipo: "cada_3_dias",
+  fechaBase: "2026-07-02",
+  duracionDias: 3,
+  vigenteDesdeMes: "2026-07"
+};
+
+const crearRotacionSemanalPorCategoria = () => ({
+  enfermero: { ...ROTACION_SEMANAL },
+  licenciado: { ...ROTACION_SEMANAL }
+});
+
+const esFechaIsoValida = (fechaIso) => {
+  const coincidencia = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fechaIso || "");
+  if (!coincidencia) return false;
+  const fecha = new Date(Date.UTC(
+    Number(coincidencia[1]),
+    Number(coincidencia[2]) - 1,
+    Number(coincidencia[3])
+  ));
+  return fecha.toISOString().slice(0, 10) === fechaIso;
+};
+
 export const TURNOS = {
   noche: {
     id: "noche",
+    rotacionPlanilla: {
+      enfermero: { ...ROTACION_NOCTURNA_ENFERMEROS },
+      licenciado: { ...ROTACION_SEMANAL }
+    },
     nombre: "Noche",
     horarioVisible: "00:00 a 06:00",
     horarios: {
@@ -20,6 +48,7 @@ export const TURNOS = {
   },
   manana: {
     id: "manana",
+    rotacionPlanilla: crearRotacionSemanalPorCategoria(),
     nombre: "Mañana",
     horarioVisible: "06:00 a 12:00",
     horarios: {
@@ -30,6 +59,7 @@ export const TURNOS = {
   },
   tarde: {
     id: "tarde",
+    rotacionPlanilla: crearRotacionSemanalPorCategoria(),
     nombre: "Tarde",
     horarioVisible: "12:00 a 18:00",
     horarios: {
@@ -40,6 +70,7 @@ export const TURNOS = {
   },
   vespertino: {
     id: "vespertino",
+    rotacionPlanilla: crearRotacionSemanalPorCategoria(),
     nombre: "Vespertino",
     horarioVisible: "18:00 a 00:00",
     horarios: {
@@ -54,3 +85,28 @@ export const TURNO_POR_DEFECTO = "tarde";
 
 export const obtenerConfiguracionTurno = (turnoId = TURNO_POR_DEFECTO) =>
   TURNOS[turnoId] || TURNOS[TURNO_POR_DEFECTO];
+
+export const obtenerEstrategiaRotacionPlanilla = ({
+  turnoId,
+  tipo,
+  mesActivo
+} = {}) => {
+  const estrategia = TURNOS[turnoId]?.rotacionPlanilla?.[tipo];
+  const esCadaTresDias =
+    estrategia?.tipo === "cada_3_dias" &&
+    /^\d{4}-(0[1-9]|1[0-2])$/.test(mesActivo || "") &&
+    /^\d{4}-(0[1-9]|1[0-2])$/.test(estrategia.vigenteDesdeMes || "") &&
+    mesActivo >= estrategia.vigenteDesdeMes &&
+    esFechaIsoValida(estrategia.fechaBase) &&
+    Number.isInteger(estrategia.duracionDias) &&
+    estrategia.duracionDias > 0;
+
+  return esCadaTresDias
+    ? {
+        tipo: estrategia.tipo,
+        fechaBase: estrategia.fechaBase,
+        duracionDias: estrategia.duracionDias,
+        vigenteDesdeMes: estrategia.vigenteDesdeMes
+      }
+    : { tipo: "semanal" };
+};

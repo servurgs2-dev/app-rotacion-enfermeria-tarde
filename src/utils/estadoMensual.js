@@ -1,6 +1,7 @@
 import { normalizarMaternal } from "./maternal.js";
 import { asegurarIdPersona } from "./identidadPersonas.js";
 import {
+  esReferenciaPersona,
   normalizarCambiosPersonasPorDia,
   normalizarListaReferenciasPersonas,
   normalizarReferenciaPlanilla
@@ -11,6 +12,7 @@ import {
   asegurarIdExtraHistorico,
   resolverPersonaPermanenteParaExtra
 } from "./extrasPersonas.js";
+import { parsearFechaIsoUTC } from "./periodosRotacionPlanilla.js";
 
 const esObjetoValido = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -34,6 +36,15 @@ export const crearPlanillaMensualVacia = () => ({
   semana4: {},
   semana5: {},
   semana6: {},
+  coberturaLibreSM: {}
+});
+
+export const crearRotacion3DiasVacia = () => ({
+  version: 1,
+  fechaBase: "2026-07-02",
+  duracionDias: 3,
+  asignacionBase: {},
+  bloques: {},
   coberturaLibreSM: {}
 });
 
@@ -134,7 +145,10 @@ const normalizarNoDisponiblesPorDia = (noDisponiblesPorDia, personal) =>
 export const crearEstadoMensualVacio = () => ({
   personal: [],
   planillas: {
-    enfermeros: crearPlanillaMensualVacia(),
+    enfermeros: {
+      ...crearPlanillaMensualVacia(),
+      rotacion3Dias: crearRotacion3DiasVacia()
+    },
     licenciados: crearPlanillaMensualVacia()
   },
   calendario: {
@@ -146,7 +160,72 @@ export const crearEstadoMensualVacio = () => ({
   certificaciones: []
 });
 
-const normalizarPlanilla = (planilla, personal) => {
+const normalizarReferenciaLigera = (referencia, personal) => {
+  const normalizada = normalizarReferenciaPlanilla(referencia, personal);
+  if (!esReferenciaPersona(normalizada)) return null;
+  return {
+    personaId: String(normalizada.personaId).trim(),
+    nombre: String(normalizada.nombre ?? "").trim()
+  };
+};
+
+const normalizarDistribucionRotacion = (distribucion, personal) => {
+  if (!esObjetoValido(distribucion)) return {};
+
+  return Object.fromEntries(
+    Object.entries(distribucion).flatMap(([sector, referencia]) => {
+      if (referencia === "" || referencia === null || referencia === undefined) {
+        return [[sector, ""]];
+      }
+      const ligera = normalizarReferenciaLigera(referencia, personal);
+      return ligera ? [[sector, ligera]] : [];
+    })
+  );
+};
+
+const normalizarRotacion3Dias = (rotacion, personal) => {
+  const normalizada = esObjetoValido(rotacion) ? clonarValor(rotacion) : {};
+  const baseVacia = crearRotacion3DiasVacia();
+  const bloques = esObjetoValido(normalizada.bloques) ? normalizada.bloques : {};
+  const cobertura = esObjetoValido(normalizada.coberturaLibreSM)
+    ? normalizada.coberturaLibreSM
+    : {};
+
+  return {
+    ...normalizada,
+    version: Number.isInteger(normalizada.version) ? normalizada.version : baseVacia.version,
+    fechaBase: parsearFechaIsoUTC(normalizada.fechaBase)
+      ? normalizada.fechaBase
+      : baseVacia.fechaBase,
+    duracionDias: Number.isInteger(normalizada.duracionDias) && normalizada.duracionDias > 0
+      ? normalizada.duracionDias
+      : baseVacia.duracionDias,
+    asignacionBase: normalizarDistribucionRotacion(
+      normalizada.asignacionBase,
+      personal
+    ),
+    bloques: Object.fromEntries(
+      Object.entries(bloques).flatMap(([clave, distribucion]) =>
+        parsearFechaIsoUTC(clave)
+          ? [[clave, normalizarDistribucionRotacion(distribucion, personal)]]
+          : []
+      )
+    ),
+    coberturaLibreSM: Object.fromEntries(
+      Object.entries(cobertura).flatMap(([clave, referencia]) => {
+        if (!parsearFechaIsoUTC(clave)) return [];
+        const ligera = normalizarReferenciaLigera(referencia, personal);
+        return ligera ? [[clave, ligera]] : [];
+      })
+    )
+  };
+};
+
+const normalizarPlanilla = (
+  planilla,
+  personal,
+  { incluirRotacion3Dias = false } = {}
+) => {
   const normalizada = esObjetoValido(planilla) ? clonarValor(planilla) : {};
 
   Object.keys(normalizada).forEach((clave) => {
@@ -172,6 +251,13 @@ const normalizarPlanilla = (planilla, personal) => {
       normalizarReferenciaPlanilla(referencia, personal)
     ])
   );
+
+  if (incluirRotacion3Dias) {
+    normalizada.rotacion3Dias = normalizarRotacion3Dias(
+      normalizada.rotacion3Dias,
+      personal
+    );
+  }
 
   return normalizada;
 };
@@ -235,7 +321,11 @@ export const normalizarEstadoMensual = (estado) => {
 
   normalizado.planillas = {
     ...planillas,
-    enfermeros: normalizarPlanilla(planillas.enfermeros, normalizado.personal),
+    enfermeros: normalizarPlanilla(
+      planillas.enfermeros,
+      normalizado.personal,
+      { incluirRotacion3Dias: true }
+    ),
     licenciados: normalizarPlanilla(planillas.licenciados, normalizado.personal)
   };
 

@@ -5,6 +5,7 @@ import CalendarioDiario from "./components/calendario/CalendarioDiario";
 import Seccion from "./components/ui/Seccion";
 import Licencias from "./components/licencias/Licencias";
 import Certificaciones from "./components/certificaciones/Certificaciones";
+import Estadisticas from "./components/estadisticas/Estadisticas";
 import SelectorTurno from "./components/turnos/SelectorTurno";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
@@ -1102,6 +1103,14 @@ return (
               return { ...prev, [claveActiva]: { ...actual, certificaciones: nuevas } };
             });
           }}
+        />
+      </Seccion>
+
+      <Seccion titulo="📈 Estadísticas" className="order-5">
+        <Estadisticas
+          calendario={mesData.calendario}
+          mesActivo={mesActivo}
+          nombreTurno={configTurno.nombre}
         />
       </Seccion>
 

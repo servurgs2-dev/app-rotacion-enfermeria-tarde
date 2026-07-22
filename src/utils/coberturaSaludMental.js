@@ -17,8 +17,18 @@ export const resolverCoberturaSemanalSaludMental = ({
   planilla,
   semana,
   personal
+}) => resolverCoberturaSaludMental({
+  coberturas: planilla?.coberturaLibreSM,
+  clave: semana,
+  personal
+});
+
+export const resolverCoberturaSaludMental = ({
+  coberturas,
+  clave,
+  personal
 }) => resolverPersonaDesdeReferencia(
-  planilla?.coberturaLibreSM?.[semana],
+  coberturas?.[clave],
   personal
 );
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { configuracionSectores } from "../../data/sectores";
+import { obtenerEstrategiaRotacionPlanilla } from "../../config/turnos.js";
 import {
   estaCertificado,
   estaDeLicencia,
@@ -7,6 +8,7 @@ import {
   keyDiaFromDate,
   semanaKeyFromDate
 } from "../../utils/fechas";
+import { obtenerBloqueParaFecha } from "../../utils/periodosRotacionPlanilla.js";
 import { normalizar } from "../../utils/texto";
 import {
   obtenerClaveIdentidadPersona,
@@ -43,7 +45,7 @@ import {
   obtenerSectorSaludMental,
   obtenerTitularSaludMental,
   puedeCubrirLibreSaludMental,
-  resolverCoberturaSemanalSaludMental
+  resolverCoberturaSaludMental
 } from "../../utils/coberturaSaludMental.js";
 import { crearResumenTurno } from "../../utils/resumenTurno.js";
 import {
@@ -139,12 +141,45 @@ const [nuevoNombre, setNuevoNombre] = useState("");
     return filasCalculadas;
   }, [posicionesTurnantes, sectoresFijos, turnantesLabels]);
 
-const semanaKey = semanaKeyFromDate(fecha, mesActivo);
-const planillaSemana = useMemo(
-  () => (semanaKey ? planilla?.[semanaKey] || {} : {}),
-  [planilla, semanaKey]
-);
 const keyDia = keyDiaFromDate(fecha);
+const periodoPlanilla = useMemo(() => {
+  const estrategia = obtenerEstrategiaRotacionPlanilla({
+    turnoId: turnoActivo,
+    tipo,
+    mesActivo
+  });
+
+  if (estrategia.tipo === "cada_3_dias") {
+    const bloque = obtenerBloqueParaFecha({
+      fecha: keyDia,
+      fechaBase: estrategia.fechaBase,
+      duracionDias: estrategia.duracionDias
+    });
+    const clavePeriodo = bloque?.clave || null;
+
+    return {
+      tipoPeriodo: "cada_3_dias",
+      clavePeriodo,
+      planillaPeriodo: clavePeriodo
+        ? planilla?.rotacion3Dias?.bloques?.[clavePeriodo] || {}
+        : {},
+      coberturasSaludMental: planilla?.rotacion3Dias?.coberturaLibreSM || {}
+    };
+  }
+
+  const clavePeriodo = semanaKeyFromDate(fecha, mesActivo);
+  return {
+    tipoPeriodo: "semanal",
+    clavePeriodo,
+    planillaPeriodo: clavePeriodo ? planilla?.[clavePeriodo] || {} : {},
+    coberturasSaludMental: planilla?.coberturaLibreSM || {}
+  };
+}, [fecha, keyDia, mesActivo, planilla, tipo, turnoActivo]);
+const {
+  clavePeriodo,
+  planillaPeriodo,
+  coberturasSaludMental
+} = periodoPlanilla;
 const bloqueadoPorCierre = estaFechaCategoriaCerrada(cierresDia, keyDia);
 const soloLecturaEfectiva = soloLectura || bloqueadoPorCierre;
 const versionCierre = obtenerUltimaVersionCierre(cierresDia, keyDia);
@@ -249,7 +284,7 @@ let asignacionCompleta = filas.map((fila) => {
     );
   } else if (!override) {
     enfermero = resolverPersonaDesdeReferencia(
-      planillaSemana[fila],
+      planillaPeriodo[fila],
       personal
     );
   }
@@ -263,13 +298,13 @@ let asignacionCompleta = filas.map((fila) => {
 
 const sectorSaludMental = obtenerSectorSaludMental(tipo);
 const titularSaludMental = obtenerTitularSaludMental({
-  planillaSemana,
+  planillaSemana: planillaPeriodo,
   personal: personalFiltrado,
   tipo
 });
-const coberturaSaludMental = resolverCoberturaSemanalSaludMental({
-  planilla,
-  semana: semanaKey,
+const coberturaSaludMental = resolverCoberturaSaludMental({
+  coberturas: coberturasSaludMental,
+  clave: clavePeriodo,
   personal: personalFiltrado
 });
 const cambiosActivosDia = cambiosActivos[keyDia] || {};

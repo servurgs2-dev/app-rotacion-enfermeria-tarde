@@ -995,6 +995,7 @@ return (
       tipo="enfermero"
       licencias={licenciasMes}
       mesActivo={mesActivo}
+      turnoId={turnoActivo}
     />
   )}
 
@@ -1007,6 +1008,7 @@ return (
       tipo="licenciado"
       licencias={licenciasMes}
       mesActivo={mesActivo}
+      turnoId={turnoActivo}
     />
   )}
 

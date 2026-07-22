@@ -1,23 +1,56 @@
 import { configuracionSectores } from "../../data/sectores";
-import { estaDeLicencia, obtenerSemanasDelMes } from "../../utils/fechas";
+import {
+  estaDeLicencia,
+  obtenerSemanasDelMes,
+  parsearFechaLocal
+} from "../../utils/fechas";
+import { obtenerEstrategiaRotacionPlanilla } from "../../config/turnos.js";
+import {
+  obtenerBloquesQueIntersectanMes
+} from "../../utils/periodosRotacionPlanilla.js";
 import {
   crearReferenciaPersona,
   obtenerNombreDesdeReferencia,
   referenciaCorrespondeAPersona,
   resolverPersonaDesdeReferencia
 } from "../../utils/referenciasPersonas.js";
-import { generarRotacionMensual } from "../../utils/rotacionPlanilla.js";
+import {
+  generarBloquesFaltantes,
+  generarRotacionMensual,
+  inicializarRotacion3DiasDesdeSemana1
+} from "../../utils/rotacionPlanilla.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 import {
   obtenerClaveRenderPersona,
   obtenerIdsPersonalDuplicados
 } from "../../utils/validacionPersonal.js";
 
-function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mesActivo, soloLectura = false }) {
+function PlanillaMensual({
+  personal,
+  planilla,
+  setPlanilla,
+  tipo,
+  licencias,
+  mesActivo,
+  turnoId,
+  soloLectura = false
+}) {
   const personalFiltrado = personal.filter((p) => p.categoria === tipo);
   const idsDuplicados = obtenerIdsPersonalDuplicados(personal);
   const { sectoresFijos, turnantes, posicionesTurnantes } = configuracionSectores[tipo];
-  const semanas = obtenerSemanasDelMes(mesActivo);
+  const estrategia = obtenerEstrategiaRotacionPlanilla({
+    turnoId,
+    tipo,
+    mesActivo
+  });
+  const usaRotacionTresDias = estrategia.tipo === "cada_3_dias";
+  const periodos = usaRotacionTresDias
+    ? obtenerBloquesQueIntersectanMes({
+        mesActivo,
+        fechaBase: estrategia.fechaBase,
+        duracionDias: estrategia.duracionDias
+      })
+    : obtenerSemanasDelMes(mesActivo);
 
   const filas = [];
   let tIndex = 0;
@@ -32,44 +65,129 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
 
   function generarMes() {
     if (soloLectura) return;
+
+    if (usaRotacionTresDias) {
+      setPlanilla((prev) => {
+        const inicializada = inicializarRotacion3DiasDesdeSemana1({
+          planillaEnfermeros: prev,
+          fechaBase: estrategia.fechaBase,
+          duracionDias: estrategia.duracionDias
+        });
+
+        return {
+          ...inicializada,
+          rotacion3Dias: generarBloquesFaltantes({
+            rotacion3Dias: inicializada.rotacion3Dias,
+            periodos,
+            filas,
+            filasFijas: ["SM"]
+          })
+        };
+      });
+      return;
+    }
+
     setPlanilla(generarRotacionMensual({
       planilla,
       filas,
-      semanas,
+      semanas: periodos,
       filaFija: tipo === "enfermero" ? "SM" : "Salud Mental",
       personal: personalFiltrado
     }));
   }
 
-  function actualizarCelda(semana, sector, personaId) {
+  function actualizarCelda(periodo, sector, personaId) {
     if (soloLectura) return;
     const persona = personalFiltrado.find((item) => item.id === personaId);
     const valor = personaId ? crearReferenciaPersona(persona) : "";
     if (personaId && !valor) return;
 
+    if (usaRotacionTresDias) {
+      setPlanilla((prev) => {
+        const planillaPreparada = inicializarRotacion3DiasDesdeSemana1({
+          planillaEnfermeros: prev,
+          fechaBase: estrategia.fechaBase,
+          duracionDias: estrategia.duracionDias
+        });
+        const rotacionActual = planillaPreparada.rotacion3Dias;
+        const bloquesActuales = rotacionActual.bloques || {};
+        const bloqueActual = bloquesActuales[periodo] || {};
+        const esBloqueBase = periodo === rotacionActual.fechaBase;
+
+        return {
+          ...planillaPreparada,
+          rotacion3Dias: {
+            ...rotacionActual,
+            bloques: {
+              ...bloquesActuales,
+              [periodo]: {
+                ...bloqueActual,
+                [sector]: valor
+              }
+            },
+            ...(esBloqueBase
+              ? {
+                  asignacionBase: {
+                    ...(rotacionActual.asignacionBase || {}),
+                    [sector]: valor
+                  }
+                }
+              : {})
+          }
+        };
+      });
+      return;
+    }
+
     setPlanilla((prev) => ({
       ...prev,
-      [semana]: {
-        ...(prev?.[semana] || {}),
+      [periodo]: {
+        ...(prev?.[periodo] || {}),
         [sector]: valor
       }
     }));
   }
 
-  function actualizarCoberturaLibreSM(semana, personaId) {
+  function actualizarCoberturaLibreSM(periodo, personaId) {
     if (soloLectura) return;
     const persona = personalFiltrado.find((item) => item.id === personaId);
     const valor = personaId ? crearReferenciaPersona(persona) : "";
     if (personaId && !valor) return;
 
+    if (usaRotacionTresDias) {
+      setPlanilla((prev) => ({
+        ...prev,
+        rotacion3Dias: {
+          ...(prev?.rotacion3Dias || {}),
+          coberturaLibreSM: {
+            ...(prev?.rotacion3Dias?.coberturaLibreSM || {}),
+            [periodo]: valor
+          }
+        }
+      }));
+      return;
+    }
+
     setPlanilla((prev) => ({
       ...prev,
       coberturaLibreSM: {
         ...(prev?.coberturaLibreSM || {}),
-        [semana]: valor
+        [periodo]: valor
       }
     }));
   }
+
+  const obtenerValoresPeriodo = (periodo) => usaRotacionTresDias
+    ? planilla?.rotacion3Dias?.bloques?.[periodo.clave] || {}
+    : planilla?.[periodo.clave] || {};
+
+  const obtenerFechaInicioPeriodo = (periodo) => usaRotacionTresDias
+    ? parsearFechaLocal(periodo.fechaInicio)
+    : periodo.desde;
+
+  const obtenerEtiquetaPeriodo = (periodo) => usaRotacionTresDias
+    ? periodo.etiqueta
+    : `${periodo.desde.getDate()}/${periodo.desde.getMonth() + 1} - ${periodo.hasta.getDate()}/${periodo.hasta.getMonth() + 1}`;
 
   return (
     <div className="space-y-4">
@@ -80,12 +198,12 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
           <thead className="bg-slate-100 text-slate-700">
             <tr>
               <th className="px-4 py-3 text-left font-semibold">Sector</th>
-              {semanas.map((semana) => (
+              {periodos.map((periodo) => (
                 <th
-                  key={semana.clave}
+                  key={periodo.clave}
                   className="px-4 py-3 text-left font-semibold min-w-[140px] whitespace-nowrap"
                 >
-                  {`${semana.desde.getDate()}/${semana.desde.getMonth() + 1} - ${semana.hasta.getDate()}/${semana.hasta.getMonth() + 1}`}
+                  {obtenerEtiquetaPeriodo(periodo)}
                 </th>
               ))}
             </tr>
@@ -98,9 +216,9 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                   {sector}
                 </td>
 
-                {semanas.map((semana) => {
-                  const valoresSemana = planilla?.[semana.clave] || {};
-                  const referenciaActual = valoresSemana[sector] || "";
+                {periodos.map((periodo) => {
+                  const valoresPeriodo = obtenerValoresPeriodo(periodo);
+                  const referenciaActual = valoresPeriodo[sector] || "";
                   const personaActual = resolverPersonaDesdeReferencia(
                     referenciaActual,
                     personal
@@ -113,13 +231,13 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                     (nombreHistorico ? "__REFERENCIA_NO_RESUELTA__" : "");
 
                   return (
-                    <td key={semana.clave} className="px-3 py-2 min-w-[140px]">
+                    <td key={periodo.clave} className="px-3 py-2 min-w-[140px]">
                       <select
                         disabled={soloLectura}
                         className="w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                         value={valorSelect}
                         onChange={(evento) =>
-                          actualizarCelda(semana.clave, sector, evento.target.value)
+                          actualizarCelda(periodo.clave, sector, evento.target.value)
                         }
                       >
                         <option value="">-- elegir --</option>
@@ -130,7 +248,7 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                         )}
                         {personalFiltrado
                           .filter((persona) => {
-                            const disponible = !Object.entries(valoresSemana).some(
+                            const disponible = !Object.entries(valoresPeriodo).some(
                               ([otroSector, referencia]) =>
                                 otroSector !== sector &&
                                 referenciaCorrespondeAPersona(
@@ -142,7 +260,7 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                             const noLicencia = !estaDeLicencia(
                               licencias,
                               persona,
-                              semana.desde,
+                              obtenerFechaInicioPeriodo(periodo),
                               personal
                             );
 
@@ -168,13 +286,16 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                   ? "Cubre libre de SM"
                   : "Cubre libre de Salud Mental"}
               </td>
-              {semanas.map((semana) => {
+              {periodos.map((periodo) => {
                 const sectorSM = tipo === "enfermero" ? "SM" : "Salud Mental";
+                const valoresPeriodo = obtenerValoresPeriodo(periodo);
                 const titular = resolverPersonaDesdeReferencia(
-                  planilla?.[semana.clave]?.[sectorSM],
+                  valoresPeriodo[sectorSM],
                   personalFiltrado
                 );
-                const referencia = planilla?.coberturaLibreSM?.[semana.clave] || "";
+                const referencia = usaRotacionTresDias
+                  ? planilla?.rotacion3Dias?.coberturaLibreSM?.[periodo.clave] || ""
+                  : planilla?.coberturaLibreSM?.[periodo.clave] || "";
                 const cobertura = resolverPersonaDesdeReferencia(referencia, personalFiltrado);
                 const nombreHistorico = obtenerNombreDesdeReferencia(referencia, personalFiltrado);
                 const valor = cobertura?.id || (nombreHistorico ? "__REFERENCIA_NO_RESUELTA__" : "");
@@ -183,12 +304,12 @@ function PlanillaMensual({ personal, planilla, setPlanilla, tipo, licencias, mes
                   .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 
                 return (
-                  <td key={semana.clave} className="px-3 py-2 min-w-[140px]">
+                  <td key={periodo.clave} className="px-3 py-2 min-w-[140px]">
                     <select
                       disabled={soloLectura}
                       value={valor}
                       onChange={(evento) =>
-                        actualizarCoberturaLibreSM(semana.clave, evento.target.value)
+                        actualizarCoberturaLibreSM(periodo.clave, evento.target.value)
                       }
                       className="w-full rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-slate-700"
                     >

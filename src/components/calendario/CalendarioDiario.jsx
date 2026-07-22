@@ -14,6 +14,7 @@ import {
 } from "../../utils/identidadPersonas.js";
 import {
   agregarPersonaAListaReferencias,
+  crearReferenciaPersona,
   quitarPersonaDeListaReferencias,
   referenciaCorrespondeAPersona,
   resolverPersonaDesdeReferencia
@@ -35,8 +36,7 @@ import {
   limpiarAsistenciaFecha,
   marcarPersonasPresentes,
   obtenerEstadoAsistencia,
-  obtenerPersonasPrevistas,
-  resumirAsistencia
+  obtenerPersonasPrevistas
 } from "../../utils/asistenciaPersonas.js";
 import {
   aplicarCoberturaLibreSaludMental,
@@ -46,6 +46,23 @@ import {
   resolverCoberturaSemanalSaludMental
 } from "../../utils/coberturaSaludMental.js";
 import { crearResumenTurno } from "../../utils/resumenTurno.js";
+import {
+  cerrarFechaCategoria,
+  crearSnapshotCierreTurno,
+  estaFechaCategoriaCerrada,
+  obtenerResponsablesCierre,
+  obtenerUltimaVersionCierre,
+  reabrirFechaCategoria,
+  snapshotAAsignacionesVisibles
+} from "../../utils/cierreTurno.js";
+
+const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
+  const clave = obtenerClaveIdentidadPersona({
+    id: referencia?.personaId,
+    nombre: referencia?.nombre
+  });
+  return (clave && snapshot?.asistencia?.[clave]) || ESTADOS_ASISTENCIA.PENDIENTE;
+};
 
 function CalendarioDiario({
   personal,
@@ -61,7 +78,10 @@ function CalendarioDiario({
   onDataReady,
   fecha,
   setFecha,
-  soloLectura = false
+  turnoActivo = "",
+  soloLectura = false,
+  usuarioActual = "",
+  puedeReabrirCierre = false
 }) {
   const personalFiltrado = useMemo(
     () => personal.filter((p) => p?.categoria === tipo),
@@ -77,13 +97,17 @@ const {
   cambiosParoDia = {},
   noDisponibles = {},
   extras = {},
-  asistenciaDia = {}
+  asistenciaDia = {},
+  cierresDia = {}
 } = calendario || {};
 
 const [nuevoNombre, setNuevoNombre] = useState("");
   const [errorNuevoExtra, setErrorNuevoExtra] = useState("");
   const [seleccionado, setSeleccionado] = useState(null);
   const [alertasAbiertas, setAlertasAbiertas] = useState(true);
+  const [cierreVisible, setCierreVisible] = useState(false);
+  const [seleccionResponsable, setSeleccionResponsable] = useState({ contexto: "", personaId: "" });
+  const [errorResponsable, setErrorResponsable] = useState({ contexto: "", mensaje: "" });
   const prevDataRef = useRef(null);
   const altaExtraEnCursoRef = useRef(false);
 
@@ -121,24 +145,30 @@ const planillaSemana = useMemo(
   [planilla, semanaKey]
 );
 const keyDia = keyDiaFromDate(fecha);
-const asistenciaFecha = useMemo(
-  () => asistenciaDia[keyDia] || {},
-  [asistenciaDia, keyDia]
-);
+const bloqueadoPorCierre = estaFechaCategoriaCerrada(cierresDia, keyDia);
+const soloLecturaEfectiva = soloLectura || bloqueadoPorCierre;
+const versionCierre = obtenerUltimaVersionCierre(cierresDia, keyDia);
+const snapshotCierre = versionCierre?.snapshot || null;
+const contextoResponsable = `${turnoActivo}|${keyDia}|${tipo}`;
+const responsableSeleccionadoId = seleccionResponsable.contexto === contextoResponsable
+  ? seleccionResponsable.personaId
+  : "";
+const mensajeErrorResponsable = errorResponsable.contexto === contextoResponsable
+  ? errorResponsable.mensaje
+  : "";
+const licenciadosResponsables = obtenerResponsablesCierre(personal);
+const asistenciaFecha = asistenciaDia[keyDia] || {};
 const cambiosActivos = esDiaParo ? cambiosParoDia : cambiosDia;
 const claveCambiosActivos = esDiaParo ? "cambiosParoDia" : "cambiosDia";
 const fechaMinima = `${mesActivo}-01`;
 const [yearMesActivo, monthMesActivo] = mesActivo.split("-").map(Number);
 const ultimoDiaDelMes = new Date(yearMesActivo, monthMesActivo, 0).getDate();
 const fechaMaxima = `${mesActivo}-${String(ultimoDiaDelMes).padStart(2, "0")}`;
-const extrasDia = useMemo(
-  () => (Array.isArray(extras[keyDia]) ? extras[keyDia].filter(Boolean) : []),
-  [extras, keyDia]
-);
+const extrasDia = Array.isArray(extras[keyDia]) ? extras[keyDia].filter(Boolean) : [];
 
 useEffect(() => {
   altaExtraEnCursoRef.current = false;
-}, [extrasDia]);
+}, [extras, keyDia]);
 
 const esLibreReal = useCallback(
   (e) => esDiaLibre(e, fecha, false),
@@ -150,13 +180,10 @@ const libres = useMemo(
   [esLibreReal, personalFiltrado]
 );
 
-const estaLibre = useCallback(
-  (e) => {
+const estaLibre = (e) => {
     const esExtraHoy = extrasDia.some((ex) => personasCompartenIdentidad(ex, e));
     return esDiaLibre(e, fecha, esExtraHoy);
-  },
-  [fecha, extrasDia]
-);
+  };
 
 const estaDeLicenciaHoy = useCallback(
   (e) => e && estaDeLicencia(licencias, e, fecha, personal),
@@ -178,31 +205,25 @@ const certificados = useMemo(
   [estaCertificadoHoy, personalFiltrado]
 );
 
-  const estaNoDisponible = useCallback(
-    (e) => e && (noDisponibles[keyDia] || []).some(
+  const estaNoDisponible = (e) => e && (noDisponibles[keyDia] || []).some(
       (referencia) => referenciaCorrespondeAPersona(
         referencia,
         e,
         personalFiltrado
       )
-    ),
-    [keyDia, noDisponibles, personalFiltrado]
-  );
+    );
 
-const estaAusente = useCallback(
-  (e) =>
+const estaAusente = (e) =>
     e &&
     (
       (esLibreReal(e) && !extrasDia.some((ex) => personasCompartenIdentidad(ex, e))) ||
       estaNoDisponible(e) ||
       estaDeLicenciaHoy(e) ||
       estaCertificadoHoy(e)
-    ),
-  [esLibreReal, estaCertificadoHoy, estaDeLicenciaHoy, estaNoDisponible, extrasDia]
-);
+    );
 
 const borrarExtra = (extra) => {
-  if (soloLectura) return;
+  if (soloLecturaEfectiva) return;
   setCalendario((prev) => eliminarExtraDelDia({
     calendarioCategoria: prev,
     fecha: keyDia,
@@ -215,7 +236,7 @@ const borrarExtra = (extra) => {
   }
 };
 
-const asignacionOrdenada = useMemo(() => {
+const asignacionOrdenada = (() => {
 let asignacionCompleta = filas.map((fila) => {
   const override = cambiosDia[keyDia]?.[normalizar(fila)];
 
@@ -669,34 +690,7 @@ ordenVisualActivo.forEach((item) => {
 });
 
 return resultadoOrdenado;
-}, [
-  cambiosActivos,
-  cambiosDia,
-  cambiosParoDia,
-  asistenciaFecha,
-  esDiaParo,
-  esLibreReal,
-  estaCertificadoHoy,
-  estaDeLicenciaHoy,
-  estaNoDisponible,
-  estaAusente,
-  extrasDia,
-  filas,
-  keyDia,
-  ordenVisual,
-  personal,
-  personalFiltrado,
-  planilla,
-  planillaSemana,
-  semanaKey,
-  sectoresBajaPrioridad,
-  sectoresCriticos,
-  prioridadSectores,
-  sectoresParo,
-  prioridadesParo,
-  tipo,
-  turnantesLabels
-]);
+})();
 
 useEffect(() => {
   const datosParaPDF = {
@@ -715,15 +709,8 @@ useEffect(() => {
   }
 }, [asignacionOrdenada, keyDia, libres, onDataReady]);
 
-  const personasPrevistas = useMemo(
-    () => obtenerPersonasPrevistas(asignacionOrdenada),
-    [asignacionOrdenada]
-  );
-  const resumenAsistencia = useMemo(
-    () => resumirAsistencia(personasPrevistas, asistenciaFecha),
-    [asistenciaFecha, personasPrevistas]
-  );
-  const resumenTurno = useMemo(() => {
+  const personasPrevistas = obtenerPersonasPrevistas(asignacionOrdenada);
+  const datosResumenTurno = (() => {
     const hayFilasDivididas = tipo === "licenciado" &&
       asignacionOrdenada.some((item) => normalizar(item?.nombre) === "REANIMACION") &&
       asignacionOrdenada.some((item) => normalizar(item?.nombre) === "SILLONES");
@@ -744,9 +731,7 @@ useEffect(() => {
         ? ["SM + Preinternación"]
         : ["Salud Mental"];
 
-    return crearResumenTurno({
-      asignaciones: asignacionOrdenada,
-      asistencia: asistenciaFecha,
+    return {
       libres,
       licencias: personasConLicencia,
       certificaciones: certificados,
@@ -755,25 +740,97 @@ useEffect(() => {
       sectoresReales,
       sectoresCriticos: criticosPanel,
       sectoresSaludMental
+    };
+  })();
+  const resumenTurno = crearResumenTurno({
+    asignaciones: asignacionOrdenada,
+    asistencia: asistenciaFecha,
+    ...datosResumenTurno
+  });
+  const asignacionesMostradas = bloqueadoPorCierre && snapshotCierre
+    ? snapshotAAsignacionesVisibles(snapshotCierre)
+    : asignacionOrdenada;
+  const resumenMostrado = bloqueadoPorCierre && snapshotCierre
+    ? snapshotCierre.resumen
+    : resumenTurno;
+  const asistenciaMostrada = bloqueadoPorCierre && snapshotCierre
+    ? snapshotCierre.asistencia
+    : asistenciaFecha;
+
+  const cerrarTurno = () => {
+    if (soloLecturaEfectiva || !usuarioActual) return;
+    const responsable = licenciadosResponsables.find(
+      (persona) => String(persona.id) === responsableSeleccionadoId
+    );
+    const responsableCierre = crearReferenciaPersona(responsable);
+    if (!responsableCierre) {
+      setErrorResponsable({
+        contexto: contextoResponsable,
+        mensaje: "Seleccioná el licenciado responsable antes de cerrar."
+      });
+      return;
+    }
+    const criticas = resumenTurno.alertas.filter((alerta) => alerta.nivel === "critica").length;
+    const mensaje = [
+      `Previstos: ${resumenTurno.conteos.previstos}`,
+      `Presentes: ${resumenTurno.conteos.presentes}`,
+      `Ausentes: ${resumenTurno.conteos.ausentes}`,
+      `Pendientes: ${resumenTurno.conteos.pendientes}`,
+      `Sectores sin cobertura: ${resumenTurno.conteos.sectoresSinCobertura}`,
+      `Alertas críticas: ${criticas}`,
+      "",
+      resumenTurno.conteos.pendientes > 0 || criticas > 0
+        ? "Hay situaciones pendientes. ¿Cerrar igualmente?"
+        : "¿Confirmar el cierre?"
+    ].join("\n");
+    if (!confirm(mensaje)) return;
+
+    const snapshot = crearSnapshotCierreTurno({
+      fecha: keyDia,
+      tipo,
+      resumen: resumenTurno,
+      asignaciones: asignacionOrdenada,
+      asistencia: asistenciaFecha,
+      libres: datosResumenTurno.libres,
+      licencias: datosResumenTurno.licencias,
+      certificaciones: datosResumenTurno.certificaciones,
+      noDisponibles: datosResumenTurno.noDisponibles,
+      extrasRegistrados: datosResumenTurno.extras,
+      sectoresReales: datosResumenTurno.sectoresReales
     });
-  }, [
-    asignacionOrdenada,
-    asistenciaFecha,
-    certificados,
-    esDiaParo,
-    estaDeLicenciaHoy,
-    estaNoDisponible,
-    extrasDia,
-    libres,
-    personalFiltrado,
-    sectoresCriticos,
-    sectoresFijos,
-    sectoresParo,
-    tipo
-  ]);
+    setCalendario((prev) => ({
+      ...prev,
+      cierresDia: cerrarFechaCategoria({
+        cierresDia: prev.cierresDia,
+        fecha: keyDia,
+        usuario: usuarioActual,
+        responsableCierre,
+        snapshot
+      })
+    }));
+    setSeleccionResponsable({ contexto: "", personaId: "" });
+    setErrorResponsable({ contexto: "", mensaje: "" });
+    setCierreVisible(true);
+  };
+
+  const reabrirTurno = () => {
+    if (!puedeReabrirCierre || !bloqueadoPorCierre) return;
+    if (!confirm("¿Reabrir esta fecha y categoría? La fotografía anterior se conservará.")) return;
+    setCalendario((prev) => ({
+      ...prev,
+      cierresDia: reabrirFechaCategoria({
+        cierresDia: prev.cierresDia,
+        fecha: keyDia,
+        usuario: usuarioActual
+      })
+    }));
+    setSeleccionResponsable({ contexto: "", personaId: "" });
+    setErrorResponsable({ contexto: "", mensaje: "" });
+    setCierreVisible(false);
+  };
 
   const cambiarAsistencia = (persona, estado) => {
-    if (soloLectura) return;
+    if (soloLecturaEfectiva) return;
     setCalendario((prev) => ({
       ...prev,
       asistenciaDia: actualizarAsistenciaPersona(prev.asistenciaDia, keyDia, persona, estado)
@@ -781,7 +838,7 @@ useEffect(() => {
   };
 
   const marcarTodosPresentes = () => {
-    if (soloLectura || personasPrevistas.length === 0) return;
+    if (soloLecturaEfectiva || personasPrevistas.length === 0) return;
     setCalendario((prev) => ({
       ...prev,
       asistenciaDia: marcarPersonasPresentes(prev.asistenciaDia, keyDia, personasPrevistas)
@@ -789,7 +846,7 @@ useEffect(() => {
   };
 
   const limpiarAsistencia = () => {
-    if (soloLectura || !Object.hasOwn(asistenciaDia, keyDia)) return;
+    if (soloLecturaEfectiva || !Object.hasOwn(asistenciaDia, keyDia)) return;
     if (!confirm("¿Limpiar la asistencia de esta fecha y categoría?")) return;
     setCalendario((prev) => ({
       ...prev,
@@ -798,7 +855,7 @@ useEffect(() => {
   };
 
   const handleClick = (item) => {
-    if (soloLectura) return;
+    if (soloLecturaEfectiva) return;
     const guardarMovimientos = (movimientos) => {
       const nuevo = aplicarMovimientosCalendario({
         cambios: cambiosActivos[keyDia],
@@ -907,8 +964,9 @@ useEffect(() => {
 />
       <button
         type="button"
-        disabled={soloLectura}
+        disabled={soloLecturaEfectiva}
         onClick={() => {
+          if (soloLecturaEfectiva) return;
           setSeleccionado(null);
           setDiaParo(keyDia, !esDiaParo);
         }}
@@ -933,15 +991,15 @@ useEffect(() => {
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {[
-            ["Previstos", resumenTurno.conteos.previstos],
-            ["Presentes", resumenTurno.conteos.presentes],
-            ["Ausentes", resumenTurno.conteos.ausentes],
-            ["Pendientes", resumenTurno.conteos.pendientes],
-            ["Libres", resumenTurno.conteos.libres],
-            ["Licencias", resumenTurno.conteos.licencias],
-            ["Certificados", resumenTurno.conteos.certificaciones],
-            ["Extras registrados", resumenTurno.conteos.extras],
-            ["Sin cobertura", resumenTurno.conteos.sectoresSinCobertura]
+            ["Previstos", resumenMostrado.conteos.previstos],
+            ["Presentes", resumenMostrado.conteos.presentes],
+            ["Ausentes", resumenMostrado.conteos.ausentes],
+            ["Pendientes", resumenMostrado.conteos.pendientes],
+            ["Libres", resumenMostrado.conteos.libres],
+            ["Licencias", resumenMostrado.conteos.licencias],
+            ["Certificados", resumenMostrado.conteos.certificaciones],
+            ["Extras registrados", resumenMostrado.conteos.extras],
+            ["Sin cobertura", resumenMostrado.conteos.sectoresSinCobertura]
           ].map(([etiqueta, valor]) => (
             <div key={etiqueta} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
               <p className="text-xs text-slate-500">{etiqueta}</p>
@@ -951,7 +1009,7 @@ useEffect(() => {
         </div>
 
         <div className="mt-3 border-t border-slate-100 pt-3">
-          {resumenTurno.alertas.length === 0 ? (
+          {resumenMostrado.alertas.length === 0 ? (
             <p className="text-sm font-medium text-emerald-700">✓ Sin alertas para revisar</p>
           ) : (
             <>
@@ -961,12 +1019,12 @@ useEffect(() => {
                 className="flex w-full items-center justify-between text-left text-sm font-semibold text-amber-800"
                 aria-expanded={alertasAbiertas}
               >
-                <span>⚠ {resumenTurno.alertas.length} situaciones para revisar</span>
+                <span>⚠ {resumenMostrado.alertas.length} situaciones para revisar</span>
                 <span>{alertasAbiertas ? "Ocultar" : "Mostrar"}</span>
               </button>
               {alertasAbiertas && (
                 <ul className="mt-2 space-y-2">
-                  {resumenTurno.alertas.map((alerta) => (
+                  {resumenMostrado.alertas.map((alerta) => (
                     <li
                       key={alerta.id}
                       className={`rounded-lg border px-3 py-2 text-sm ${
@@ -987,15 +1045,106 @@ useEffect(() => {
         </div>
       </section>
 
+      <section className={`my-4 rounded-2xl border p-4 ${
+        bloqueadoPorCierre
+          ? "border-emerald-200 bg-emerald-50"
+          : cierresDia?.[keyDia]?.estado === "reabierto"
+            ? "border-amber-200 bg-amber-50"
+            : "border-slate-200 bg-white"
+      }`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-slate-800">
+              {bloqueadoPorCierre
+                ? `✓ Turno cerrado — ${tipo === "enfermero" ? "Enfermeros" : "Licenciados"}`
+                : cierresDia?.[keyDia]?.estado === "reabierto"
+                  ? `Turno reabierto — ${tipo === "enfermero" ? "Enfermeros" : "Licenciados"}`
+                  : `Turno abierto — ${tipo === "enfermero" ? "Enfermeros" : "Licenciados"}`}
+            </p>
+            {versionCierre && (
+              <p className="mt-1 text-xs text-slate-600">
+                Cerrado por {versionCierre.cerradoPor}{versionCierre.responsableCierre?.nombre ? `, ${versionCierre.responsableCierre.nombre}` : ""} · {new Date(versionCierre.cerradoEn).toLocaleString("es-UY")} · Revisión {versionCierre.revision}
+              </p>
+            )}
+          </div>
+          {!bloqueadoPorCierre && !soloLectura && (
+            <div className="min-w-64">
+              <label htmlFor={`responsable-cierre-${tipo}`} className="mb-1 block text-xs font-semibold text-slate-600">
+                Responsable del cierre
+              </label>
+              <select
+                id={`responsable-cierre-${tipo}`}
+                value={responsableSeleccionadoId}
+                onChange={(evento) => {
+                  setSeleccionResponsable({ contexto: contextoResponsable, personaId: evento.target.value });
+                  setErrorResponsable({ contexto: "", mensaje: "" });
+                }}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+              >
+                <option value="">Seleccionar responsable</option>
+                {licenciadosResponsables.map((persona) => (
+                  <option key={persona.id} value={persona.id}>
+                    {obtenerEtiquetaPersona(persona, personal)}
+                  </option>
+                ))}
+              </select>
+              {mensajeErrorResponsable && <p className="mt-1 text-xs font-medium text-red-600" role="alert">{mensajeErrorResponsable}</p>}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {versionCierre && (
+              <button type="button" onClick={() => setCierreVisible((actual) => !actual)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+                {cierreVisible ? "Ocultar cierre" : "Ver cierre"}
+              </button>
+            )}
+            {!bloqueadoPorCierre && !soloLectura && (
+              <button type="button" onClick={cerrarTurno} className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white">
+                Cerrar turno — {tipo === "enfermero" ? "Enfermeros" : "Licenciados"}
+              </button>
+            )}
+            {bloqueadoPorCierre && puedeReabrirCierre && (
+              <button type="button" onClick={reabrirTurno} className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white">
+                Reabrir
+              </button>
+            )}
+          </div>
+        </div>
+        {cierreVisible && versionCierre?.snapshot && (
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <p className="text-sm font-semibold text-slate-700">Fotografía histórica · {versionCierre.snapshot.fecha}</p>
+            <p className="mt-1 text-sm text-slate-600">Cuenta de cierre: {versionCierre.cerradoPor}</p>
+            <p className="text-sm text-slate-600">Responsable: {versionCierre.responsableCierre?.nombre || "No registrado"}</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">Distribución</p>
+                <ul className="mt-1 space-y-1 text-sm text-slate-700">
+                  {versionCierre.snapshot.asignaciones.map((item, indice) => (
+                    <li key={`${item.sector}-${indice}`}><strong>{item.sector}:</strong> {item.persona?.nombre || "Sin cobertura"}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">Asistencia</p>
+                <ul className="mt-1 space-y-1 text-sm text-slate-700">
+                  {versionCierre.snapshot.personasPrevistas.map((persona) => (
+                    <li key={persona.personaId}><strong>{persona.nombre}:</strong> {obtenerAsistenciaDeSnapshot(versionCierre.snapshot, persona)}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
       <div className="my-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm font-medium text-slate-700">
-            Previstos: {resumenAsistencia.previstos} | Presentes: {resumenAsistencia.presente} | Ausentes: {resumenAsistencia.ausente} | Pendientes: {resumenAsistencia.pendiente}
+            Previstos: {resumenMostrado.conteos.previstos} | Presentes: {resumenMostrado.conteos.presentes} | Ausentes: {resumenMostrado.conteos.ausentes} | Pendientes: {resumenMostrado.conteos.pendientes}
           </p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={soloLectura || personasPrevistas.length === 0}
+              disabled={soloLecturaEfectiva || personasPrevistas.length === 0}
               onClick={marcarTodosPresentes}
               className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -1003,7 +1152,7 @@ useEffect(() => {
             </button>
             <button
               type="button"
-              disabled={soloLectura || !Object.hasOwn(asistenciaDia, keyDia)}
+              disabled={soloLecturaEfectiva || !Object.hasOwn(asistenciaDia, keyDia)}
               onClick={limpiarAsistencia}
               className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -1014,7 +1163,7 @@ useEffect(() => {
       </div>
 
 <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-  {asignacionOrdenada.map((item, i) => {
+  {asignacionesMostradas.map((item, i) => {
 
     if (item.tipo === "divider") {
       return (
@@ -1022,8 +1171,11 @@ useEffect(() => {
       );
     }
 
-    const bg =
-      seleccionado?.nombre === item.nombre
+    const bg = bloqueadoPorCierre
+      ? item.sacrificado
+        ? "bg-slate-200"
+        : "bg-white"
+      : seleccionado?.nombre === item.nombre
         ? "bg-yellow-200"
         : item.sacrificado
         ? "bg-slate-200"
@@ -1050,17 +1202,17 @@ useEffect(() => {
           {item.enfermero && (
             <select
               aria-label={`Asistencia de ${item.enfermero.nombre}`}
-              value={obtenerEstadoAsistencia(asistenciaFecha, item.enfermero)}
-              disabled={soloLectura}
+              value={obtenerEstadoAsistencia(asistenciaMostrada, item.enfermero)}
+              disabled={soloLecturaEfectiva}
               onClick={(evento) => evento.stopPropagation()}
               onChange={(evento) => {
                 evento.stopPropagation();
                 cambiarAsistencia(item.enfermero, evento.target.value);
               }}
               className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                obtenerEstadoAsistencia(asistenciaFecha, item.enfermero) === ESTADOS_ASISTENCIA.PRESENTE
+                obtenerEstadoAsistencia(asistenciaMostrada, item.enfermero) === ESTADOS_ASISTENCIA.PRESENTE
                   ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                  : obtenerEstadoAsistencia(asistenciaFecha, item.enfermero) === ESTADOS_ASISTENCIA.AUSENTE
+                  : obtenerEstadoAsistencia(asistenciaMostrada, item.enfermero) === ESTADOS_ASISTENCIA.AUSENTE
                     ? "border-red-300 bg-red-50 text-red-800"
                     : "border-slate-300 bg-white text-slate-600"
               }`}
@@ -1086,11 +1238,12 @@ useEffect(() => {
 
     return (
       <button
-        disabled={soloLectura}
+        disabled={soloLecturaEfectiva}
         key={obtenerClaveRenderPersona(e, indice, idsPersonalDuplicados)}
         className={`px-3 py-1.5 rounded-lg text-sm text-white transition
           ${yaEsta ? "bg-green-600" : "bg-green-400 hover:bg-green-500"}`}
         onClick={() => {
+          if (soloLecturaEfectiva) return;
           if (yaEsta) {
             borrarExtra(e);
             return;
@@ -1140,7 +1293,7 @@ useEffect(() => {
 
       {e.temporal && (
         <button
-          disabled={soloLectura}
+          disabled={soloLecturaEfectiva}
           onClick={() => borrarExtra(e)}
           className="text-red-500"
         >
@@ -1153,7 +1306,7 @@ useEffect(() => {
 
 <div className="flex gap-2 mb-2">
   <input
-    disabled={soloLectura}
+    disabled={soloLecturaEfectiva}
     value={nuevoNombre}
     onChange={(e) => {
       setNuevoNombre(e.target.value);
@@ -1164,8 +1317,9 @@ useEffect(() => {
   />
 
   <button
-    disabled={soloLectura}
+    disabled={soloLecturaEfectiva}
     onClick={() => {
+      if (soloLecturaEfectiva) return;
       if (altaExtraEnCursoRef.current) return;
       const resultado = crearExtraTemporal({
         nombre: nuevoNombre,
@@ -1217,13 +1371,14 @@ useEffect(() => {
 
     return (
       <button
-        disabled={soloLectura}
+        disabled={soloLecturaEfectiva}
         key={obtenerClaveRenderPersona(e, indice, idsPersonalDuplicados)}
         className={`px-3 py-1.5 rounded-lg text-sm transition
           ${activo
             ? "bg-red-500 text-white"
             : "bg-slate-200 text-slate-700 hover:bg-slate-300"}`}
         onClick={() => {
+          if (soloLecturaEfectiva) return;
           const lista = noDisponibles[keyDia] || [];
 
           const nueva = activo

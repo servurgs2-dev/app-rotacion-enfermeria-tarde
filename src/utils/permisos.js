@@ -40,6 +40,11 @@ export const puedeEditarTurno = (perfil, turno) => {
 export const esSoloLectura = (perfil, turno) =>
   puedeLeerAplicacion(perfil) && !puedeEditarTurno(perfil, turno);
 
+export const esPerfilSupervision = (perfil) => {
+  const valido = validarPerfil(perfil);
+  return Boolean(valido?.activo && valido.rol === ROLES_APLICACION.SUPERVISION);
+};
+
 export const obtenerEtiquetaPerfil = (perfil) => {
   const valido = validarPerfil(perfil);
   if (!valido) return "";

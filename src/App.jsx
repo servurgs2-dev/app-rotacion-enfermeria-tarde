@@ -44,11 +44,13 @@ import {
   evaluarCierreSesion
 } from "./utils/auth.js";
 import {
+  esPerfilSupervision,
   esSoloLectura,
   obtenerEtiquetaPerfil,
   obtenerMensajeSoloLectura,
   puedeEditarTurno
 } from "./utils/permisos.js";
+import { quitarCierresDeEstadoCopiado } from "./utils/cierreTurno.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
@@ -698,7 +700,7 @@ const copiarMesAnterior = async () => {
 
   setEstadoPorTurnoMes(prev => {
     if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
-    return { ...prev, [claveActiva]: resultado.estado };
+    return { ...prev, [claveActiva]: quitarCierresDeEstadoCopiado(resultado.estado) };
   });
 };
 
@@ -1160,6 +1162,9 @@ return (
 <div className={tabCalendario === "enfermeros" ? "" : "hidden"}>
   <CalendarioDiario
     soloLectura={modoSoloLectura}
+    turnoActivo={turnoActivo}
+    usuarioActual={perfil.usuario}
+    puedeReabrirCierre={esPerfilSupervision(perfil)}
   key="enfermeros"
     personal={personal}
     planilla={planillaEnfermeros}
@@ -1205,6 +1210,9 @@ return (
 <div className={tabCalendario === "licenciados" ? "" : "hidden"}>
   <CalendarioDiario
     soloLectura={modoSoloLectura}
+    turnoActivo={turnoActivo}
+    usuarioActual={perfil.usuario}
+    puedeReabrirCierre={esPerfilSupervision(perfil)}
   key="licenciados"
     personal={personal}
     planilla={planillaLicenciados}

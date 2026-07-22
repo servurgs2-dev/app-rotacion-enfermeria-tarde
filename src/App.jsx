@@ -1109,8 +1109,10 @@ return (
       <Seccion titulo="📈 Estadísticas" className="order-5">
         <Estadisticas
           calendario={mesData.calendario}
+          estadoActivo={mesData}
           mesActivo={mesActivo}
           nombreTurno={configTurno.nombre}
+          turnoActivo={turnoActivo}
         />
       </Seccion>
 

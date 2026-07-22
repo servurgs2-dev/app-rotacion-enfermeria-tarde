@@ -70,10 +70,28 @@ export const crearRepositorioEstadoPorTurnoMes = (
     if (error) throw error;
   };
 
-  return { cargarEstadoPorTurnoMes, guardarEstadoPorTurnoMes };
+  const cargarEstadosTurnosPorMes = async (mes, turnos = Object.keys(TURNOS)) => {
+    const mesValidado = validarMes(mes);
+    const turnosValidados = turnos.map(validarTurno);
+    const { data, error } = await clienteSupabase
+      .from("estado_por_turno_mes")
+      .select("turno, mes, data")
+      .eq("mes", mesValidado)
+      .in("turno", turnosValidados);
+
+    if (error) throw error;
+    return Object.fromEntries(
+      (Array.isArray(data) ? data : [])
+        .filter((fila) => fila?.data && turnosValidados.includes(fila.turno))
+        .map((fila) => [fila.turno, normalizarEstadoMensual(fila.data)])
+    );
+  };
+
+  return { cargarEstadoPorTurnoMes, guardarEstadoPorTurnoMes, cargarEstadosTurnosPorMes };
 };
 
 export const {
   cargarEstadoPorTurnoMes,
-  guardarEstadoPorTurnoMes
+  guardarEstadoPorTurnoMes,
+  cargarEstadosTurnosPorMes
 } = crearRepositorioEstadoPorTurnoMes(supabase);

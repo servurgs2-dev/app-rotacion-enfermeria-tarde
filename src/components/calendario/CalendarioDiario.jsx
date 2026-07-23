@@ -1017,187 +1017,7 @@ useEffect(() => {
 
       <h3>Día {fecha.getDate()}</h3>
 
-      <section className="my-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 className="font-semibold text-slate-800">Resumen del turno</h4>
-          <span className="text-xs font-medium text-slate-500">
-            {tipo === "enfermero" ? "Enfermeros" : "Licenciados"}
-          </span>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-          {[
-            ["Previstos", resumenMostrado.conteos.previstos],
-            ["Presentes", resumenMostrado.conteos.presentes],
-            ["Ausentes", resumenMostrado.conteos.ausentes],
-            ["Pendientes", resumenMostrado.conteos.pendientes],
-            ["Libres", resumenMostrado.conteos.libres],
-            ["Licencias", resumenMostrado.conteos.licencias],
-            ["Certificados", resumenMostrado.conteos.certificaciones],
-            ["Extras registrados", resumenMostrado.conteos.extras],
-            ["Sin cobertura", resumenMostrado.conteos.sectoresSinCobertura]
-          ].map(([etiqueta, valor]) => (
-            <div key={etiqueta} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-              <p className="text-xs text-slate-500">{etiqueta}</p>
-              <p className="text-xl font-bold text-slate-800">{valor}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-3 border-t border-slate-100 pt-3">
-          {resumenMostrado.alertas.length === 0 ? (
-            <p className="text-sm font-medium text-emerald-700">✓ Sin alertas para revisar</p>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setAlertasAbiertas((actual) => !actual)}
-                className="flex w-full items-center justify-between text-left text-sm font-semibold text-amber-800"
-                aria-expanded={alertasAbiertas}
-              >
-                <span>⚠ {resumenMostrado.alertas.length} situaciones para revisar</span>
-                <span>{alertasAbiertas ? "Ocultar" : "Mostrar"}</span>
-              </button>
-              {alertasAbiertas && (
-                <ul className="mt-2 space-y-2">
-                  {resumenMostrado.alertas.map((alerta) => (
-                    <li
-                      key={alerta.id}
-                      className={`rounded-lg border px-3 py-2 text-sm ${
-                        alerta.nivel === "critica"
-                          ? "border-red-200 bg-red-50 text-red-800"
-                          : alerta.nivel === "advertencia"
-                            ? "border-amber-200 bg-amber-50 text-amber-900"
-                            : "border-blue-200 bg-blue-50 text-blue-800"
-                      }`}
-                    >
-                      <strong>{alerta.nivel.toUpperCase()}:</strong> {alerta.mensaje}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
-        </div>
-      </section>
-
-      <section className={`my-4 rounded-2xl border p-4 ${
-        bloqueadoPorCierre
-          ? "border-emerald-200 bg-emerald-50"
-          : cierresDia?.[keyDia]?.estado === "reabierto"
-            ? "border-amber-200 bg-amber-50"
-            : "border-slate-200 bg-white"
-      }`}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-semibold text-slate-800">
-              {bloqueadoPorCierre
-                ? `✓ Turno cerrado — ${tipo === "enfermero" ? "Enfermeros" : "Licenciados"}`
-                : cierresDia?.[keyDia]?.estado === "reabierto"
-                  ? `Turno reabierto — ${tipo === "enfermero" ? "Enfermeros" : "Licenciados"}`
-                  : `Turno abierto — ${tipo === "enfermero" ? "Enfermeros" : "Licenciados"}`}
-            </p>
-            {versionCierre && (
-              <p className="mt-1 text-xs text-slate-600">
-                Cerrado por {versionCierre.cerradoPor}{versionCierre.responsableCierre?.nombre ? `, ${versionCierre.responsableCierre.nombre}` : ""} · {new Date(versionCierre.cerradoEn).toLocaleString("es-UY")} · Revisión {versionCierre.revision}
-              </p>
-            )}
-          </div>
-          {!bloqueadoPorCierre && !soloLectura && (
-            <div className="min-w-64">
-              <label htmlFor={`responsable-cierre-${tipo}`} className="mb-1 block text-xs font-semibold text-slate-600">
-                Responsable del cierre
-              </label>
-              <select
-                id={`responsable-cierre-${tipo}`}
-                value={responsableSeleccionadoId}
-                onChange={(evento) => {
-                  setSeleccionResponsable({ contexto: contextoResponsable, personaId: evento.target.value });
-                  setErrorResponsable({ contexto: "", mensaje: "" });
-                }}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
-              >
-                <option value="">Seleccionar responsable</option>
-                {licenciadosResponsables.map((persona) => (
-                  <option key={persona.id} value={persona.id}>
-                    {obtenerEtiquetaPersona(persona, personal)}
-                  </option>
-                ))}
-              </select>
-              {mensajeErrorResponsable && <p className="mt-1 text-xs font-medium text-red-600" role="alert">{mensajeErrorResponsable}</p>}
-            </div>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {versionCierre && (
-              <button type="button" onClick={() => setCierreVisible((actual) => !actual)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
-                {cierreVisible ? "Ocultar cierre" : "Ver cierre"}
-              </button>
-            )}
-            {!bloqueadoPorCierre && !soloLectura && (
-              <button type="button" onClick={cerrarTurno} className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white">
-                Cerrar turno — {tipo === "enfermero" ? "Enfermeros" : "Licenciados"}
-              </button>
-            )}
-            {bloqueadoPorCierre && puedeReabrirCierre && (
-              <button type="button" onClick={reabrirTurno} className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white">
-                Reabrir
-              </button>
-            )}
-          </div>
-        </div>
-        {cierreVisible && versionCierre?.snapshot && (
-          <div className="mt-4 border-t border-slate-200 pt-4">
-            <p className="text-sm font-semibold text-slate-700">Fotografía histórica · {versionCierre.snapshot.fecha}</p>
-            <p className="mt-1 text-sm text-slate-600">Cuenta de cierre: {versionCierre.cerradoPor}</p>
-            <p className="text-sm text-slate-600">Responsable: {versionCierre.responsableCierre?.nombre || "No registrado"}</p>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <div>
-                <p className="text-xs font-semibold uppercase text-slate-500">Distribución</p>
-                <ul className="mt-1 space-y-1 text-sm text-slate-700">
-                  {versionCierre.snapshot.asignaciones.map((item, indice) => (
-                    <li key={`${item.sector}-${indice}`}><strong>{item.sector}:</strong> {item.persona?.nombre || "Sin cobertura"}</li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase text-slate-500">Asistencia</p>
-                <ul className="mt-1 space-y-1 text-sm text-slate-700">
-                  {versionCierre.snapshot.personasPrevistas.map((persona) => (
-                    <li key={persona.personaId}><strong>{persona.nombre}:</strong> {obtenerAsistenciaDeSnapshot(versionCierre.snapshot, persona)}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <div className="my-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm font-medium text-slate-700">
-            Previstos: {resumenMostrado.conteos.previstos} | Presentes: {resumenMostrado.conteos.presentes} | Ausentes: {resumenMostrado.conteos.ausentes} | Pendientes: {resumenMostrado.conteos.pendientes}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={soloLecturaEfectiva || personasPrevistas.length === 0}
-              onClick={marcarTodosPresentes}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Marcar todos presentes
-            </button>
-            <button
-              type="button"
-              disabled={soloLecturaEfectiva || !Object.hasOwn(asistenciaDia, keyDia)}
-              onClick={limpiarAsistencia}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Limpiar asistencia
-            </button>
-          </div>
-        </div>
-      </div>
-
-<div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+<div className="rounded-2xl border border-slate-100 bg-white">
   {asignacionesMostradas.map((item, i) => {
 
     if (item.tipo === "divider") {
@@ -1434,6 +1254,186 @@ useEffect(() => {
     );
   })}
 </div>
+      <div className="my-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-medium text-slate-700">
+            Previstos: {resumenMostrado.conteos.previstos} | Presentes: {resumenMostrado.conteos.presentes} | Ausentes: {resumenMostrado.conteos.ausentes} | Pendientes: {resumenMostrado.conteos.pendientes}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={soloLecturaEfectiva || personasPrevistas.length === 0}
+              onClick={marcarTodosPresentes}
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Marcar todos presentes
+            </button>
+            <button
+              type="button"
+              disabled={soloLecturaEfectiva || !Object.hasOwn(asistenciaDia, keyDia)}
+              onClick={limpiarAsistencia}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Limpiar asistencia
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <section className="my-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="font-semibold text-slate-800">Resumen del turno</h4>
+          <span className="text-xs font-medium text-slate-500">
+            {tipo === "enfermero" ? "Enfermeros" : "Licenciados"}
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {[
+            ["Previstos", resumenMostrado.conteos.previstos],
+            ["Presentes", resumenMostrado.conteos.presentes],
+            ["Ausentes", resumenMostrado.conteos.ausentes],
+            ["Pendientes", resumenMostrado.conteos.pendientes],
+            ["Libres", resumenMostrado.conteos.libres],
+            ["Licencias", resumenMostrado.conteos.licencias],
+            ["Certificados", resumenMostrado.conteos.certificaciones],
+            ["Extras registrados", resumenMostrado.conteos.extras],
+            ["Sin cobertura", resumenMostrado.conteos.sectoresSinCobertura]
+          ].map(([etiqueta, valor]) => (
+            <div key={etiqueta} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">{etiqueta}</p>
+              <p className="text-xl font-bold text-slate-800">{valor}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          {resumenMostrado.alertas.length === 0 ? (
+            <p className="text-sm font-medium text-emerald-700">✓ Sin alertas para revisar</p>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setAlertasAbiertas((actual) => !actual)}
+                className="flex w-full items-center justify-between text-left text-sm font-semibold text-amber-800"
+                aria-expanded={alertasAbiertas}
+              >
+                <span>⚠ {resumenMostrado.alertas.length} situaciones para revisar</span>
+                <span>{alertasAbiertas ? "Ocultar" : "Mostrar"}</span>
+              </button>
+              {alertasAbiertas && (
+                <ul className="mt-2 space-y-2">
+                  {resumenMostrado.alertas.map((alerta) => (
+                    <li
+                      key={alerta.id}
+                      className={`rounded-lg border px-3 py-2 text-sm ${
+                        alerta.nivel === "critica"
+                          ? "border-red-200 bg-red-50 text-red-800"
+                          : alerta.nivel === "advertencia"
+                            ? "border-amber-200 bg-amber-50 text-amber-900"
+                            : "border-blue-200 bg-blue-50 text-blue-800"
+                      }`}
+                    >
+                      <strong>{alerta.nivel.toUpperCase()}:</strong> {alerta.mensaje}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+      </section>
+
+      <section className={`my-4 rounded-2xl border p-4 ${
+        bloqueadoPorCierre
+          ? "border-emerald-200 bg-emerald-50"
+          : cierresDia?.[keyDia]?.estado === "reabierto"
+            ? "border-amber-200 bg-amber-50"
+            : "border-slate-200 bg-white"
+      }`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-slate-800">
+              {bloqueadoPorCierre
+                ? `✓ Turno cerrado — ${tipo === "enfermero" ? "Enfermeros" : "Licenciados"}`
+                : cierresDia?.[keyDia]?.estado === "reabierto"
+                  ? `Turno reabierto — ${tipo === "enfermero" ? "Enfermeros" : "Licenciados"}`
+                  : `Turno abierto — ${tipo === "enfermero" ? "Enfermeros" : "Licenciados"}`}
+            </p>
+            {versionCierre && (
+              <p className="mt-1 text-xs text-slate-600">
+                Cerrado por {versionCierre.cerradoPor}{versionCierre.responsableCierre?.nombre ? `, ${versionCierre.responsableCierre.nombre}` : ""} · {new Date(versionCierre.cerradoEn).toLocaleString("es-UY")} · Revisión {versionCierre.revision}
+              </p>
+            )}
+          </div>
+          {!bloqueadoPorCierre && !soloLectura && (
+            <div className="min-w-64">
+              <label htmlFor={`responsable-cierre-${tipo}`} className="mb-1 block text-xs font-semibold text-slate-600">
+                Responsable del cierre
+              </label>
+              <select
+                id={`responsable-cierre-${tipo}`}
+                value={responsableSeleccionadoId}
+                onChange={(evento) => {
+                  setSeleccionResponsable({ contexto: contextoResponsable, personaId: evento.target.value });
+                  setErrorResponsable({ contexto: "", mensaje: "" });
+                }}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+              >
+                <option value="">Seleccionar responsable</option>
+                {licenciadosResponsables.map((persona) => (
+                  <option key={persona.id} value={persona.id}>
+                    {obtenerEtiquetaPersona(persona, personal)}
+                  </option>
+                ))}
+              </select>
+              {mensajeErrorResponsable && <p className="mt-1 text-xs font-medium text-red-600" role="alert">{mensajeErrorResponsable}</p>}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {versionCierre && (
+              <button type="button" onClick={() => setCierreVisible((actual) => !actual)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+                {cierreVisible ? "Ocultar cierre" : "Ver cierre"}
+              </button>
+            )}
+            {!bloqueadoPorCierre && !soloLectura && (
+              <button type="button" onClick={cerrarTurno} className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white">
+                Cerrar turno — {tipo === "enfermero" ? "Enfermeros" : "Licenciados"}
+              </button>
+            )}
+            {bloqueadoPorCierre && puedeReabrirCierre && (
+              <button type="button" onClick={reabrirTurno} className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white">
+                Reabrir
+              </button>
+            )}
+          </div>
+        </div>
+        {cierreVisible && versionCierre?.snapshot && (
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <p className="text-sm font-semibold text-slate-700">Fotografía histórica · {versionCierre.snapshot.fecha}</p>
+            <p className="mt-1 text-sm text-slate-600">Cuenta de cierre: {versionCierre.cerradoPor}</p>
+            <p className="text-sm text-slate-600">Responsable: {versionCierre.responsableCierre?.nombre || "No registrado"}</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">Distribución</p>
+                <ul className="mt-1 space-y-1 text-sm text-slate-700">
+                  {versionCierre.snapshot.asignaciones.map((item, indice) => (
+                    <li key={`${item.sector}-${indice}`}><strong>{item.sector}:</strong> {item.persona?.nombre || "Sin cobertura"}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">Asistencia</p>
+                <ul className="mt-1 space-y-1 text-sm text-slate-700">
+                  {versionCierre.snapshot.personasPrevistas.map((persona) => (
+                    <li key={persona.personaId}><strong>{persona.nombre}:</strong> {obtenerAsistenciaDeSnapshot(versionCierre.snapshot, persona)}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
     </div>
   );
 }

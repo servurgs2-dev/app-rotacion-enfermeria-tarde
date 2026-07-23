@@ -934,7 +934,11 @@ return (
 
       
 
-      <Seccion titulo="👥 Personal" className="order-3">
+      <Seccion
+        titulo="👥 Personal"
+        className="order-3"
+        cuerpoClassName="max-h-[70vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
+      >
         {modoSoloLectura && (
           <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
             {obtenerMensajeSoloLectura(perfil)}
@@ -1244,7 +1248,10 @@ return (
 
       <div id="calendario-pdf" className="order-1">
         
-        <Seccion titulo="📅 Calendario diario" defaultAbierto>
+        <Seccion
+          titulo="📅 Calendario diario"
+          cuerpoClassName="max-h-[75vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
+        >
           
 
   <button

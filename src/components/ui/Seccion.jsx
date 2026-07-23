@@ -1,15 +1,23 @@
 import { useState } from "react";
 
-function Seccion({ titulo, children, className = "", defaultAbierto = false }) {
+function Seccion({
+  titulo,
+  children,
+  className = "",
+  cuerpoClassName = "",
+  defaultAbierto = false
+}) {
   const [abierto, setAbierto] = useState(defaultAbierto);
 
   return (
     <div className={`${className} bg-white rounded-2xl shadow-sm border border-slate-200`}>
 
       {/* HEADER */}
-      <div
-        onClick={() => setAbierto(!abierto)}
-        className="cursor-pointer px-5 py-4 flex justify-between items-center hover:bg-slate-50 transition"
+      <button
+        type="button"
+        onClick={() => setAbierto((actual) => !actual)}
+        className="flex w-full cursor-pointer items-center justify-between px-5 py-4 text-left transition hover:bg-slate-50"
+        aria-expanded={abierto}
       >
         <h2 className="font-semibold text-slate-800">
           {titulo}
@@ -23,15 +31,11 @@ function Seccion({ titulo, children, className = "", defaultAbierto = false }) {
         >
           ⌄
         </span>
-      </div>
+      </button>
 
       {/* CONTENIDO */}
-      <div
-        className={`transition-all duration-300 ease-in-out ${
-          abierto ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
-        } overflow-hidden`}
-      >
-        <div className="px-5 pb-5">
+      <div className={abierto ? "block" : "hidden"}>
+        <div className={`min-h-0 px-5 pb-5 ${cuerpoClassName}`}>
           {children}
         </div>
       </div>

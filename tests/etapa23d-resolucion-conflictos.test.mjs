@@ -119,8 +119,8 @@ const casos = [
   }],
   ["45. ir no resuelve automáticamente", () => assert.doesNotMatch(app, /irAlConflicto[\s\S]{0,400}actualizarMetadatosClave/)],
   ["46. lista todos los conflictos", () => assert.equal(listarConflictosPendientes({ "noche|2026-08": { estado: "resolviendo_conflicto", conflicto }, "tarde|2026-09": { estado: "error", conflicto } }, { noche: { nombre: "Noche" }, tarde: { nombre: "Tarde" } }).length, 2)],
-  ["47. editor dispone de tres acciones", () => {
-    assert.match(panel, /Descargar mi copia/);
+  ["47. editor dispone de acciones principales y respaldo avanzado", () => {
+    assert.match(panel, /Descargar respaldo técnico/);
     assert.match(panel, /Usar versión del servidor/);
     assert.match(panel, /Conservar mi versión y guardar/);
   }],
@@ -242,7 +242,46 @@ const casos = [
     /actualizarMetadatosClave|conflicto:\s*null/
   )],
   ["83. App sigue sin guardado heredado", () => assert.doesNotMatch(app, /\bguardarEstadoTurnoMes\b/)],
-  ["84. tests no contienen cliente externo", () => assert.doesNotMatch(helper, /\bsupabase\b/i)]
+  ["84. tests no contienen cliente externo", () => assert.doesNotMatch(helper, /\bsupabase\b/i)],
+  ["85. existe Opciones avanzadas", () => assert.match(panel, /Opciones avanzadas/)],
+  ["86. opciones avanzadas usa details y summary", () => {
+    assert.match(panel, /<details/);
+    assert.match(panel, /<summary/);
+  }],
+  ["87. opciones avanzadas está cerrada por defecto", () => assert.doesNotMatch(panel, /<details[^>]*\sopen(?:=|\s|>)/)],
+  ["88. texto anterior de descarga fue eliminado", () => assert.doesNotMatch(panel, /Descargar mi copia/)],
+  ["89. aparece Descargar respaldo técnico", () => assert.match(panel, /Descargar respaldo técnico/)],
+  ["90. explica el uso administrativo", () => assert.match(panel, /Utilizala solamente si te lo solicita el administrador/)],
+  ["91. advierte sobre datos personales", () => assert.match(panel, /El archivo puede contener datos personales/)],
+  ["92. callback de descarga permanece conectado una sola vez", () => assert.equal(
+    (panel.match(/onClick=\{onDescargar\}/g) || []).length,
+    1
+  )],
+  ["93. acciones principales aparecen antes de opciones avanzadas", () => {
+    assert.ok(panel.indexOf("Usar versión del servidor") < panel.indexOf("Opciones avanzadas"));
+    assert.ok(panel.indexOf("Conservar mi versión y guardar") < panel.indexOf("Opciones avanzadas"));
+  }],
+  ["94. solo los editores ven acciones de escritura", () => {
+    const inicioPermisos = panel.indexOf("{puedeResolver &&");
+    const finPermisos = panel.indexOf("<details");
+    const bloquePermisos = panel.slice(inicioPermisos, finPermisos);
+    assert.match(bloquePermisos, /onUsarServidor/);
+    assert.match(bloquePermisos, /onConservarLocal/);
+    assert.doesNotMatch(bloquePermisos, /onDescargar/);
+  }],
+  ["95. solo lectura conserva descarga fuera del permiso de escritura", () => {
+    assert.ok(panel.indexOf("<details") > panel.indexOf("{puedeResolver &&"));
+    assert.match(panel.slice(panel.indexOf("<details")), /onClick=\{onDescargar\}/);
+  }],
+  ["96. todos los botones mantienen type button", () => assert.equal(
+    (panel.match(/<button/g) || []).length,
+    (panel.match(/type="button"/g) || []).length
+  )],
+  ["97. opciones avanzadas no agrega llamadas externas", () => assert.doesNotMatch(panel, /\b(supabase|rpc|fetch)\b/i)],
+  ["98. lógica de resolución permanece en App", () => {
+    assert.match(app, /cargarEstadoTurnoMesConRevision/);
+    assert.match(app, /esResolucionConflicto: true/);
+  }]
 ];
 
 for (const [nombreCaso, prueba] of casos) await probar(nombreCaso, prueba);

@@ -34,29 +34,43 @@ function PanelConflictoEdicion({
         último campo modificado. Incluye Enfermeros, Licenciados, planillas,
         calendario, cierres, licencias y certificaciones.
       </p>
-      <p className="mt-2 text-xs text-slate-600">
-        El archivo de respaldo puede contener datos personales y debe conservarse
-        de forma segura.
-      </p>
       {estadoResolucion !== "inactivo" && estadoResolucion !== "error" && (
         <p className="mt-3 font-medium text-blue-700">Procesando resolución…</p>
       )}
       {error && <p className="mt-3 text-red-700" role="alert">{error}</p>}
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" disabled={ocupado} onClick={onDescargar} className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-medium disabled:opacity-50">
-          Descargar mi copia
-        </button>
-        {puedeResolver && (
-          <>
-            <button type="button" disabled={ocupado} onClick={onUsarServidor} className="rounded-lg border border-blue-300 bg-white px-3 py-2 font-medium text-blue-700 disabled:opacity-50">
-              Usar versión del servidor
-            </button>
-            <button type="button" disabled={ocupado} onClick={onConservarLocal} className="rounded-lg bg-red-700 px-3 py-2 font-medium text-white disabled:opacity-50">
-              Conservar mi versión y guardar
-            </button>
-          </>
-        )}
-      </div>
+      {puedeResolver && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" disabled={ocupado} onClick={onUsarServidor} className="rounded-lg border border-blue-300 bg-white px-3 py-2 font-medium text-blue-700 disabled:opacity-50">
+            Usar versión del servidor
+          </button>
+          <button type="button" disabled={ocupado} onClick={onConservarLocal} className="rounded-lg bg-red-700 px-3 py-2 font-medium text-white disabled:opacity-50">
+            Conservar mi versión y guardar
+          </button>
+        </div>
+      )}
+      <details className="mt-4 rounded-lg border border-slate-300 bg-white px-3 py-2">
+        <summary className="cursor-pointer font-medium text-slate-700">
+          Opciones avanzadas
+        </summary>
+        <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
+          <p className="text-slate-600">
+            Esta opción guarda una copia técnica de tus cambios locales en un
+            archivo JSON. Utilizala solamente si te lo solicita el administrador.
+          </p>
+          <p className="text-xs text-slate-600">
+            El archivo puede contener datos personales. Guardalo de forma segura
+            y eliminálo cuando ya no sea necesario.
+          </p>
+          <button
+            type="button"
+            disabled={ocupado}
+            onClick={onDescargar}
+            className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-medium text-slate-700 disabled:opacity-50"
+          >
+            Descargar respaldo técnico
+          </button>
+        </div>
+      </details>
     </section>
   );
 }

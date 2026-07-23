@@ -336,22 +336,22 @@ await probar("36. comparación entre turnos no consulta revisión", async () => 
   assert.deepEqual(Object.keys(resultado), ["noche", "tarde"]);
 });
 
-await probar("37. estadoTurnos mantiene conectada la carga heredada", async () => {
+await probar("37. estadoTurnos conserva disponible la carga heredada", async () => {
   const codigo = await readFile(
     new URL("../src/services/estadoTurnos.js", import.meta.url),
     "utf8"
   );
   assert.match(codigo, /cargarNuevo:\s*cargarEstadoPorTurnoMes/);
-  assert.doesNotMatch(codigo, /cargarEstadoPorTurnoMesConRevision/);
+  assert.match(codigo, /crearServicioEstadoTurnos\(/);
 });
 
-await probar("38. App no usa carga ni guardado versionados", async () => {
+await probar("38. App integra las rutas versionadas en 23C", async () => {
   const codigo = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
-  assert.doesNotMatch(codigo, /cargarEstadoPorTurnoMesConRevision/);
-  assert.doesNotMatch(codigo, /guardarEstadoTurnoMesConRevision/);
+  assert.match(codigo, /cargarEstadoTurnoMesConRevision/);
+  assert.match(codigo, /guardarEstadoTurnoMesConRevision/);
 });
 
-await probar("39. el servicio expone rutas versionadas sin activarlas en App", async () => {
+await probar("39. el repositorio mantiene rutas heredadas y versionadas", async () => {
   const codigo = await readFile(
     new URL("../src/services/estadoPorTurnoMes.js", import.meta.url),
     "utf8"
@@ -389,6 +389,60 @@ await probar("42. la función conserva RLS y restringe EXECUTE", async () => {
   assert.match(sql, /from anon;/i);
   assert.match(sql, /to authenticated;/i);
   assert.doesNotMatch(sql, /p_user_id|p_updated_at/i);
+});
+
+const leerMigracionConcurrencia = () =>
+  readFile(
+    new URL("../supabase/migrations/20260723_agregar_concurrencia_estado_turno_mes.sql", import.meta.url),
+    "utf8"
+  );
+
+await probar("43. existe un trigger BEFORE INSERT OR UPDATE", async () => {
+  const sql = await leerMigracionConcurrencia();
+  assert.match(
+    sql,
+    /create trigger estado_turno_mes_revision_trigger\s+before insert or update/i
+  );
+});
+await probar("44. INSERT establece revisión uno", async () => {
+  const sql = await leerMigracionConcurrencia();
+  assert.match(sql, /if tg_op = 'INSERT' then[\s\S]*new\.revision := 1/i);
+});
+await probar("45. INSERT establece updated_at con now", async () => {
+  const sql = await leerMigracionConcurrencia();
+  assert.match(sql, /if tg_op = 'INSERT' then[\s\S]*new\.updated_at := now\(\)/i);
+});
+await probar("46. UPDATE exige OLD revision más uno", async () => {
+  const sql = await leerMigracionConcurrencia();
+  assert.match(sql, /new\.revision is distinct from old\.revision \+ 1/i);
+});
+await probar("47. UPDATE establece updated_at con now", async () => {
+  const sql = await leerMigracionConcurrencia();
+  const coincidencias = sql.match(/new\.updated_at := now\(\)/gi) || [];
+  assert.equal(coincidencias.length, 2);
+});
+await probar("48. UPDATE sin avance de revisión se rechaza", async () => {
+  const sql = await leerMigracionConcurrencia();
+  assert.match(sql, /raise exception 'Actualización rechazada: revisión inválida\.'/i);
+});
+await probar("49. RPC continúa incrementando revisión", async () => {
+  const sql = await leerMigracionConcurrencia();
+  assert.match(sql, /revision = revision \+ 1/i);
+});
+await probar("50. RPC continúa condicionando la revisión esperada", async () => {
+  const sql = await leerMigracionConcurrencia();
+  assert.match(sql, /and revision = p_revision_esperada/i);
+});
+await probar("51. se crea un solo trigger con nombre estable", async () => {
+  const sql = await leerMigracionConcurrencia();
+  const creaciones = sql.match(/create trigger estado_turno_mes_revision_trigger/gi) || [];
+  assert.equal(creaciones.length, 1);
+  assert.match(sql, /drop trigger if exists estado_turno_mes_revision_trigger/i);
+});
+await probar("52. trigger y RPC no reciben updated_at del cliente", async () => {
+  const sql = await leerMigracionConcurrencia();
+  assert.doesNotMatch(sql, /p_updated_at/i);
+  assert.match(sql, /create or replace function public\.preparar_revision_estado_turno_mes\(\)/i);
 });
 
 process.stdout.write(`\n${cantidadPruebas} pruebas permanentes de Etapa 23B superadas.\n`);

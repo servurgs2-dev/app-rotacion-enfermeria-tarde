@@ -18,6 +18,40 @@ begin
 end
 $$;
 
+create or replace function public.preparar_revision_estado_turno_mes()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if tg_op = 'INSERT' then
+    new.revision := 1;
+    new.updated_at := now();
+    return new;
+  end if;
+
+  if new.revision is distinct from old.revision + 1 then
+    raise exception 'Actualización rechazada: revisión inválida.'
+      using errcode = '23514';
+  end if;
+
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+revoke all on function public.preparar_revision_estado_turno_mes() from public;
+revoke all on function public.preparar_revision_estado_turno_mes() from anon;
+
+drop trigger if exists estado_turno_mes_revision_trigger
+  on public.estado_por_turno_mes;
+
+create trigger estado_turno_mes_revision_trigger
+before insert or update on public.estado_por_turno_mes
+for each row
+execute function public.preparar_revision_estado_turno_mes();
+
 create or replace function public.guardar_estado_turno_mes_si_revision(
   p_turno text,
   p_mes text,

@@ -9,6 +9,8 @@
     "lint": "eslint .",
     "test:etapa20": "node tests/etapa20-estadisticas.test.mjs",
     "test:etapa23b": "node tests/etapa23b-concurrencia.test.mjs",
+    "test:etapa23c": "node tests/etapa23c-integracion-concurrencia.test.mjs",
+    "test:etapa23d": "node tests/etapa23d-resolucion-conflictos.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

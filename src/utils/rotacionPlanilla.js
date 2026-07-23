@@ -103,6 +103,180 @@ export const generarDistribucionParaIndice = ({
   pasos: indice
 });
 
+const esReferenciaUtil = (referencia) => {
+  if (referencia && typeof referencia === "object" && !Array.isArray(referencia)) {
+    return String(referencia.personaId ?? referencia.id ?? "").trim() !== "";
+  }
+  return typeof referencia === "string" &&
+    referencia.trim() !== "" &&
+    referencia !== "__EMPTY__";
+};
+
+export const tieneAsignacionesUtiles = (distribucion) =>
+  distribucion &&
+  typeof distribucion === "object" &&
+  !Array.isArray(distribucion) &&
+  Object.values(distribucion).some(esReferenciaUtil);
+
+export const obtenerPrimerBloqueReferencia = ({
+  rotacion3Dias,
+  periodos
+} = {}) => {
+  const bloques = rotacion3Dias?.bloques && typeof rotacion3Dias.bloques === "object"
+    ? rotacion3Dias.bloques
+    : {};
+
+  for (const periodo of Array.isArray(periodos) ? periodos : []) {
+    const bloque = bloques[periodo?.clave];
+    if (periodo?.clave && Number.isInteger(periodo.indice) && tieneAsignacionesUtiles(bloque)) {
+      return { periodo, bloque: clonarDistribucion(bloque) };
+    }
+  }
+
+  return null;
+};
+
+export const derivarAsignacionBaseDesdeBloque = ({
+  bloqueReferencia,
+  indiceReferencia,
+  filas,
+  filasFijas = []
+} = {}) => {
+  if (!tieneAsignacionesUtiles(bloqueReferencia) || !Number.isInteger(indiceReferencia)) {
+    return null;
+  }
+
+  return generarDistribucionParaIndice({
+    distribucionBase: bloqueReferencia,
+    filas,
+    filasFijas,
+    indice: -indiceReferencia
+  });
+};
+
+export const existenBloquesPosterioresUtiles = ({
+  rotacion3Dias,
+  periodos,
+  claveReferencia
+} = {}) => {
+  const bloques = rotacion3Dias?.bloques && typeof rotacion3Dias.bloques === "object"
+    ? rotacion3Dias.bloques
+    : {};
+  const indiceReferencia = (Array.isArray(periodos) ? periodos : [])
+    .findIndex((periodo) => periodo?.clave === claveReferencia);
+  if (indiceReferencia < 0) return false;
+
+  return periodos
+    .slice(indiceReferencia + 1)
+    .some((periodo) => tieneAsignacionesUtiles(bloques[periodo?.clave]));
+};
+
+export const regenerarRotacion3DiasDesdePrimerBloque = ({
+  rotacion3Dias,
+  periodos,
+  filas,
+  filasFijas = [],
+  estrategia
+} = {}) => {
+  const rotacion = rotacion3Dias && typeof rotacion3Dias === "object"
+    ? rotacion3Dias
+    : {};
+  const periodosValidos = (Array.isArray(periodos) ? periodos : [])
+    .filter((periodo) => periodo?.clave && Number.isInteger(periodo.indice));
+  const bloqueReferencia = obtenerPrimerBloqueReferencia({
+    rotacion3Dias: rotacion,
+    periodos: periodosValidos
+  });
+  if (!bloqueReferencia) {
+    return { ok: false, codigo: "BLOQUE_REFERENCIA_AUSENTE", rotacion3Dias: rotacion };
+  }
+
+  const asignacionBase = derivarAsignacionBaseDesdeBloque({
+    bloqueReferencia: bloqueReferencia.bloque,
+    indiceReferencia: bloqueReferencia.periodo.indice,
+    filas,
+    filasFijas
+  });
+  const bloques = Object.fromEntries(
+    periodosValidos.map((periodo) => [
+      periodo.clave,
+      periodo.clave === bloqueReferencia.periodo.clave
+        ? clonarDistribucion(bloqueReferencia.bloque)
+        : generarDistribucionParaIndice({
+            distribucionBase: asignacionBase,
+            filas,
+            filasFijas,
+            indice: periodo.indice
+          })
+    ])
+  );
+
+  return {
+    ok: true,
+    bloqueReferencia,
+    rotacion3Dias: {
+      ...rotacion,
+      version: rotacion.version ?? 1,
+      fechaBase: estrategia?.fechaBase ?? rotacion.fechaBase,
+      duracionDias: estrategia?.duracionDias ?? rotacion.duracionDias,
+      asignacionBase: clonarDistribucion(asignacionBase),
+      bloques,
+      coberturaLibreSM: clonarDistribucion(rotacion.coberturaLibreSM)
+    }
+  };
+};
+
+export const prepararRotacion3DiasParaGenerar = ({
+  rotacion3Dias,
+  periodos,
+  filas,
+  filasFijas = [],
+  estrategia
+} = {}) => {
+  const rotacion = rotacion3Dias && typeof rotacion3Dias === "object"
+    ? rotacion3Dias
+    : {};
+  let asignacionBase = tieneAsignacionesUtiles(rotacion.asignacionBase)
+    ? clonarDistribucion(rotacion.asignacionBase)
+    : null;
+  let bloqueReferencia = null;
+
+  if (!asignacionBase) {
+    bloqueReferencia = obtenerPrimerBloqueReferencia({ rotacion3Dias: rotacion, periodos });
+    if (!bloqueReferencia) {
+      return { ok: false, codigo: "BLOQUE_REFERENCIA_AUSENTE", rotacion3Dias: rotacion };
+    }
+
+    asignacionBase = derivarAsignacionBaseDesdeBloque({
+      bloqueReferencia: bloqueReferencia.bloque,
+      indiceReferencia: bloqueReferencia.periodo.indice,
+      filas,
+      filasFijas
+    });
+  }
+
+  const preparada = {
+    ...rotacion,
+    version: rotacion.version ?? 1,
+    fechaBase: estrategia?.fechaBase ?? rotacion.fechaBase,
+    duracionDias: estrategia?.duracionDias ?? rotacion.duracionDias,
+    asignacionBase,
+    bloques: rotacion.bloques || {},
+    coberturaLibreSM: rotacion.coberturaLibreSM || {}
+  };
+
+  return {
+    ok: true,
+    bloqueReferencia,
+    rotacion3Dias: generarBloquesFaltantes({
+      rotacion3Dias: preparada,
+      periodos,
+      filas,
+      filasFijas
+    })
+  };
+};
+
 export const generarBloquesFaltantes = ({
   rotacion3Dias,
   periodos,

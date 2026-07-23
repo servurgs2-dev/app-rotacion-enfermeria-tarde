@@ -15,9 +15,11 @@ import {
   resolverPersonaDesdeReferencia
 } from "../../utils/referenciasPersonas.js";
 import {
-  generarBloquesFaltantes,
+  existenBloquesPosterioresUtiles,
   generarRotacionMensual,
-  inicializarRotacion3DiasDesdeSemana1
+  prepararRotacion3DiasParaGenerar,
+  regenerarRotacion3DiasDesdePrimerBloque,
+  tieneAsignacionesUtiles
 } from "../../utils/rotacionPlanilla.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 import {
@@ -67,21 +69,47 @@ function PlanillaMensual({
     if (soloLectura) return;
 
     if (usaRotacionTresDias) {
-      setPlanilla((prev) => {
-        const inicializada = inicializarRotacion3DiasDesdeSemana1({
-          planillaEnfermeros: prev,
-          fechaBase: estrategia.fechaBase,
-          duracionDias: estrategia.duracionDias
-        });
-
-        return {
-          ...inicializada,
-          rotacion3Dias: generarBloquesFaltantes({
-            rotacion3Dias: inicializada.rotacion3Dias,
+      const esMesInicial = mesActivo === estrategia.vigenteDesdeMes;
+      const prepararGeneracion = (rotacion3Dias) => (esMesInicial
+        ? regenerarRotacion3DiasDesdePrimerBloque({
+            rotacion3Dias,
             periodos,
             filas,
-            filasFijas: ["SM"]
+            filasFijas: ["SM"],
+            estrategia
           })
+        : prepararRotacion3DiasParaGenerar({
+            rotacion3Dias,
+            periodos,
+            filas,
+            filasFijas: ["SM"],
+            estrategia
+          }));
+      const preparacionActual = prepararGeneracion(planilla?.rotacion3Dias);
+      if (!preparacionActual.ok) {
+        alert("Completá el primer bloque de la rotación antes de generar los siguientes.");
+        return;
+      }
+
+      if (
+        esMesInicial &&
+        existenBloquesPosterioresUtiles({
+          rotacion3Dias: planilla?.rotacion3Dias,
+          periodos,
+          claveReferencia: preparacionActual.bloqueReferencia.periodo.clave
+        }) &&
+        !window.confirm(
+          `Se volverán a generar todos los bloques posteriores usando ${preparacionActual.bloqueReferencia.periodo.etiqueta} como referencia. Las asignaciones manuales posteriores serán reemplazadas. ¿Deseás continuar?`
+        )
+      ) return;
+
+      setPlanilla((prev) => {
+        const preparacion = prepararGeneracion(prev?.rotacion3Dias);
+        if (!preparacion.ok) return prev;
+
+        return {
+          ...prev,
+          rotacion3Dias: preparacion.rotacion3Dias
         };
       });
       return;
@@ -104,20 +132,21 @@ function PlanillaMensual({
 
     if (usaRotacionTresDias) {
       setPlanilla((prev) => {
-        const planillaPreparada = inicializarRotacion3DiasDesdeSemana1({
-          planillaEnfermeros: prev,
-          fechaBase: estrategia.fechaBase,
-          duracionDias: estrategia.duracionDias
-        });
-        const rotacionActual = planillaPreparada.rotacion3Dias;
+        const rotacionActual = prev?.rotacion3Dias || {};
         const bloquesActuales = rotacionActual.bloques || {};
         const bloqueActual = bloquesActuales[periodo] || {};
         const esBloqueBase = periodo === rotacionActual.fechaBase;
+        const tieneBase = tieneAsignacionesUtiles(rotacionActual.asignacionBase);
 
         return {
-          ...planillaPreparada,
+          ...prev,
           rotacion3Dias: {
             ...rotacionActual,
+            version: rotacionActual.version ?? 1,
+            fechaBase: rotacionActual.fechaBase || estrategia.fechaBase,
+            duracionDias: rotacionActual.duracionDias || estrategia.duracionDias,
+            asignacionBase: rotacionActual.asignacionBase || {},
+            coberturaLibreSM: rotacionActual.coberturaLibreSM || {},
             bloques: {
               ...bloquesActuales,
               [periodo]: {
@@ -125,7 +154,7 @@ function PlanillaMensual({
                 [sector]: valor
               }
             },
-            ...(esBloqueBase
+            ...(esBloqueBase && tieneBase
               ? {
                   asignacionBase: {
                     ...(rotacionActual.asignacionBase || {}),

@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test:etapa20": "node tests/etapa20-estadisticas.test.mjs",
+    "test:etapa23b": "node tests/etapa23b-concurrencia.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

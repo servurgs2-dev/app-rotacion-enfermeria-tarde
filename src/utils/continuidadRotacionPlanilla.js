@@ -18,6 +18,39 @@ export const tieneAsignacionBaseRotacion3Dias = (rotacion) =>
   esObjeto(rotacion?.asignacionBase) &&
   Object.values(rotacion.asignacionBase).some(esReferenciaUtil);
 
+const esClaveMesValida = (mes) => /^\d{4}-(0[1-9]|1[0-2])$/.test(mes || "");
+
+export const evaluarPreparacionRotacion3Dias = ({
+  estrategia,
+  mesActivo,
+  rotacion3Dias
+} = {}) => {
+  const esRotacionTresDias = estrategia?.tipo === "cada_3_dias";
+  const mesValido = esClaveMesValida(mesActivo);
+  const vigenciaValida = esClaveMesValida(estrategia?.vigenteDesdeMes);
+  const esMesInicial = esRotacionTresDias &&
+    mesValido &&
+    vigenciaValida &&
+    mesActivo === estrategia.vigenteDesdeMes;
+  const esMesPosterior = esRotacionTresDias &&
+    mesValido &&
+    vigenciaValida &&
+    mesActivo > estrategia.vigenteDesdeMes;
+  const tieneBase = tieneAsignacionBaseRotacion3Dias(rotacion3Dias);
+  const debeBloquearGeneracion = esMesPosterior && !tieneBase;
+
+  return {
+    esRotacionTresDias,
+    esMesInicial,
+    esMesPosterior,
+    tieneBase,
+    debeBloquearGeneracion,
+    mensaje: debeBloquearGeneracion
+      ? "Este mes todavía no tiene la base de la rotación nocturna. Usá ‘Continuar desde mes anterior’ antes de generar la planilla."
+      : ""
+  };
+};
+
 export class ErrorContinuidadRotacionPlanilla extends Error {
   constructor(mensaje, codigo = "CONTINUIDAD_ROTACION_INVALIDA") {
     super(mensaje);

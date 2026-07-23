@@ -21,6 +21,9 @@ import {
   regenerarRotacion3DiasDesdePrimerBloque,
   tieneAsignacionesUtiles
 } from "../../utils/rotacionPlanilla.js";
+import {
+  evaluarPreparacionRotacion3Dias
+} from "../../utils/continuidadRotacionPlanilla.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 import {
   obtenerClaveRenderPersona,
@@ -53,6 +56,11 @@ function PlanillaMensual({
         duracionDias: estrategia.duracionDias
       })
     : obtenerSemanasDelMes(mesActivo);
+  const evaluacionGeneracion = evaluarPreparacionRotacion3Dias({
+    estrategia,
+    mesActivo,
+    rotacion3Dias: planilla?.rotacion3Dias
+  });
 
   const filas = [];
   let tIndex = 0;
@@ -69,7 +77,12 @@ function PlanillaMensual({
     if (soloLectura) return;
 
     if (usaRotacionTresDias) {
-      const esMesInicial = mesActivo === estrategia.vigenteDesdeMes;
+      if (evaluacionGeneracion.debeBloquearGeneracion) {
+        alert(evaluacionGeneracion.mensaje);
+        return;
+      }
+
+      const esMesInicial = evaluacionGeneracion.esMesInicial;
       const prepararGeneracion = (rotacion3Dias) => (esMesInicial
         ? regenerarRotacion3DiasDesdePrimerBloque({
             rotacion3Dias,
@@ -366,12 +379,20 @@ function PlanillaMensual({
       </div>
 
       <button
-        disabled={soloLectura}
+        disabled={soloLectura || evaluacionGeneracion.debeBloquearGeneracion}
         onClick={generarMes}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
+        title={evaluacionGeneracion.debeBloquearGeneracion
+          ? evaluacionGeneracion.mensaje
+          : undefined}
+        className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl shadow-sm transition"
       >
         🔄 Generar rotación automática
       </button>
+      {evaluacionGeneracion.debeBloquearGeneracion && (
+        <p className="text-sm text-amber-700">
+          Para generar este mes primero debés usar ‘Continuar desde mes anterior’.
+        </p>
+      )}
     </div>
   );
 }

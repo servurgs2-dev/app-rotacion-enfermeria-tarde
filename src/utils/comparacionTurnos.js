@@ -14,6 +14,9 @@ export const combinarEstadoActivoComparacion = ({ estadosRecuperados, turnoActiv
 export const esSolicitudComparacionVigente = (solicitudActual, solicitudRecibida) =>
   solicitudActual === solicitudRecibida;
 
+export const crearClaveCacheComparacion = (mesActivo, intento = 0) =>
+  `${String(mesActivo || "")}|${Number.isFinite(Number(intento)) ? Number(intento) : 0}`;
+
 export const debeConsultarComparacion = ({ habilitado, cache, claveSolicitud }) =>
   Boolean(habilitado && cache instanceof Map && !cache.has(claveSolicitud));
 

@@ -3,6 +3,7 @@ import { TURNOS } from "../config/turnos.js";
 import { cargarEstadosTurnosPorMes } from "../services/estadoPorTurnoMes.js";
 import {
   combinarEstadoActivoComparacion,
+  crearClaveCacheComparacion,
   debeConsultarComparacion,
   esSolicitudComparacionVigente
 } from "../utils/comparacionTurnos.js";
@@ -12,7 +13,7 @@ export function useEstadosTurnosMes({ mesActivo, turnoActivo, estadoActivo, habi
   const [intento, setIntento] = useState(0);
   const solicitudRef = useRef(0);
   const turnos = useMemo(() => Object.keys(TURNOS), []);
-  const claveSolicitud = `${mesActivo}|${intento}`;
+  const claveSolicitud = crearClaveCacheComparacion(mesActivo, intento);
 
   useEffect(() => {
     if (!debeConsultarComparacion({ habilitado, cache, claveSolicitud })) return undefined;

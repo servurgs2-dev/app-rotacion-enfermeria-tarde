@@ -10,7 +10,18 @@ import SelectorTurno from "./components/turnos/SelectorTurno";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
 import { generarAlertasHorarios } from "./utils/alertasHorarios";
-import { TURNOS, obtenerConfiguracionTurno } from "./config/turnos";
+import {
+  TURNOS,
+  obtenerConfiguracionTurno,
+  obtenerEstrategiaRotacionPlanilla
+} from "./config/turnos";
+import { configuracionSectores } from "./data/sectores";
+import { obtenerBloquesQueIntersectanMes } from "./utils/periodosRotacionPlanilla.js";
+import {
+  continuarRotacion3DiasEntreMeses,
+  esSolicitudContinuidadVigente,
+  tieneAsignacionBaseRotacion3Dias
+} from "./utils/continuidadRotacionPlanilla.js";
 import {
   crearEstadoMensualVacio,
   crearPlanillaMensualVacia
@@ -54,6 +65,21 @@ import {
 import { quitarCierresDeEstadoCopiado } from "./utils/cierreTurno.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
+
+const obtenerFilasRotacion = ({ sectoresFijos, turnantes, posicionesTurnantes }) => {
+  const filas = [];
+  let indiceTurnante = 0;
+
+  sectoresFijos.forEach((sector, indice) => {
+    filas.push(sector);
+    if (posicionesTurnantes.includes(indice)) {
+      filas.push(turnantes[indiceTurnante]);
+      indiceTurnante += 1;
+    }
+  });
+
+  return filas;
+};
 
 const ControlSesion = ({ etiqueta, cerrando, error, onCerrar }) => (
   <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
@@ -1021,7 +1047,10 @@ return (
           <button
   className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
             onClick={async () => {
-              const [year, month] = mesActivo.split("-").map(Number);
+              const turnoSolicitud = turnoActivo;
+              const mesDestino = mesActivo;
+              const claveSolicitud = claveActiva;
+              const [year, month] = mesDestino.split("-").map(Number);
 
               const fechaAnterior = new Date(year, month - 2);
               const keyAnterior = `${fechaAnterior.getFullYear()}-${String(
@@ -1031,26 +1060,112 @@ return (
               let resultado;
 
               try {
-                resultado = await cargarEstadoTurnoMes(turnoActivo, keyAnterior);
+                resultado = await cargarEstadoTurnoMes(turnoSolicitud, keyAnterior);
               } catch {
                 alert("No hay planilla anterior");
                 return;
               }
 
-              const estadoAnterior = resultado.existe ? resultado.estado : null;
+              if (!esSolicitudContinuidadVigente(
+                claveSolicitud,
+                cargaActualRef.current.clave
+              )) return;
 
+              const estadoAnterior = resultado.existe ? resultado.estado : null;
+              if (!estadoAnterior) {
+                alert("No hay planilla anterior");
+                return;
+              }
+
+              const estrategiaEnfermeros = obtenerEstrategiaRotacionPlanilla({
+                turnoId: turnoSolicitud,
+                tipo: "enfermero",
+                mesActivo: mesDestino
+              });
               const semanasAnteriores = obtenerSemanasDelMes(keyAnterior);
-              const ultimaSemanaAnterior = semanasAnteriores.at(-1)?.clave || "semana5";
+              const ultimaSemanaAnterior =
+                semanasAnteriores.at(-1)?.clave || "semana5";
+              const baseLicenciadaCandidata =
+                estadoAnterior?.planillas.licenciados[ultimaSemanaAnterior] ||
+                estadoAnterior?.planillas.licenciados.semana5;
+              const baseLic = baseLicenciadaCandidata &&
+                Object.keys(baseLicenciadaCandidata).length > 0
+                ? baseLicenciadaCandidata
+                : null;
+              const coberturaLic = baseLic
+                ? estadoAnterior?.planillas.licenciados.coberturaLibreSM?.[
+                    ultimaSemanaAnterior
+                  ]
+                : null;
+
+              if (estrategiaEnfermeros.tipo === "cada_3_dias") {
+                const rotacionAnterior =
+                  estadoAnterior.planillas?.enfermeros?.rotacion3Dias;
+                if (!tieneAsignacionBaseRotacion3Dias(rotacionAnterior)) {
+                  alert(
+                    "El mes anterior no tiene una asignación base válida para continuar la rotación de tres días."
+                  );
+                  return;
+                }
+
+                const periodosDestino = obtenerBloquesQueIntersectanMes({
+                  mesActivo: mesDestino,
+                  fechaBase: estrategiaEnfermeros.fechaBase,
+                  duracionDias: estrategiaEnfermeros.duracionDias
+                });
+                const filas = obtenerFilasRotacion(configuracionSectores.enfermero);
+
+                setEstadoPorTurnoMes((prev) => {
+                  if (
+                    !esSolicitudContinuidadVigente(
+                      claveSolicitud,
+                      cargaActualRef.current.clave
+                    ) ||
+                    !puedeEditarTurno(perfil, turnoSolicitud) ||
+                    erroresCargaRef.current.has(claveSolicitud)
+                  ) return prev;
+
+                  const actual = prev[claveSolicitud] || crearEstadoMensualVacio();
+                  const rotacionActual = actual.planillas?.enfermeros?.rotacion3Dias;
+                  const rotacionContinuada = continuarRotacion3DiasEntreMeses({
+                    rotacionAnterior,
+                    rotacionActual,
+                    periodosDestino,
+                    filas,
+                    filasFijas: ["SM"],
+                    estrategia: estrategiaEnfermeros
+                  });
+                  const estadoConLicenciados = continuarPlanillasDesdeMesAnterior(
+                    actual,
+                    {
+                      planillaVacia: crearPlanillaMensualVacia,
+                      baseLicenciados: baseLic,
+                      coberturaLicenciados: coberturaLic
+                    }
+                  );
+
+                  return {
+                    ...prev,
+                    [claveSolicitud]: {
+                      ...estadoConLicenciados,
+                      planillas: {
+                        ...estadoConLicenciados.planillas,
+                        enfermeros: {
+                          ...estadoConLicenciados.planillas.enfermeros,
+                          rotacion3Dias: rotacionContinuada
+                        }
+                      }
+                    }
+                  };
+                });
+                return;
+              }
+
               const baseEnf =
                 estadoAnterior?.planillas.enfermeros[ultimaSemanaAnterior] ||
                 estadoAnterior?.planillas.enfermeros.semana5;
-              const baseLic =
-                estadoAnterior?.planillas.licenciados[ultimaSemanaAnterior] ||
-                estadoAnterior?.planillas.licenciados.semana5;
               const coberturaEnf =
                 estadoAnterior?.planillas.enfermeros.coberturaLibreSM?.[ultimaSemanaAnterior];
-              const coberturaLic =
-                estadoAnterior?.planillas.licenciados.coberturaLibreSM?.[ultimaSemanaAnterior];
 
               if (!baseEnf && !baseLic) {
                 alert("No hay planilla anterior");
@@ -1058,11 +1173,18 @@ return (
               }
 
               setEstadoPorTurnoMes((prev) => {
-                if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
-                const actual = prev[claveActiva] || crearEstadoMensualVacio();
+                if (
+                  !esSolicitudContinuidadVigente(
+                    claveSolicitud,
+                    cargaActualRef.current.clave
+                  ) ||
+                  !puedeEditarTurno(perfil, turnoSolicitud) ||
+                  erroresCargaRef.current.has(claveSolicitud)
+                ) return prev;
+                const actual = prev[claveSolicitud] || crearEstadoMensualVacio();
                 return {
                   ...prev,
-                  [claveActiva]: continuarPlanillasDesdeMesAnterior(actual, {
+                  [claveSolicitud]: continuarPlanillasDesdeMesAnterior(actual, {
                     planillaVacia: crearPlanillaMensualVacia,
                     baseEnfermeros: baseEnf,
                     baseLicenciados: baseLic,

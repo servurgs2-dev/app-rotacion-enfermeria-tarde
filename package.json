@@ -12,6 +12,7 @@
     "test:etapa23c": "node tests/etapa23c-integracion-concurrencia.test.mjs",
     "test:etapa23d": "node tests/etapa23d-resolucion-conflictos.test.mjs",
     "test:etapa24b": "node tests/etapa24b-historial-base.test.mjs",
+    "test:etapa24c": "node tests/etapa24c-servicios-restauracion.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

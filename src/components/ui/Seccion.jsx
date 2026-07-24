@@ -5,7 +5,8 @@ function Seccion({
   children,
   className = "",
   cuerpoClassName = "",
-  defaultAbierto = false
+  defaultAbierto = false,
+  onCambioAbierto
 }) {
   const [abierto, setAbierto] = useState(defaultAbierto);
 
@@ -15,7 +16,11 @@ function Seccion({
       {/* HEADER */}
       <button
         type="button"
-        onClick={() => setAbierto((actual) => !actual)}
+        onClick={() => setAbierto((actual) => {
+          const siguiente = !actual;
+          onCambioAbierto?.(siguiente);
+          return siguiente;
+        })}
         className="flex w-full cursor-pointer items-center justify-between px-5 py-4 text-left transition hover:bg-slate-50"
         aria-expanded={abierto}
       >

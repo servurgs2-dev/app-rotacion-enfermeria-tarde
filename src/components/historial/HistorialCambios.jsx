@@ -4,8 +4,10 @@ import {
   cargarRevisionAnterior,
   cargarRevisionHistorial,
   compararRevisiones,
-  listarHistorial
+  listarHistorial,
+  restaurarRevision
 } from "../../services/historialEstadoTurnos.js";
+import { crearPreflightRestauracion } from "../../utils/restauracionHistorial.js";
 import DetalleHistorial from "./DetalleHistorial.jsx";
 import {
   ACCIONES_HISTORIAL,
@@ -29,7 +31,26 @@ const crearFiltrosIniciales = (turno, mes) => ({
   fechaHasta: ""
 });
 
-function HistorialCambios({ turnoInicial, mesInicial }) {
+const crearEstadoRestauracion = () => ({
+  estado: "inactivo",
+  preflight: null,
+  error: "",
+  mensaje: ""
+});
+
+function HistorialCambios({
+  turnoInicial,
+  mesInicial,
+  turnoActivo,
+  mesActivo,
+  sesionId,
+  seccionVisible,
+  obtenerDisponibilidadRestauracion,
+  cargarEstadoOperativo,
+  iniciarRestauracion,
+  adoptarRestauracion,
+  finalizarRestauracion
+}) {
   const [filtros, setFiltros] = useState(() =>
     crearFiltrosIniciales(turnoInicial, mesInicial)
   );
@@ -48,8 +69,11 @@ function HistorialCambios({ turnoInicial, mesInicial }) {
     diferencias: null,
     error: ""
   });
+  const [restauracion, setRestauracion] = useState(crearEstadoRestauracion);
+  const [mensajeExito, setMensajeExito] = useState("");
   const solicitudListaRef = useRef(0);
   const solicitudDetalleRef = useRef(0);
+  const solicitudRestauracionRef = useRef(0);
   const montadoRef = useRef(true);
 
   useEffect(() => {
@@ -58,8 +82,20 @@ function HistorialCambios({ turnoInicial, mesInicial }) {
       montadoRef.current = false;
       solicitudListaRef.current += 1;
       solicitudDetalleRef.current += 1;
+      solicitudRestauracionRef.current += 1;
     };
   }, []);
+
+  const invalidarRestauracion = useCallback(() => {
+    solicitudRestauracionRef.current += 1;
+    setRestauracion(crearEstadoRestauracion());
+    setMensajeExito("");
+  }, []);
+
+  useEffect(() => {
+    const temporizador = window.setTimeout(invalidarRestauracion, 0);
+    return () => window.clearTimeout(temporizador);
+  }, [invalidarRestauracion, mesActivo, seccionVisible, sesionId, turnoActivo]);
 
   const cargarPagina = useCallback(async ({
     reiniciar,
@@ -128,6 +164,7 @@ function HistorialCambios({ turnoInicial, mesInicial }) {
       const consulta = crearFiltrosConsultaHistorial(filtros);
       solicitudListaRef.current += 1;
       solicitudDetalleRef.current += 1;
+      invalidarRestauracion();
       setDetalle({
         estado: "inactivo",
         id: null,
@@ -147,6 +184,7 @@ function HistorialCambios({ turnoInicial, mesInicial }) {
     const vacios = crearFiltrosIniciales("", "");
     solicitudListaRef.current += 1;
     solicitudDetalleRef.current += 1;
+    invalidarRestauracion();
     setFiltros(vacios);
     setDetalle({
       estado: "inactivo",
@@ -160,6 +198,7 @@ function HistorialCambios({ turnoInicial, mesInicial }) {
   };
 
   const abrirDetalle = useCallback(async (id) => {
+    invalidarRestauracion();
     const solicitud = solicitudDetalleRef.current + 1;
     solicitudDetalleRef.current = solicitud;
     setDetalle({
@@ -224,10 +263,11 @@ function HistorialCambios({ turnoInicial, mesInicial }) {
         error: "No se pudo cargar el detalle. Intentá nuevamente."
       }));
     }
-  }, []);
+  }, [invalidarRestauracion]);
 
   const cerrarDetalle = () => {
     solicitudDetalleRef.current += 1;
+    invalidarRestauracion();
     setDetalle({
       estado: "inactivo",
       id: null,
@@ -237,6 +277,185 @@ function HistorialCambios({ turnoInicial, mesInicial }) {
       error: ""
     });
   };
+
+  const disponibilidadRestauracion =
+    detalle.revision && typeof obtenerDisponibilidadRestauracion === "function"
+      ? obtenerDisponibilidadRestauracion({
+          turno: detalle.revision.turno,
+          mes: detalle.revision.mes
+        })
+      : null;
+
+  const prepararRestauracion = useCallback(async () => {
+    const revision = detalle.revision;
+    if (!revision || typeof cargarEstadoOperativo !== "function") return;
+    const disponibilidad = obtenerDisponibilidadRestauracion({
+      turno: revision.turno,
+      mes: revision.mes
+    });
+    if (!disponibilidad?.permitida) {
+      setRestauracion({
+        ...crearEstadoRestauracion(),
+        error: disponibilidad?.mensaje || "La restauración no está disponible."
+      });
+      return;
+    }
+    const solicitud = solicitudRestauracionRef.current + 1;
+    solicitudRestauracionRef.current = solicitud;
+    setMensajeExito("");
+    setRestauracion({ estado: "preparando", preflight: null, error: "", mensaje: "" });
+    try {
+      const estadoOperativo = await cargarEstadoOperativo({
+        turno: revision.turno,
+        mes: revision.mes
+      });
+      if (!montadoRef.current || solicitud !== solicitudRestauracionRef.current) return;
+      const preflight = crearPreflightRestauracion({
+        revisionHistorica: revision,
+        estadoOperativo,
+        comparar: compararRevisiones
+      });
+      setRestauracion({
+        estado: "preparado",
+        preflight,
+        error: "",
+        mensaje: preflight.sinCambios
+          ? "Esta revisión ya coincide con el estado actual."
+          : ""
+      });
+    } catch {
+      if (!montadoRef.current || solicitud !== solicitudRestauracionRef.current) return;
+      setRestauracion({
+        estado: "error",
+        preflight: null,
+        error: "No se pudo cargar el estado operativo actual. Intentá nuevamente.",
+        mensaje: ""
+      });
+    }
+  }, [
+    cargarEstadoOperativo,
+    detalle.revision,
+    obtenerDisponibilidadRestauracion
+  ]);
+
+  const ejecutarRestauracion = useCallback(async () => {
+    const revision = detalle.revision;
+    const preflight = restauracion.preflight;
+    if (!revision || !preflight || preflight.sinCambios) return;
+    const disponibilidad = obtenerDisponibilidadRestauracion({
+      turno: revision.turno,
+      mes: revision.mes
+    });
+    if (!disponibilidad?.permitida) {
+      setRestauracion((actual) => ({
+        ...actual,
+        estado: "error",
+        error: disponibilidad?.mensaje || "La restauración quedó bloqueada."
+      }));
+      return;
+    }
+    const inicio = iniciarRestauracion({
+      turno: revision.turno,
+      mes: revision.mes,
+      revisionEsperada: preflight.revisionEsperada
+    });
+    if (!inicio?.permitida) {
+      setRestauracion((actual) => ({
+        ...actual,
+        estado: "error",
+        error: inicio?.mensaje || "La restauración quedó bloqueada."
+      }));
+      return;
+    }
+
+    const solicitud = solicitudRestauracionRef.current + 1;
+    solicitudRestauracionRef.current = solicitud;
+    setRestauracion((actual) => ({
+      ...actual,
+      estado: "restaurando",
+      error: "",
+      mensaje: "Restaurando revisión…"
+    }));
+
+    let resultado;
+    try {
+      resultado = await restaurarRevision({
+        historialId: revision.id,
+        revisionEsperada: preflight.revisionEsperada
+      });
+    } catch {
+      resultado = { tipo: "error" };
+    }
+
+    if (resultado?.tipo === "restaurado") {
+      const adopcion = await adoptarRestauracion({
+        turno: revision.turno,
+        mes: revision.mes,
+        resultadoRestauracion: resultado
+      });
+      if (!montadoRef.current || solicitud !== solicitudRestauracionRef.current) return;
+      if (adopcion?.tipo === "adoptado") {
+        setRestauracion(crearEstadoRestauracion());
+        setMensajeExito("Revisión restaurada correctamente. Se creó una nueva revisión histórica.");
+        solicitudDetalleRef.current += 1;
+        setDetalle({
+          estado: "inactivo",
+          id: null,
+          revision: null,
+          revisionAnterior: null,
+          diferencias: null,
+          error: ""
+        });
+        await cargarPagina({
+          reiniciar: true,
+          consultaFiltros: filtrosAplicados
+        });
+        return;
+      }
+      setRestauracion((actual) => ({
+        ...actual,
+        estado: "error_post_exito",
+        error: "La restauración se completó en el servidor, pero no fue posible actualizar esta pantalla. Recargá la aplicación.",
+        mensaje: ""
+      }));
+      return;
+    }
+
+    finalizarRestauracion({ turno: revision.turno, mes: revision.mes });
+    if (!montadoRef.current || solicitud !== solicitudRestauracionRef.current) return;
+    if (resultado?.tipo === "conflicto") {
+      setRestauracion((actual) => ({
+        ...actual,
+        estado: "conflicto",
+        error: `El estado cambió desde que preparaste la restauración. No se aplicó ninguna restauración.${
+          resultado.revision ? ` Revisión remota: ${resultado.revision}.` : ""
+        }${resultado.updatedAt ? ` Último guardado: ${new Date(resultado.updatedAt).toLocaleString("es-UY")}.` : ""}`,
+        mensaje: ""
+      }));
+      return;
+    }
+    const mensajes = {
+      sin_permiso: "No tenés permiso para restaurar revisiones.",
+      no_encontrado: "La revisión histórica ya no está disponible."
+    };
+    setRestauracion((actual) => ({
+      ...actual,
+      estado: ["sin_permiso", "no_encontrado"].includes(resultado?.tipo)
+        ? resultado.tipo
+        : "error",
+      error: mensajes[resultado?.tipo] || "No fue posible restaurar la revisión. Intentá nuevamente.",
+      mensaje: ""
+    }));
+  }, [
+    adoptarRestauracion,
+    cargarPagina,
+    detalle.revision,
+    filtrosAplicados,
+    finalizarRestauracion,
+    iniciarRestauracion,
+    obtenerDisponibilidadRestauracion,
+    restauracion.preflight
+  ]);
 
   const descargarSnapshot = () => {
     if (!detalle.revision) return;
@@ -260,6 +479,12 @@ function HistorialCambios({ turnoInicial, mesInicial }) {
           Consulta de revisiones mensuales. Las cuentas pueden ser compartidas y no identifican necesariamente a la persona física.
         </p>
       </div>
+
+      {mensajeExito && (
+        <p aria-live="polite" className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-900">
+          {mensajeExito}
+        </p>
+      )}
 
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-3">
         <label className="text-sm font-medium text-slate-700">
@@ -385,9 +610,14 @@ function HistorialCambios({ turnoInicial, mesInicial }) {
         revision={detalle.revision}
         revisionAnterior={detalle.revisionAnterior}
         diferencias={detalle.diferencias}
+        disponibilidadRestauracion={disponibilidadRestauracion}
+        restauracion={restauracion}
         onCerrar={cerrarDetalle}
         onReintentar={() => detalle.id && abrirDetalle(detalle.id)}
         onDescargar={descargarSnapshot}
+        onPrepararRestauracion={prepararRestauracion}
+        onRestaurar={ejecutarRestauracion}
+        onCancelarRestauracion={invalidarRestauracion}
       />
     </div>
   );

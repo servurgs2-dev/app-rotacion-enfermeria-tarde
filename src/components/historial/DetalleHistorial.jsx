@@ -6,6 +6,7 @@ import {
   formatearSeccionHistorial,
   formatearTurnoHistorial
 } from "./historialPresentacion.js";
+import PanelRestauracionHistorial from "./PanelRestauracionHistorial.jsx";
 
 const VistaValor = ({ titulo, valor }) => (
   <details className="rounded-lg border border-slate-200 bg-slate-50 p-2">
@@ -24,9 +25,14 @@ function DetalleHistorial({
   revision,
   revisionAnterior,
   diferencias,
+  disponibilidadRestauracion,
+  restauracion,
   onCerrar,
   onReintentar,
-  onDescargar
+  onDescargar,
+  onPrepararRestauracion,
+  onRestaurar,
+  onCancelarRestauracion
 }) {
   const [mostrarSnapshot, setMostrarSnapshot] = useState(false);
 
@@ -132,6 +138,18 @@ function DetalleHistorial({
             )}
           </div>
         </section>
+      )}
+
+      {disponibilidadRestauracion && (
+        <PanelRestauracionHistorial
+          key={`${restauracion.estado}-${restauracion.preflight?.revisionEsperada || "sin-preflight"}`}
+          revision={revision}
+          disponibilidad={disponibilidadRestauracion}
+          restauracion={restauracion}
+          onPreparar={onPrepararRestauracion}
+          onRestaurar={onRestaurar}
+          onCancelar={onCancelarRestauracion}
+        />
       )}
 
       <details className="mt-5 rounded-xl border border-slate-200 p-3">

@@ -257,10 +257,15 @@ prueba("layout es responsive", () =>
 prueba("botones se deshabilitan durante carga", () =>
   assert.match(historial, /disabled=\{estadoLista === "cargando"\}/));
 
-prueba("no existe botón Restaurar", () =>
-  assert.doesNotMatch(componentesHistorial, />\s*Restaurar(?:\s|<)/));
-prueba("UI no importa restaurarRevision", () =>
-  assert.doesNotMatch(componentesHistorial, /restaurarRevision/));
+prueba("el listado de solo lectura no ofrece restauración directa", () => {
+  const listado = historial.slice(
+    historial.indexOf("{items.length > 0"),
+    historial.indexOf("<DetalleHistorial")
+  );
+  assert.doesNotMatch(listado, /Restaurar|restaurarRevision/);
+});
+prueba("la base visual D1 no llama servicios de datos directamente", () =>
+  assert.doesNotMatch(detalle, /\.rpc\(|clienteSupabase/));
 prueba("UI no llama RPC", () =>
   assert.doesNotMatch(componentesHistorial, /\.rpc\(/));
 prueba("UI no modifica estadoPorTurnoMes", () =>

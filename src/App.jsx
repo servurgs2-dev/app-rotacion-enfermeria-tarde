@@ -87,6 +87,13 @@ import {
   prepararMetadatosUsarServidor,
   prepararResolucionConservarLocal
 } from "./utils/resolucionConflicto.js";
+import {
+  debeMantenerBloqueoRestauracion,
+  evaluarDisponibilidadRestauracion,
+  seleccionarEstadoCargaVersionada,
+  validarContextoAdopcionRestauracion,
+  validarRespuestaRestaurada
+} from "./utils/restauracionHistorial.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
@@ -163,6 +170,14 @@ const erroresCargaRef = useRef(new Set());
 const [intentoCarga, setIntentoCarga] = useState(0);
 const [cerrandoSesion, setCerrandoSesion] = useState(false);
 const [errorCierreSesion, setErrorCierreSesion] = useState("");
+const [historialAbierto, setHistorialAbierto] = useState(false);
+const [restauracionHistorialEnCurso, setRestauracionHistorialEnCurso] = useState(null);
+const restauracionHistorialEnCursoRef = useRef(null);
+const [clavesBloqueadasTrasRestauracion, setClavesBloqueadasTrasRestauracion] =
+  useState(() => new Set());
+const clavesBloqueadasTrasRestauracionRef = useRef(new Set());
+const sesionActivaRef = useRef(String(perfil?.usuario || ""));
+const contextoActivoRef = useRef({ turno: turnoActivo, mes: mesActivo });
 
 const [dataPDFEnf, setDataPDFEnf] = useState({ asignaciones: [], libres: [] });
 const [dataPDFLic, setDataPDFLic] = useState({ asignaciones: [], libres: [] });
@@ -170,6 +185,11 @@ const [dataPDFLic, setDataPDFLic] = useState({ asignaciones: [], libres: [] });
 useEffect(() => {
   estadoPorTurnoMesRef.current = estadoPorTurnoMes;
 }, [estadoPorTurnoMes]);
+
+useEffect(() => {
+  sesionActivaRef.current = String(perfil?.usuario || "");
+  contextoActivoRef.current = { turno: turnoActivo, mes: mesActivo };
+}, [mesActivo, perfil?.usuario, turnoActivo]);
 
 //console.log("🔁 TAB ACTUAL:", tabCalendario);
 
@@ -309,6 +329,7 @@ const encolarGuardado = useCallback(({
   const metadatos = metadatosPorClaveRef.current.get(clave);
   if (
     erroresCargaRef.current.has(clave) ||
+    clavesBloqueadasTrasRestauracionRef.current.has(clave) ||
     !metadatos ||
     (claveBloqueadaPorConflicto(metadatos) && !esResolucionConflicto) ||
     !puedeEditarTurno(perfil, turnoId)
@@ -474,6 +495,10 @@ useEffect(() => {
 
   Object.entries(estadoPorTurnoMes).forEach(([clave, data]) => {
     if (erroresCargaRef.current.has(clave)) return;
+    if (clavesBloqueadasTrasRestauracionRef.current.has(clave)) {
+      referenciasEstadoRef.current.set(clave, data);
+      return;
+    }
     if (claveBloqueadaPorConflicto(metadatosPorClaveRef.current.get(clave))) {
       referenciasEstadoRef.current.set(clave, data);
       actualizarMetadatosClave(clave, (actuales) =>
@@ -870,12 +895,172 @@ const actualizarResolucionClave = (clave, estado, error = "") => {
   }));
 };
 
-const limpiarPendientesClave = (clave) => {
+const limpiarPendientesClave = useCallback((clave) => {
   clearTimeout(debouncesGuardadoRef.current.get(clave));
   debouncesGuardadoRef.current.delete(clave);
   colaGuardadoRef.current.delete(clave);
   mesesConErrorGuardadoRef.current.delete(clave);
-};
+}, []);
+
+const actualizarBloqueoTrasRestauracion = useCallback((clave, bloqueada) => {
+  const siguientes = new Set(clavesBloqueadasTrasRestauracionRef.current);
+  if (bloqueada) {
+    siguientes.add(clave);
+  } else {
+    siguientes.delete(clave);
+  }
+  clavesBloqueadasTrasRestauracionRef.current = siguientes;
+  setClavesBloqueadasTrasRestauracion(siguientes);
+}, []);
+
+const adoptarCargaServidorClave = useCallback((clave, resultado) => {
+  const { carga, estado: estadoServidor } = seleccionarEstadoCargaVersionada(
+    resultado,
+    crearEstadoMensualVacio
+  );
+  limpiarPendientesClave(clave);
+  erroresCargaRef.current.delete(clave);
+  actualizarBloqueoTrasRestauracion(clave, false);
+  setErroresCargaPorClave((prev) => {
+    if (!prev[clave]) return prev;
+    const siguiente = { ...prev };
+    delete siguiente[clave];
+    return siguiente;
+  });
+  referenciasEstadoRef.current.set(clave, estadoServidor);
+  mesesCargadosRef.current.add(clave);
+  setEstadoPorTurnoMes((prev) => {
+    const siguiente = { ...prev, [clave]: estadoServidor };
+    estadoPorTurnoMesRef.current = siguiente;
+    return siguiente;
+  });
+  actualizarMetadatosClave(clave, prepararMetadatosUsarServidor(carga));
+  setEstadoGuardado("saved");
+  return estadoServidor;
+}, [
+  actualizarBloqueoTrasRestauracion,
+  actualizarMetadatosClave,
+  limpiarPendientesClave
+]);
+
+const obtenerDisponibilidadRestauracion = useCallback(({ turno, mes }) => {
+  const clave = crearClaveTurnoMes(turno, mes);
+  const coincideContexto =
+    turno === turnoActivo &&
+    mes === mesActivo &&
+    clave === claveActiva;
+  const estadoPrevio = estadoPorTurnoMesRef.current[clave];
+  const hayCambiosLocales = hayCambiosLocalesPendientes({
+    clave,
+    estadoPrevio,
+    referenciaConocida: referenciasEstadoRef.current.get(clave),
+    cola: colaGuardadoRef.current,
+    debounces: debouncesGuardadoRef.current,
+    erroresGuardado: mesesConErrorGuardadoRef.current,
+    claveGuardadoEnCurso: claveGuardadoEnCursoRef.current
+  });
+  return evaluarDisponibilidadRestauracion({
+    esSupervision: esPerfilSupervision(perfil),
+    coincideContexto,
+    metadatos: metadatosPorClaveRef.current.get(clave),
+    estadoCargado:
+      !cargandoRef.current &&
+      !erroresCargaRef.current.has(clave) &&
+      Boolean(estadoPrevio),
+    hayCambiosLocales,
+    restauracionEnCurso: Boolean(restauracionHistorialEnCursoRef.current),
+    bloqueadaTrasRestauracion:
+      clavesBloqueadasTrasRestauracionRef.current.has(clave)
+  });
+}, [claveActiva, mesActivo, perfil, turnoActivo]);
+
+const cargarEstadoOperativoHistorial = useCallback(async ({ turno, mes }) => {
+  const disponibilidad = obtenerDisponibilidadRestauracion({ turno, mes });
+  if (!disponibilidad.permitida) {
+    throw new Error(disponibilidad.mensaje);
+  }
+  return cargarEstadoTurnoMesConRevision(turno, mes);
+}, [obtenerDisponibilidadRestauracion]);
+
+const iniciarRestauracionHistorial = useCallback(({ turno, mes }) => {
+  const disponibilidad = obtenerDisponibilidadRestauracion({ turno, mes });
+  if (!disponibilidad.permitida) return disponibilidad;
+  const clave = crearClaveTurnoMes(turno, mes);
+  restauracionHistorialEnCursoRef.current = {
+    clave,
+    sesionId: sesionActivaRef.current
+  };
+  setRestauracionHistorialEnCurso(clave);
+  return { permitida: true };
+}, [obtenerDisponibilidadRestauracion]);
+
+const finalizarRestauracionHistorial = useCallback(({ turno, mes }) => {
+  const clave = crearClaveTurnoMes(turno, mes);
+  if (restauracionHistorialEnCursoRef.current?.clave !== clave) return;
+  restauracionHistorialEnCursoRef.current = null;
+  setRestauracionHistorialEnCurso(null);
+}, []);
+
+const adoptarRestauracionHistorial = useCallback(async ({
+  turno,
+  mes,
+  resultadoRestauracion
+}) => {
+  const clave = crearClaveTurnoMes(turno, mes);
+  const inicio = restauracionHistorialEnCursoRef.current;
+  try {
+    const cargaServidor = await cargarEstadoTurnoMesConRevision(turno, mes);
+    const cargaValidada = validarRespuestaRestaurada({
+      resultadoRestauracion,
+      cargaServidor,
+      turnoEsperado: turno,
+      mesEsperado: mes
+    });
+    const contextoActual = contextoActivoRef.current;
+    if (!validarContextoAdopcionRestauracion({
+      inicio,
+      clave,
+      sesionActual: sesionActivaRef.current,
+      turnoActual: contextoActual.turno,
+      mesActual: contextoActual.mes,
+      turnoEsperado: turno,
+      mesEsperado: mes
+    })) {
+      throw new Error("La sesión o el contexto activo cambió durante la restauración.");
+    }
+    adoptarCargaServidorClave(clave, cargaValidada);
+    finalizarRestauracionHistorial({ turno, mes });
+    return { tipo: "adoptado", revision: cargaValidada.revision };
+  } catch {
+    actualizarBloqueoTrasRestauracion(
+      clave,
+      debeMantenerBloqueoRestauracion({
+        rpcConfirmada: true,
+        adopcionVerificada: false
+      })
+    );
+    limpiarPendientesClave(clave);
+    erroresCargaRef.current.add(clave);
+    actualizarMetadatosClave(clave, (actuales) =>
+      aplicarErrorConcurrencia(
+        actuales,
+        new Error("La restauración se completó, pero falta recargar el estado desde el servidor.")
+      )
+    );
+    if (restauracionHistorialEnCursoRef.current?.clave === clave) {
+      restauracionHistorialEnCursoRef.current = null;
+      setRestauracionHistorialEnCurso(null);
+    }
+    setEstadoGuardado("error");
+    return { tipo: "error_recarga" };
+  }
+}, [
+  adoptarCargaServidorClave,
+  actualizarBloqueoTrasRestauracion,
+  actualizarMetadatosClave,
+  finalizarRestauracionHistorial,
+  limpiarPendientesClave
+]);
 
 const descargarCopiaConflicto = (clave) => {
   const contexto = interpretarClaveConflicto(clave);
@@ -925,28 +1110,8 @@ const usarVersionServidor = async (clave) => {
       contexto.turnoId,
       contexto.mes
     );
-    const estadoServidor = resultado.existe
-      ? resultado.estado
-      : crearEstadoMensualVacio();
-
-    limpiarPendientesClave(clave);
-    erroresCargaRef.current.delete(clave);
-    setErroresCargaPorClave((prev) => {
-      if (!prev[clave]) return prev;
-      const siguiente = { ...prev };
-      delete siguiente[clave];
-      return siguiente;
-    });
-    referenciasEstadoRef.current.set(clave, estadoServidor);
-    mesesCargadosRef.current.add(clave);
-    setEstadoPorTurnoMes((prev) => {
-      const siguiente = { ...prev, [clave]: estadoServidor };
-      estadoPorTurnoMesRef.current = siguiente;
-      return siguiente;
-    });
-    actualizarMetadatosClave(clave, prepararMetadatosUsarServidor(resultado));
+    adoptarCargaServidorClave(clave, resultado);
     actualizarResolucionClave(clave, "inactivo");
-    setEstadoGuardado("saved");
   } catch (error) {
     actualizarResolucionClave(
       clave,
@@ -1258,7 +1423,11 @@ console.log("🔁 TAB ACTUAL:", tabCalendario);*/
 const metadatosActivos = claveActiva ? metadatosPorClave[claveActiva] : null;
 const resolviendoConflictoActivo =
   resolucionPorClave[claveActiva]?.estado === "guardando_local";
-const modoSoloLecturaEfectiva = modoSoloLectura || resolviendoConflictoActivo;
+const modoSoloLecturaEfectiva =
+  modoSoloLectura ||
+  resolviendoConflictoActivo ||
+  restauracionHistorialEnCurso === claveActiva ||
+  clavesBloqueadasTrasRestauracion.has(claveActiva);
 const estadoGuardadoVisible = normalizarEstadoGuardadoVisible(
   metadatosActivos?.estado,
   estadoGuardado
@@ -1330,6 +1499,12 @@ return (
     <p className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
       Hay cambios más recientes guardados desde otra computadora. El guardado
       automático quedó detenido.
+    </p>
+  )}
+  {clavesBloqueadasTrasRestauracion.has(claveActiva) && (
+    <p role="alert" className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      La restauración se completó en el servidor, pero no fue posible actualizar
+      esta pantalla. Recargá la aplicación.
     </p>
   )}
   <button
@@ -1680,10 +1855,20 @@ return (
           titulo="🕘 Historial"
           className="order-6"
           cuerpoClassName="max-h-[75vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
+          onCambioAbierto={setHistorialAbierto}
         >
           <HistorialCambios
             turnoInicial={turnoActivo}
             mesInicial={mesActivo}
+            turnoActivo={turnoActivo}
+            mesActivo={mesActivo}
+            sesionId={perfil?.usuario || ""}
+            seccionVisible={historialAbierto}
+            obtenerDisponibilidadRestauracion={obtenerDisponibilidadRestauracion}
+            cargarEstadoOperativo={cargarEstadoOperativoHistorial}
+            iniciarRestauracion={iniciarRestauracionHistorial}
+            adoptarRestauracion={adoptarRestauracionHistorial}
+            finalizarRestauracion={finalizarRestauracionHistorial}
           />
         </Seccion>
       )}

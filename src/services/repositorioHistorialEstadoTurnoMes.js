@@ -291,6 +291,32 @@ export const crearRepositorioHistorialEstadoTurnoMes = (clienteSupabase) => {
       : { tipo: "no_encontrado" };
   };
 
+  const cargarRevisionHistorialPorContexto = async ({
+    turno,
+    mes,
+    revision
+  }) => {
+    const turnoValidado = validarTurno(turno);
+    const mesValidado = validarMes(mes);
+    const revisionValidada = normalizarRevisionConcurrencia(revision, {
+      permitirCero: false
+    });
+    const { data, error } = await clienteSupabase
+      .from("historial_estado_turno_mes")
+      .select(CAMPOS_DETALLE)
+      .eq("turno", turnoValidado)
+      .eq("mes", mesValidado)
+      .eq("revision", revisionValidada)
+      .maybeSingle();
+    if (error) {
+      if (esErrorPermiso(error)) return { tipo: "sin_permiso" };
+      throw error;
+    }
+    return data
+      ? { tipo: "ok", revision: normalizarFila(data, { incluirData: true }) }
+      : { tipo: "no_encontrado" };
+  };
+
   const restaurarRevision = async ({ historialId, revisionEsperada }) => {
     const id = validarEnteroPositivo(historialId, "El id histórico");
     const revision = normalizarRevisionConcurrencia(revisionEsperada, {
@@ -320,7 +346,12 @@ export const crearRepositorioHistorialEstadoTurnoMes = (clienteSupabase) => {
     }
   };
 
-  return { listarHistorial, cargarRevisionHistorial, restaurarRevision };
+  return {
+    listarHistorial,
+    cargarRevisionHistorial,
+    cargarRevisionHistorialPorContexto,
+    restaurarRevision
+  };
 };
 
 export const LIMITES_HISTORIAL = Object.freeze({

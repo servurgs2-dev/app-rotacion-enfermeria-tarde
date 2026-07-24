@@ -7,6 +7,7 @@ export const crearServicioHistorialEstadoTurnos = (clienteSupabase) => {
   return {
     listarHistorial: repositorio.listarHistorial,
     cargarRevisionHistorial: repositorio.cargarRevisionHistorial,
+    cargarRevisionAnterior: repositorio.cargarRevisionHistorialPorContexto,
     compararRevisiones: compararSnapshotsMensuales,
     restaurarRevision: repositorio.restaurarRevision
   };
@@ -15,6 +16,7 @@ export const crearServicioHistorialEstadoTurnos = (clienteSupabase) => {
 export const {
   listarHistorial,
   cargarRevisionHistorial,
+  cargarRevisionAnterior,
   compararRevisiones,
   restaurarRevision
 } = crearServicioHistorialEstadoTurnos(supabase);

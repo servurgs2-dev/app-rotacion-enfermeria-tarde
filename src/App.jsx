@@ -6,6 +6,7 @@ import Seccion from "./components/ui/Seccion";
 import Licencias from "./components/licencias/Licencias";
 import Certificaciones from "./components/certificaciones/Certificaciones";
 import Estadisticas from "./components/estadisticas/Estadisticas";
+import HistorialCambios from "./components/historial/HistorialCambios";
 import PanelConflictoEdicion from "./components/concurrencia/PanelConflictoEdicion";
 import SelectorTurno from "./components/turnos/SelectorTurno";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
@@ -1673,6 +1674,19 @@ return (
           turnoActivo={turnoActivo}
         />
       </Seccion>
+
+      {esPerfilSupervision(perfil) && (
+        <Seccion
+          titulo="🕘 Historial"
+          className="order-6"
+          cuerpoClassName="max-h-[75vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
+        >
+          <HistorialCambios
+            turnoInicial={turnoActivo}
+            mesInicial={mesActivo}
+          />
+        </Seccion>
+      )}
 
       <div id="calendario-pdf" className="order-1">
         

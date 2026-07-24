@@ -13,6 +13,7 @@
     "test:etapa23d": "node tests/etapa23d-resolucion-conflictos.test.mjs",
     "test:etapa24b": "node tests/etapa24b-historial-base.test.mjs",
     "test:etapa24c": "node tests/etapa24c-servicios-restauracion.test.mjs",
+    "test:etapa24d1": "node tests/etapa24d1-interfaz-historial.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { configuracionSectores } from "../../data/sectores";
 import {
   estaDeLicencia,
@@ -17,6 +18,7 @@ import {
 import {
   existenBloquesPosterioresUtiles,
   generarRotacionMensual,
+  obtenerPrimerBloqueReferencia,
   prepararRotacion3DiasParaGenerar,
   regenerarRotacion3DiasDesdePrimerBloque,
   tieneAsignacionesUtiles
@@ -29,6 +31,13 @@ import {
   obtenerClaveRenderPersona,
   obtenerIdsPersonalDuplicados
 } from "../../utils/validacionPersonal.js";
+import {
+  analizarDistribucionBaseEnfermeros,
+  crearMetadataGeneracionFlexible,
+  tieneAsignacionesEnPeriodos,
+  validarPosicionesNoAplicables
+} from "../../utils/generacionFlexiblePlanilla.js";
+import SelectorPosicionesNoAplicables from "./SelectorPosicionesNoAplicables.jsx";
 
 function PlanillaMensual({
   personal,
@@ -42,7 +51,12 @@ function PlanillaMensual({
 }) {
   const personalFiltrado = personal.filter((p) => p.categoria === tipo);
   const idsDuplicados = obtenerIdsPersonalDuplicados(personal);
-  const { sectoresFijos, turnantes, posicionesTurnantes } = configuracionSectores[tipo];
+  const {
+    sectoresFijos,
+    turnantes,
+    posicionesTurnantes,
+    sectoresCriticos
+  } = configuracionSectores[tipo];
   const estrategia = obtenerEstrategiaRotacionPlanilla({
     turnoId,
     tipo,
@@ -61,6 +75,9 @@ function PlanillaMensual({
     mesActivo,
     rotacion3Dias: planilla?.rotacion3Dias
   });
+  const [preparacionFlexible, setPreparacionFlexible] = useState(null);
+  const [posicionesSeleccionadas, setPosicionesSeleccionadas] = useState([]);
+  const [errorSeleccion, setErrorSeleccion] = useState("");
 
   const filas = [];
   let tIndex = 0;
@@ -73,8 +90,177 @@ function PlanillaMensual({
     }
   });
 
+  const obtenerContextoBaseEnfermeros = () => {
+    if (!usaRotacionTresDias) {
+      return {
+        distribucionBase: planilla?.semana1,
+        bloqueReferencia: null
+      };
+    }
+    if (evaluacionGeneracion.esMesInicial) {
+      const bloqueReferencia = obtenerPrimerBloqueReferencia({
+        rotacion3Dias: planilla?.rotacion3Dias,
+        periodos
+      });
+      return {
+        distribucionBase: bloqueReferencia?.bloque,
+        bloqueReferencia
+      };
+    }
+    return {
+      distribucionBase: planilla?.rotacion3Dias?.asignacionBase,
+      bloqueReferencia: null
+    };
+  };
+
+  const obtenerAdvertenciaSobrescritura = (bloqueReferencia) => {
+    if (!usaRotacionTresDias) {
+      const posteriores = periodos.slice(1).map(
+        (periodo) => planilla?.[periodo.clave]
+      );
+      return tieneAsignacionesEnPeriodos(posteriores)
+        ? "Las semanas posteriores contienen asignaciones y serán regeneradas."
+        : "";
+    }
+    if (
+      evaluacionGeneracion.esMesInicial &&
+      bloqueReferencia &&
+      existenBloquesPosterioresUtiles({
+        rotacion3Dias: planilla?.rotacion3Dias,
+        periodos,
+        claveReferencia: bloqueReferencia.periodo.clave
+      })
+    ) {
+      return `Los bloques posteriores a ${bloqueReferencia.periodo.etiqueta} contienen asignaciones y serán regenerados.`;
+    }
+    return "";
+  };
+
+  const ejecutarGeneracionEnfermeros = ({
+    analisis,
+    posicionesNoAplicables
+  }) => {
+    const metadata = crearMetadataGeneracionFlexible({
+      estrategia: estrategia.tipo,
+      turnoId,
+      posicionesNoAplicables,
+      cantidadPersonasConsideradas: analisis.cantidadPersonas
+    });
+
+    if (usaRotacionTresDias) {
+      const esMesInicial = evaluacionGeneracion.esMesInicial;
+      const preparar = (rotacion3Dias) => esMesInicial
+        ? regenerarRotacion3DiasDesdePrimerBloque({
+            rotacion3Dias,
+            periodos,
+            filas,
+            filasFijas: ["SM"],
+            posicionesNoAplicables,
+            estrategia
+          })
+        : prepararRotacion3DiasParaGenerar({
+            rotacion3Dias,
+            periodos,
+            filas,
+            filasFijas: ["SM"],
+            posicionesNoAplicables,
+            estrategia
+          });
+
+      setPlanilla((prev) => {
+        const resultado = preparar(prev?.rotacion3Dias);
+        if (!resultado.ok) return prev;
+        return {
+          ...prev,
+          rotacion3Dias: resultado.rotacion3Dias,
+          generacionFlexible: metadata
+        };
+      });
+    } else {
+      setPlanilla((prev) => ({
+        ...generarRotacionMensual({
+          planilla: prev,
+          filas,
+          semanas: periodos,
+          filaFija: "SM",
+          personal: personalFiltrado,
+          posicionesNoAplicables
+        }),
+        generacionFlexible: metadata
+      }));
+    }
+
+    setPreparacionFlexible(null);
+    setPosicionesSeleccionadas([]);
+    setErrorSeleccion("");
+  };
+
+  const iniciarGeneracionFlexible = () => {
+    if (evaluacionGeneracion.debeBloquearGeneracion) {
+      alert(evaluacionGeneracion.mensaje);
+      return;
+    }
+    const contexto = obtenerContextoBaseEnfermeros();
+    const analisis = analizarDistribucionBaseEnfermeros({
+      distribucionBase: contexto.distribucionBase,
+      filas,
+      personal: personalFiltrado
+    });
+    if (!analisis.ok) {
+      alert(analisis.mensaje);
+      return;
+    }
+    const advertenciaSobrescritura = obtenerAdvertenciaSobrescritura(
+      contexto.bloqueReferencia
+    );
+    const preparacion = {
+      ...analisis,
+      bloqueReferencia: contexto.bloqueReferencia,
+      advertenciaSobrescritura
+    };
+
+    if (analisis.cantidadPosicionesNoAplicables === 0) {
+      if (
+        advertenciaSobrescritura &&
+        !window.confirm(`${advertenciaSobrescritura} ¿Deseás continuar?`)
+      ) return;
+      ejecutarGeneracionEnfermeros({
+        analisis,
+        posicionesNoAplicables: []
+      });
+      return;
+    }
+
+    setPreparacionFlexible(preparacion);
+    setPosicionesSeleccionadas([...analisis.filasVacias]);
+    setErrorSeleccion("");
+  };
+
+  const confirmarGeneracionFlexible = () => {
+    if (!preparacionFlexible) return;
+    const validacion = validarPosicionesNoAplicables({
+      seleccionadas: posicionesSeleccionadas,
+      filas,
+      filasVacias: preparacionFlexible.filasVacias,
+      cantidadRequerida: preparacionFlexible.cantidadPosicionesNoAplicables
+    });
+    if (!validacion.ok) {
+      setErrorSeleccion(validacion.mensaje);
+      return;
+    }
+    ejecutarGeneracionEnfermeros({
+      analisis: preparacionFlexible,
+      posicionesNoAplicables: posicionesSeleccionadas
+    });
+  };
+
   function generarMes() {
     if (soloLectura) return;
+
+    if (tipo === "enfermero") {
+      iniciarGeneracionFlexible();
+      return;
+    }
 
     if (usaRotacionTresDias) {
       if (evaluacionGeneracion.debeBloquearGeneracion) {
@@ -392,6 +578,32 @@ function PlanillaMensual({
         <p className="text-sm text-amber-700">
           Para generar este mes primero debés usar ‘Continuar desde mes anterior’.
         </p>
+      )}
+      {preparacionFlexible && (
+        <SelectorPosicionesNoAplicables
+          filas={filas}
+          filasVacias={preparacionFlexible.filasVacias}
+          nombresPorFila={preparacionFlexible.nombresPorFila}
+          seleccionadas={posicionesSeleccionadas}
+          cantidadRequerida={preparacionFlexible.cantidadPosicionesNoAplicables}
+          sectoresCriticos={sectoresCriticos}
+          advertenciaSobrescritura={preparacionFlexible.advertenciaSobrescritura}
+          error={errorSeleccion}
+          onAlternar={(fila) => {
+            setErrorSeleccion("");
+            setPosicionesSeleccionadas((actuales) =>
+              actuales.includes(fila)
+                ? actuales.filter((item) => item !== fila)
+                : [...actuales, fila]
+            );
+          }}
+          onCancelar={() => {
+            setPreparacionFlexible(null);
+            setPosicionesSeleccionadas([]);
+            setErrorSeleccion("");
+          }}
+          onConfirmar={confirmarGeneracionFlexible}
+        />
       )}
     </div>
   );

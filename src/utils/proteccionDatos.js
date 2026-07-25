@@ -1,3 +1,5 @@
+import { quitarGeneracionFlexible } from "./generacionFlexiblePlanilla.js";
+
 const clonarReferencia = (referencia) =>
   referencia && typeof referencia === "object" && !Array.isArray(referencia)
     ? { ...referencia }
@@ -25,34 +27,40 @@ export const continuarPlanillasDesdeMesAnterior = (
     coberturaEnfermeros,
     coberturaLicenciados
   }
-) => ({
-  ...estadoActual,
-  planillas: {
-    ...estadoActual.planillas,
-    ...(baseEnfermeros
-      ? {
-          enfermeros: {
-            ...planillaVacia(),
-            semana1: clonarReferencias(baseEnfermeros),
-            coberturaLibreSM: coberturaEnfermeros
-              ? { semana1: clonarReferencia(coberturaEnfermeros) }
-              : {}
+) => {
+  const enfermerosSinExclusionActiva = quitarGeneracionFlexible(
+    estadoActual.planillas?.enfermeros
+  );
+  return {
+    ...estadoActual,
+    planillas: {
+      ...estadoActual.planillas,
+      enfermeros: enfermerosSinExclusionActiva,
+      ...(baseEnfermeros
+        ? {
+            enfermeros: {
+              ...planillaVacia(),
+              semana1: clonarReferencias(baseEnfermeros),
+              coberturaLibreSM: coberturaEnfermeros
+                ? { semana1: clonarReferencia(coberturaEnfermeros) }
+                : {}
+            }
           }
-        }
-      : {}),
-    ...(baseLicenciados
-      ? {
-          licenciados: {
-            ...planillaVacia(),
-            semana1: clonarReferencias(baseLicenciados),
-            coberturaLibreSM: coberturaLicenciados
-              ? { semana1: clonarReferencia(coberturaLicenciados) }
-              : {}
+        : {}),
+      ...(baseLicenciados
+        ? {
+            licenciados: {
+              ...planillaVacia(),
+              semana1: clonarReferencias(baseLicenciados),
+              coberturaLibreSM: coberturaLicenciados
+                ? { semana1: clonarReferencia(coberturaLicenciados) }
+                : {}
+            }
           }
-        }
-      : {})
-  }
-});
+        : {})
+    }
+  };
+};
 
 export const clasificarResultadoCarga = ({ error, resultado, estadoPrevio }) => {
   if (error) {

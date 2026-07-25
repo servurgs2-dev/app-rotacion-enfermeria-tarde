@@ -7,6 +7,7 @@ import {
   obtenerPersonasPrevistas
 } from "./asistenciaPersonas.js";
 import { normalizar } from "./texto.js";
+import { quitarGeneracionFlexible } from "./generacionFlexiblePlanilla.js";
 
 const esObjeto = (valor) => Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
 const clonarSerializable = (valor) => JSON.parse(JSON.stringify(valor));
@@ -174,6 +175,11 @@ export const snapshotAAsignacionesVisibles = (snapshot) =>
 
 export const quitarCierresDeEstadoCopiado = (estado) => {
   const copia = clonarSerializable(estado);
+  if (esObjeto(copia?.planillas?.enfermeros)) {
+    copia.planillas.enfermeros = quitarGeneracionFlexible(
+      copia.planillas.enfermeros
+    );
+  }
   for (const categoria of ["enfermeros", "licenciados"]) {
     if (esObjeto(copia?.calendario?.[categoria])) {
       copia.calendario[categoria].cierresDia = {};

@@ -61,6 +61,7 @@ export const rotarDistribucionPorPasos = ({
   distribucionBase,
   filas,
   filasFijas = [],
+  posicionesNoAplicables = [],
   pasos = 0
 } = {}) => {
   const base = distribucionBase && typeof distribucionBase === "object"
@@ -68,15 +69,23 @@ export const rotarDistribucionPorPasos = ({
     : {};
   const filasValidas = Array.isArray(filas) ? filas : [];
   const fijas = new Set(Array.isArray(filasFijas) ? filasFijas : []);
-  const filasRotables = filasValidas.filter((fila) => !fijas.has(fila));
+  const excluidas = new Set(
+    Array.isArray(posicionesNoAplicables) ? posicionesNoAplicables : []
+  );
+  const filasRotables = filasValidas.filter(
+    (fila) => !fijas.has(fila) && !excluidas.has(fila)
+  );
   const referenciasFijas = new Set(
-    [...fijas].map((fila) => obtenerIdReferencia(base[fila])).filter(Boolean)
+    [...fijas]
+      .filter((fila) => !excluidas.has(fila))
+      .map((fila) => obtenerIdReferencia(base[fila]))
+      .filter(Boolean)
   );
   const referenciasRotadas = rotarValores(
     filasRotables.map((fila) => base[fila] || ""),
     pasos
   );
-  const resultado = {};
+  const resultado = Object.fromEntries(filasValidas.map((fila) => [fila, ""]));
 
   filasRotables.forEach((fila, indice) => {
     const referencia = referenciasRotadas[indice];
@@ -85,7 +94,9 @@ export const rotarDistribucionPorPasos = ({
       : clonarAsignacion(referencia);
   });
   [...fijas].forEach((fila) => {
-    resultado[fila] = clonarAsignacion(base[fila] || "");
+    resultado[fila] = excluidas.has(fila)
+      ? ""
+      : clonarAsignacion(base[fila] || "");
   });
 
   return resultado;
@@ -95,11 +106,13 @@ export const generarDistribucionParaIndice = ({
   distribucionBase,
   filas,
   filasFijas = [],
+  posicionesNoAplicables = [],
   indice = 0
 } = {}) => rotarDistribucionPorPasos({
   distribucionBase,
   filas,
   filasFijas,
+  posicionesNoAplicables,
   pasos: indice
 });
 
@@ -140,7 +153,8 @@ export const derivarAsignacionBaseDesdeBloque = ({
   bloqueReferencia,
   indiceReferencia,
   filas,
-  filasFijas = []
+  filasFijas = [],
+  posicionesNoAplicables = []
 } = {}) => {
   if (!tieneAsignacionesUtiles(bloqueReferencia) || !Number.isInteger(indiceReferencia)) {
     return null;
@@ -150,6 +164,7 @@ export const derivarAsignacionBaseDesdeBloque = ({
     distribucionBase: bloqueReferencia,
     filas,
     filasFijas,
+    posicionesNoAplicables,
     indice: -indiceReferencia
   });
 };
@@ -176,6 +191,7 @@ export const regenerarRotacion3DiasDesdePrimerBloque = ({
   periodos,
   filas,
   filasFijas = [],
+  posicionesNoAplicables = [],
   estrategia
 } = {}) => {
   const rotacion = rotacion3Dias && typeof rotacion3Dias === "object"
@@ -195,7 +211,8 @@ export const regenerarRotacion3DiasDesdePrimerBloque = ({
     bloqueReferencia: bloqueReferencia.bloque,
     indiceReferencia: bloqueReferencia.periodo.indice,
     filas,
-    filasFijas
+    filasFijas,
+    posicionesNoAplicables
   });
   const bloques = Object.fromEntries(
     periodosValidos.map((periodo) => [
@@ -206,6 +223,7 @@ export const regenerarRotacion3DiasDesdePrimerBloque = ({
             distribucionBase: asignacionBase,
             filas,
             filasFijas,
+            posicionesNoAplicables,
             indice: periodo.indice
           })
     ])
@@ -231,6 +249,7 @@ export const prepararRotacion3DiasParaGenerar = ({
   periodos,
   filas,
   filasFijas = [],
+  posicionesNoAplicables = [],
   estrategia
 } = {}) => {
   const rotacion = rotacion3Dias && typeof rotacion3Dias === "object"
@@ -251,7 +270,8 @@ export const prepararRotacion3DiasParaGenerar = ({
       bloqueReferencia: bloqueReferencia.bloque,
       indiceReferencia: bloqueReferencia.periodo.indice,
       filas,
-      filasFijas
+      filasFijas,
+      posicionesNoAplicables
     });
   }
 
@@ -272,7 +292,8 @@ export const prepararRotacion3DiasParaGenerar = ({
       rotacion3Dias: preparada,
       periodos,
       filas,
-      filasFijas
+      filasFijas,
+      posicionesNoAplicables
     })
   };
 };
@@ -281,7 +302,8 @@ export const generarBloquesFaltantes = ({
   rotacion3Dias,
   periodos,
   filas,
-  filasFijas = []
+  filasFijas = [],
+  posicionesNoAplicables = []
 } = {}) => {
   const rotacion = rotacion3Dias && typeof rotacion3Dias === "object"
     ? rotacion3Dias
@@ -302,6 +324,7 @@ export const generarBloquesFaltantes = ({
       distribucionBase: rotacion.asignacionBase,
       filas,
       filasFijas,
+      posicionesNoAplicables,
       indice: periodo.indice
     });
   });
@@ -364,13 +387,21 @@ export const generarRotacionMensual = ({
   filas,
   semanas,
   filaFija,
-  personal
+  personal,
+  posicionesNoAplicables = []
 }) => {
   const semana1 = planilla?.semana1 || {};
-  const filasRotables = filas.filter((fila) => fila !== filaFija);
+  const excluidas = new Set(
+    Array.isArray(posicionesNoAplicables) ? posicionesNoAplicables : []
+  );
+  const filasRotables = filas.filter(
+    (fila) => fila !== filaFija && !excluidas.has(fila)
+  );
   const baseRotable = filasRotables.map((fila) => semana1[fila] || "");
   const tieneAsignacionFija = Object.prototype.hasOwnProperty.call(semana1, filaFija);
-  const referenciaFija = tieneAsignacionFija ? semana1[filaFija] : "";
+  const referenciaFija = tieneAsignacionFija && !excluidas.has(filaFija)
+    ? semana1[filaFija]
+    : "";
   const personaFija = resolverPersonaDesdeReferencia(referenciaFija, personal);
 
   const correspondeAFija = (referencia) => {
@@ -386,7 +417,7 @@ export const generarRotacionMensual = ({
 
   semanas.slice(1).forEach((semana, indiceSemana) => {
     const referenciasRotadas = rotarValores(baseRotable, indiceSemana + 1);
-    const semanaGenerada = {};
+    const semanaGenerada = Object.fromEntries(filas.map((fila) => [fila, ""]));
 
     filasRotables.forEach((fila, indiceFila) => {
       const referencia = referenciasRotadas[indiceFila];
@@ -396,6 +427,9 @@ export const generarRotacionMensual = ({
     });
 
     semanaGenerada[filaFija] = clonarAsignacion(referenciaFija);
+    excluidas.forEach((fila) => {
+      semanaGenerada[fila] = "";
+    });
     nuevaPlanilla[semana.clave] = semanaGenerada;
   });
 

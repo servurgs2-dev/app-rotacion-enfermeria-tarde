@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { configuracionSectores } from "../../data/sectores";
 import {
   estaDeLicencia,
@@ -20,8 +20,7 @@ import {
   generarRotacionMensual,
   obtenerPrimerBloqueReferencia,
   prepararRotacion3DiasParaGenerar,
-  regenerarRotacion3DiasDesdePrimerBloque,
-  tieneAsignacionesUtiles
+  regenerarRotacion3DiasDesdePrimerBloque
 } from "../../utils/rotacionPlanilla.js";
 import {
   evaluarPreparacionRotacion3Dias
@@ -38,6 +37,14 @@ import {
   validarPosicionesNoAplicables
 } from "../../utils/generacionFlexiblePlanilla.js";
 import SelectorPosicionesNoAplicables from "./SelectorPosicionesNoAplicables.jsx";
+import PanelIntercambioPlanilla from "./PanelIntercambioPlanilla.jsx";
+import {
+  aplicarIntercambioPlanilla,
+  debeSincronizarAsignacionBase,
+  obtenerDistribucionPeriodo,
+  obtenerOpcionesOcupadas,
+  validarIntercambioPlanilla
+} from "../../utils/intercambioPlanilla.js";
 
 function PlanillaMensual({
   personal,
@@ -47,7 +54,8 @@ function PlanillaMensual({
   licencias,
   mesActivo,
   turnoId,
-  soloLectura = false
+  soloLectura = false,
+  versionHistoricaActiva = false
 }) {
   const personalFiltrado = personal.filter((p) => p.categoria === tipo);
   const idsDuplicados = obtenerIdsPersonalDuplicados(personal);
@@ -78,6 +86,15 @@ function PlanillaMensual({
   const [preparacionFlexible, setPreparacionFlexible] = useState(null);
   const [posicionesSeleccionadas, setPosicionesSeleccionadas] = useState([]);
   const [errorSeleccion, setErrorSeleccion] = useState("");
+  const [intercambio, setIntercambio] = useState(null);
+  const claveContextoIntercambio = [
+    turnoId,
+    mesActivo,
+    tipo,
+    estrategia.tipo,
+    soloLectura ? "lectura" : "edicion",
+    versionHistoricaActiva ? "historica" : "actual"
+  ].join("|");
 
   const filas = [];
   let tIndex = 0;
@@ -89,6 +106,11 @@ function PlanillaMensual({
       tIndex += 1;
     }
   });
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setIntercambio(null), 0);
+    return () => clearTimeout(timeout);
+  }, [claveContextoIntercambio]);
 
   const obtenerContextoBaseEnfermeros = () => {
     if (!usaRotacionTresDias) {
@@ -334,8 +356,10 @@ function PlanillaMensual({
         const rotacionActual = prev?.rotacion3Dias || {};
         const bloquesActuales = rotacionActual.bloques || {};
         const bloqueActual = bloquesActuales[periodo] || {};
-        const esBloqueBase = periodo === rotacionActual.fechaBase;
-        const tieneBase = tieneAsignacionesUtiles(rotacionActual.asignacionBase);
+        const sincronizaAsignacionBase = debeSincronizarAsignacionBase({
+          rotacion3Dias: rotacionActual,
+          periodoClave: periodo
+        });
 
         return {
           ...prev,
@@ -353,7 +377,7 @@ function PlanillaMensual({
                 [sector]: valor
               }
             },
-            ...(esBloqueBase && tieneBase
+            ...(sincronizaAsignacionBase
               ? {
                   asignacionBase: {
                     ...(rotacionActual.asignacionBase || {}),
@@ -416,6 +440,117 @@ function PlanillaMensual({
   const obtenerEtiquetaPeriodo = (periodo) => usaRotacionTresDias
     ? periodo.etiqueta
     : `${periodo.desde.getDate()}/${periodo.desde.getMonth() + 1} - ${periodo.hasta.getDate()}/${periodo.hasta.getMonth() + 1}`;
+
+  const periodosIntercambiables = periodos.flatMap((periodo, indice) =>
+    obtenerDistribucionPeriodo({
+      planilla,
+      periodoClave: periodo.clave,
+      usaRotacionTresDias
+    })
+      ? [{
+          clave: periodo.clave,
+          etiqueta: usaRotacionTresDias
+            ? obtenerEtiquetaPeriodo(periodo)
+            : `Semana ${indice + 1}`
+        }]
+      : []
+  );
+
+  const opcionesIntercambio = intercambio
+    ? obtenerOpcionesOcupadas({
+        planilla,
+        periodoClave: intercambio.periodoClave,
+        filas,
+        personal,
+        categoria: tipo,
+        usaRotacionTresDias
+      })
+    : [];
+
+  const validacionIntercambio = intercambio?.filaOrigen && intercambio?.filaDestino
+    ? validarIntercambioPlanilla({
+        planilla,
+        periodoClave: intercambio.periodoClave,
+        filaOrigen: intercambio.filaOrigen,
+        filaDestino: intercambio.filaDestino,
+        filas,
+        personal: personalFiltrado,
+        categoria: tipo,
+        usaRotacionTresDias,
+        personaIdOrigenEsperada: intercambio.personaIdOrigenEsperada,
+        personaIdDestinoEsperada: intercambio.personaIdDestinoEsperada
+      })
+    : null;
+
+  const abrirIntercambio = () => {
+    if (soloLectura || versionHistoricaActiva) return;
+    const primerPeriodo = periodosIntercambiables[0];
+    if (!primerPeriodo) {
+      alert("No hay períodos existentes para intercambiar.");
+      return;
+    }
+    setIntercambio({
+      contextoClave: claveContextoIntercambio,
+      periodoClave: primerPeriodo.clave,
+      filaOrigen: "",
+      filaDestino: "",
+      personaIdOrigenEsperada: "",
+      personaIdDestinoEsperada: "",
+      error: ""
+    });
+  };
+
+  const confirmarIntercambio = () => {
+    if (
+      !intercambio ||
+      intercambio.contextoClave !== claveContextoIntercambio ||
+      soloLectura ||
+      versionHistoricaActiva
+    ) {
+      setIntercambio((actual) => actual
+        ? {
+            ...actual,
+            error: versionHistoricaActiva
+              ? "No se puede intercambiar mientras estás viendo una versión histórica."
+              : "No se puede intercambiar en modo solo lectura."
+          }
+        : actual);
+      return;
+    }
+    const validacion = validarIntercambioPlanilla({
+      planilla,
+      periodoClave: intercambio.periodoClave,
+      filaOrigen: intercambio.filaOrigen,
+      filaDestino: intercambio.filaDestino,
+      filas,
+      personal,
+      categoria: tipo,
+      usaRotacionTresDias,
+      personaIdOrigenEsperada: intercambio.personaIdOrigenEsperada,
+      personaIdDestinoEsperada: intercambio.personaIdDestinoEsperada
+    });
+    if (!validacion.ok) {
+      setIntercambio((actual) => ({ ...actual, error: validacion.mensaje }));
+      return;
+    }
+
+    setPlanilla((prev) => {
+      const resultado = aplicarIntercambioPlanilla({
+        planilla: prev,
+        periodoClave: intercambio.periodoClave,
+        filaOrigen: intercambio.filaOrigen,
+        filaDestino: intercambio.filaDestino,
+        filas,
+        personal,
+        categoria: tipo,
+        usaRotacionTresDias,
+        personaIdOrigenEsperada: intercambio.personaIdOrigenEsperada,
+        personaIdDestinoEsperada: intercambio.personaIdDestinoEsperada
+      });
+      return resultado.ok ? resultado.planilla : prev;
+    });
+    setIntercambio(null);
+  };
 
   return (
     <div className="space-y-4">
@@ -574,6 +709,17 @@ function PlanillaMensual({
       >
         🔄 Generar rotación automática
       </button>
+      <button
+        type="button"
+        disabled={soloLectura || versionHistoricaActiva}
+        onClick={abrirIntercambio}
+        title={versionHistoricaActiva
+          ? "No se puede intercambiar mientras estás viendo una versión histórica."
+          : undefined}
+        className="ml-2 rounded-xl border border-blue-600 px-4 py-2 text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
+      >
+        ⇄ Intercambiar personas
+      </button>
       {evaluacionGeneracion.debeBloquearGeneracion && (
         <p className="text-sm text-amber-700">
           Para generar este mes primero debés usar ‘Continuar desde mes anterior’.
@@ -603,6 +749,65 @@ function PlanillaMensual({
             setErrorSeleccion("");
           }}
           onConfirmar={confirmarGeneracionFlexible}
+        />
+      )}
+      {intercambio?.contextoClave === claveContextoIntercambio && (
+        <PanelIntercambioPlanilla
+          periodos={periodosIntercambiables}
+          periodoClave={intercambio.periodoClave}
+          filaOrigen={intercambio.filaOrigen}
+          filaDestino={intercambio.filaDestino}
+          opciones={opcionesIntercambio}
+          resumen={validacionIntercambio?.ok
+            ? {
+                ...validacionIntercambio.resumen,
+                periodoEtiqueta: periodosIntercambiables.find(
+                  (periodo) => periodo.clave === intercambio.periodoClave
+                )?.etiqueta || intercambio.periodoClave
+              }
+            : null}
+          error={intercambio.error || (
+            validacionIntercambio && !validacionIntercambio.ok
+              ? validacionIntercambio.mensaje
+              : ""
+          )}
+          onCambiarPeriodo={(periodoClave) => {
+            setIntercambio((actual) => ({
+              ...actual,
+              periodoClave,
+              filaOrigen: "",
+              filaDestino: "",
+              personaIdOrigenEsperada: "",
+              personaIdDestinoEsperada: "",
+              error: ""
+            }));
+          }}
+          onCambiarOrigen={(filaOrigen) => {
+            const opcion = opcionesIntercambio.find(
+              (item) => item.fila === filaOrigen
+            );
+            setIntercambio((actual) => ({
+              ...actual,
+              filaOrigen,
+              filaDestino: "",
+              personaIdOrigenEsperada: opcion?.personaId || "",
+              personaIdDestinoEsperada: "",
+              error: ""
+            }));
+          }}
+          onCambiarDestino={(filaDestino) => {
+            const opcion = opcionesIntercambio.find(
+              (item) => item.fila === filaDestino
+            );
+            setIntercambio((actual) => ({
+              ...actual,
+              filaDestino,
+              personaIdDestinoEsperada: opcion?.personaId || "",
+              error: ""
+            }));
+          }}
+          onCancelar={() => setIntercambio(null)}
+          onConfirmar={confirmarIntercambio}
         />
       )}
     </div>

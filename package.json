@@ -16,6 +16,7 @@
     "test:etapa24d1": "node tests/etapa24d1-interfaz-historial.test.mjs",
     "test:etapa24d2": "node tests/etapa24d2-restauracion-historial.test.mjs",
     "test:etapa25": "node tests/etapa25-generacion-flexible.test.mjs",
+    "test:etapa26": "node tests/etapa26-intercambio-seguro.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

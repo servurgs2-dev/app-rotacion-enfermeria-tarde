@@ -8,25 +8,17 @@ import Certificaciones from "./components/certificaciones/Certificaciones";
 import Estadisticas from "./components/estadisticas/Estadisticas";
 import HistorialCambios from "./components/historial/HistorialCambios";
 import PanelConflictoEdicion from "./components/concurrencia/PanelConflictoEdicion";
+import PanelPrepararMes from "./components/mes/PanelPrepararMes";
 import SelectorTurno from "./components/turnos/SelectorTurno";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
 import { generarAlertasHorarios } from "./utils/alertasHorarios";
 import {
   TURNOS,
-  obtenerConfiguracionTurno,
-  obtenerEstrategiaRotacionPlanilla
+  obtenerConfiguracionTurno
 } from "./config/turnos";
-import { configuracionSectores } from "./data/sectores";
-import { obtenerBloquesQueIntersectanMes } from "./utils/periodosRotacionPlanilla.js";
 import {
-  continuarRotacion3DiasEntreMeses,
-  esSolicitudContinuidadVigente,
-  tieneAsignacionBaseRotacion3Dias
-} from "./utils/continuidadRotacionPlanilla.js";
-import {
-  crearEstadoMensualVacio,
-  crearPlanillaMensualVacia
+  crearEstadoMensualVacio
 } from "./utils/estadoMensual";
 import {
   cargarEstadoTurnoMesConRevision,
@@ -48,7 +40,6 @@ import {
 } from "./utils/validacionPersonal.js";
 import {
   clasificarResultadoCarga,
-  continuarPlanillasDesdeMesAnterior,
   esCargaVigente,
   hayCambiosLocalesPendientes
 } from "./utils/proteccionDatos.js";
@@ -64,7 +55,13 @@ import {
   obtenerMensajeSoloLectura,
   puedeEditarTurno
 } from "./utils/permisos.js";
-import { quitarCierresDeEstadoCopiado } from "./utils/cierreTurno.js";
+import {
+  analizarPreparacionMesNuevo,
+  clasificarEstadoMesDestino,
+  construirEstadoMesNuevo,
+  formatearContenidoMes,
+  validarContextoPreparacion
+} from "./utils/preparacionMesNuevo.js";
 import {
   aplicarConflictoConcurrencia,
   aplicarErrorConcurrencia,
@@ -96,21 +93,6 @@ import {
 } from "./utils/restauracionHistorial.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
-
-const obtenerFilasRotacion = ({ sectoresFijos, turnantes, posicionesTurnantes }) => {
-  const filas = [];
-  let indiceTurnante = 0;
-
-  sectoresFijos.forEach((sector, indice) => {
-    filas.push(sector);
-    if (posicionesTurnantes.includes(indice)) {
-      filas.push(turnantes[indiceTurnante]);
-      indiceTurnante += 1;
-    }
-  });
-
-  return filas;
-};
 
 const ControlSesion = ({ etiqueta, cerrando, error, onCerrar }) => (
   <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
@@ -171,6 +153,7 @@ const [intentoCarga, setIntentoCarga] = useState(0);
 const [cerrandoSesion, setCerrandoSesion] = useState(false);
 const [errorCierreSesion, setErrorCierreSesion] = useState("");
 const [historialAbierto, setHistorialAbierto] = useState(false);
+const [preparacionMes, setPreparacionMes] = useState(null);
 const [restauracionHistorialEnCurso, setRestauracionHistorialEnCurso] = useState(null);
 const restauracionHistorialEnCursoRef = useRef(null);
 const [clavesBloqueadasTrasRestauracion, setClavesBloqueadasTrasRestauracion] =
@@ -1193,54 +1176,6 @@ useEffect(() => {
   });
 }, [metadatosPorClave]);
 
-const copiarMesAnterior = async () => {
-  const [year, month] = mesActivo.split("-").map(Number);
-
-  const fechaAnterior = new Date(year, month - 2);
-  const keyAnterior = `${fechaAnterior.getFullYear()}-${String(
-    fechaAnterior.getMonth() + 1
-  ).padStart(2, "0")}`;
-
-  // 👇 traer desde Supabase SI o SI
-  let resultado;
-
-  try {
-    resultado = await cargarEstadoTurnoMesConRevision(turnoActivo, keyAnterior);
-  } catch {
-    alert("No hay datos del mes anterior");
-    return;
-  }
-
-  if (!resultado.existe) {
-    alert("No hay datos del mes anterior");
-    return;
-  }
-
-  let validacion;
-  try {
-    validacion = await validarPersonasDisponiblesEnOtrosTurnos(
-      resultado.estado.personal || []
-    );
-  } catch {
-    alert("No se pudo verificar en qué turno está el personal. Intentá nuevamente.");
-    return;
-  }
-
-  if (validacion.cancelada) return;
-
-  if (validacion.existeEnOtroTurno) {
-    alert(
-      `${validacion.personaValidada.nombre} ya pertenece al Turno ${validacion.turnoNombre} en el mes actual.`
-    );
-    return;
-  }
-
-  setEstadoPorTurnoMes(prev => {
-    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
-    return { ...prev, [claveActiva]: quitarCierresDeEstadoCopiado(resultado.estado) };
-  });
-};
-
 const hoy = new Date();
 
 const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
@@ -1257,11 +1192,13 @@ const seleccionarTurno = (turnoId) => {
   setDataPDFEnf({ asignaciones: [], libres: [] });
   setDataPDFLic({ asignaciones: [], libres: [] });
   setCargando(true);
+  setPreparacionMes(null);
   cargandoRef.current = true;
   setTurnoActivo(turnoId);
 };
 
 const cambiarTurno = () => {
+  setPreparacionMes(null);
   cargaActualRef.current = {
     id: cargaActualRef.current.id + 1,
     clave: null
@@ -1440,6 +1377,232 @@ const textoEstadoGuardado = {
   error: "Error al guardar",
   conflict: "Conflicto de edición"
 }[estadoGuardadoVisible];
+const destinoActivoPreparacion = clasificarEstadoMesDestino({
+  existeRemoto: metadatosActivos?.existeRemoto === true,
+  estado: mesData
+});
+const contenidoDestinoPresentable = formatearContenidoMes(
+  destinoActivoPreparacion.contenido
+);
+
+const obtenerMesAnterior = (mes) => {
+  const [anio, numeroMes] = mes.split("-").map(Number);
+  const fechaAnterior = new Date(anio, numeroMes - 2);
+  return `${fechaAnterior.getFullYear()}-${String(
+    fechaAnterior.getMonth() + 1
+  ).padStart(2, "0")}`;
+};
+
+const hayPendientesEnClave = (clave) => {
+  const estadoPrevio = estadoPorTurnoMesRef.current[clave];
+  return hayCambiosLocalesPendientes({
+    clave,
+    estadoPrevio,
+    referenciaConocida: referenciasEstadoRef.current.get(clave),
+    cola: colaGuardadoRef.current,
+    debounces: debouncesGuardadoRef.current,
+    erroresGuardado: mesesConErrorGuardadoRef.current,
+    claveGuardadoEnCurso: claveGuardadoEnCursoRef.current
+  });
+};
+
+const iniciarPreparacionMes = async () => {
+  const mesDestino = mesActivo;
+  const mesOrigen = obtenerMesAnterior(mesDestino);
+  const turnoId = turnoActivo;
+  const claveDestino = claveActiva;
+  const metadatosDestino = metadatosPorClaveRef.current.get(claveDestino);
+  const revisionDestino = String(metadatosDestino?.revisionConfirmada ?? "");
+  const contexto = {
+    turnoId,
+    mesOrigen,
+    mesDestino,
+    revisionDestino,
+    cargaId: cargaActualRef.current.id
+  };
+  const contextoSigueVigente = () =>
+    cargaActualRef.current.id === contexto.cargaId &&
+    cargaActualRef.current.clave === claveDestino &&
+    String(
+      metadatosPorClaveRef.current.get(claveDestino)?.revisionConfirmada ?? ""
+    ) === revisionDestino;
+  if (
+    mesDestino !== mesSiguiente ||
+    !puedeEditarActivo ||
+    modoSoloLecturaEfectiva ||
+    cargandoRef.current ||
+    erroresCargaRef.current.has(claveDestino) ||
+    metadatosDestino?.conflicto ||
+    clavesBloqueadasTrasRestauracionRef.current.has(claveDestino) ||
+    !revisionDestino ||
+    hayPendientesEnClave(claveDestino)
+  ) {
+    alert("El mes destino debe estar cargado, estable y sin guardados pendientes.");
+    return;
+  }
+  const claveOrigen = crearClaveTurnoMes(turnoId, mesOrigen);
+  if (hayPendientesEnClave(claveOrigen)) {
+    alert("El mes origen todavía tiene cambios locales pendientes de guardar.");
+    return;
+  }
+  const destinoActual =
+    estadoPorTurnoMesRef.current[claveDestino] || crearEstadoMensualVacio();
+  const clasificacion = clasificarEstadoMesDestino({
+    existeRemoto: metadatosDestino?.existeRemoto === true,
+    estado: destinoActual
+  });
+  if (!clasificacion.permitido) {
+    alert(
+      `El mes destino ya contiene información: ${clasificacion.contenido.join(", ")}.`
+    );
+    return;
+  }
+
+  setPreparacionMes({ estado: "cargando", contexto, error: "" });
+  let origen;
+  try {
+    origen = await cargarEstadoTurnoMesConRevision(turnoId, mesOrigen);
+  } catch {
+    if (!contextoSigueVigente()) return;
+    setPreparacionMes({
+      estado: "error",
+      contexto,
+      error: "No se pudo cargar el mes origen. Intentá nuevamente."
+    });
+    return;
+  }
+  if (!contextoSigueVigente()) return;
+  if (hayPendientesEnClave(claveOrigen)) {
+    setPreparacionMes({
+      estado: "error",
+      contexto,
+      error: "El mes origen recibió cambios mientras se preparaba la vista previa."
+    });
+    return;
+  }
+  const metadatosActuales = metadatosPorClaveRef.current.get(claveDestino);
+  const contextoActual = {
+    turnoId: turnoActivo,
+    mesOrigen: obtenerMesAnterior(mesActivo),
+    mesDestino: mesActivo,
+    revisionDestino: String(metadatosActuales?.revisionConfirmada ?? "")
+  };
+  if (!validarContextoPreparacion(contexto, contextoActual)) {
+    setPreparacionMes(null);
+    return;
+  }
+  if (!origen?.existe || !origen.estado) {
+    setPreparacionMes({
+      estado: "error",
+      contexto,
+      error: "No existe información en el mes origen."
+    });
+    return;
+  }
+
+  let exclusividad;
+  try {
+    exclusividad = await validarPersonasDisponiblesEnOtrosTurnos(
+      origen.estado.personal || []
+    );
+  } catch {
+    if (!contextoSigueVigente()) return;
+    setPreparacionMes({
+      estado: "error",
+      contexto,
+      error: "No se pudo validar la pertenencia del Personal."
+    });
+    return;
+  }
+  if (!contextoSigueVigente()) return;
+  if (exclusividad.cancelada) {
+    setPreparacionMes(null);
+    return;
+  }
+  if (exclusividad.existeEnOtroTurno) {
+    setPreparacionMes({
+      estado: "error",
+      contexto,
+      error: `${exclusividad.personaValidada.nombre} ya pertenece al Turno ${exclusividad.turnoNombre}.`
+    });
+    return;
+  }
+
+  const analisis = analizarPreparacionMesNuevo({
+    turnoId,
+    mesOrigen,
+    mesDestino,
+    estadoOrigen: origen.estado,
+    estadoDestino: destinoActual,
+    existeDestinoRemoto: metadatosDestino?.existeRemoto === true,
+    revisionDestino
+  });
+  if (!analisis.ok) {
+    setPreparacionMes({ estado: "error", contexto, error: analisis.mensaje });
+    return;
+  }
+  setPreparacionMes({
+    estado: "lista",
+    contexto,
+    analisis: {
+      ...analisis,
+      turnoNombre: TURNOS[turnoId]?.nombre || turnoId
+    },
+    posicionesSeleccionadas: [...analisis.enfermeros.analisis.filasVacias],
+    error: ""
+  });
+};
+
+const confirmarPreparacionMes = () => {
+  if (preparacionMes?.estado !== "lista") return;
+  const metadatosDestino = metadatosPorClaveRef.current.get(claveActiva);
+  const contextoActual = {
+    turnoId: turnoActivo,
+    mesOrigen: obtenerMesAnterior(mesActivo),
+    mesDestino: mesActivo,
+    revisionDestino: String(metadatosDestino?.revisionConfirmada ?? "")
+  };
+  const estadoDestino =
+    estadoPorTurnoMesRef.current[claveActiva] || crearEstadoMensualVacio();
+  const destinoActual = clasificarEstadoMesDestino({
+    existeRemoto: metadatosDestino?.existeRemoto === true,
+    estado: estadoDestino
+  });
+  if (
+    !validarContextoPreparacion(preparacionMes.contexto, contextoActual) ||
+    !destinoActual.permitido ||
+    !puedeEditarActivo ||
+    modoSoloLecturaEfectiva ||
+    metadatosDestino?.conflicto ||
+    hayPendientesEnClave(claveActiva)
+  ) {
+    setPreparacionMes((actual) => ({
+      ...actual,
+      error: "El estado del mes cambió mientras preparabas la continuidad. Volvé a revisar la vista previa."
+    }));
+    return;
+  }
+  const construccion = construirEstadoMesNuevo({
+    analisis: preparacionMes.analisis,
+    posicionesNoAplicables: preparacionMes.posicionesSeleccionadas
+  });
+  if (!construccion.ok) {
+    setPreparacionMes((actual) => ({ ...actual, error: construccion.mensaje }));
+    return;
+  }
+
+  setEstadoPorTurnoMes((prev) => {
+    const actual = prev[claveActiva] || crearEstadoMensualVacio();
+    const clasificacion = clasificarEstadoMesDestino({
+      existeRemoto: metadatosDestino?.existeRemoto === true,
+      estado: actual
+    });
+    if (!clasificacion.permitido) return prev;
+    return { ...prev, [claveActiva]: construccion.estado };
+  });
+  setPreparacionMes(null);
+  setEstadoGuardado("pending");
+};
 
 return (
   <div className="min-h-screen bg-slate-100 p-4 md:p-6">
@@ -1481,6 +1644,7 @@ return (
   }
 
   const nuevaClave = crearClaveTurnoMes(turnoActivo, nuevoMes);
+  setPreparacionMes(null);
   cargaActualRef.current = {
     id: cargaActualRef.current.id + 1,
     clave: nuevaClave
@@ -1535,6 +1699,100 @@ return (
         />
       )}
 
+      {mesActivo === mesSiguiente && (
+        <div className="mb-4 rounded-xl border border-purple-200 bg-white p-4 shadow-sm">
+          <h2 className="text-base font-semibold text-slate-900">Gestión del mes</h2>
+          {destinoActivoPreparacion.permitido &&
+          puedeEditarActivo &&
+          !modoSoloLecturaEfectiva &&
+          !cargando &&
+          !metadatosActivos?.conflicto &&
+          !clavesBloqueadasTrasRestauracion.has(claveActiva) &&
+          !hayPendientesEnClave(claveActiva) && (
+            <button
+              type="button"
+              onClick={iniciarPreparacionMes}
+              disabled={
+                cargando ||
+                Boolean(metadatosActivos?.conflicto) ||
+                clavesBloqueadasTrasRestauracion.has(claveActiva)
+              }
+              className="mt-3 flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm text-white shadow-sm transition hover:bg-purple-700 disabled:bg-slate-300"
+            >
+              Preparar mes siguiente
+            </button>
+          )}
+          {!destinoActivoPreparacion.permitido && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <p className="font-medium">
+                Este mes ya fue iniciado y no puede prepararse nuevamente.
+              </p>
+              {contenidoDestinoPresentable.length > 0 && (
+                <div className="mt-3">
+                  <p className="font-medium">Información encontrada:</p>
+                  <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {contenidoDestinoPresentable.map((etiqueta) => (
+                      <li
+                        key={etiqueta}
+                        className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2"
+                      >
+                        • {etiqueta}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+          {destinoActivoPreparacion.permitido &&
+            (cargando ||
+              metadatosActivos?.conflicto ||
+              clavesBloqueadasTrasRestauracion.has(claveActiva) ||
+              hayPendientesEnClave(claveActiva)) && (
+              <p className="mt-3 text-sm text-slate-600">
+                La preparación estará disponible cuando finalicen las operaciones pendientes.
+              </p>
+            )}
+
+          {preparacionMes?.estado === "cargando" && (
+            <p aria-live="polite" className="mt-3 text-sm text-slate-600">
+              Preparando vista previa…
+            </p>
+          )}
+          {preparacionMes?.estado === "error" && (
+            <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
+              <p role="alert" className="text-sm text-rose-700">{preparacionMes.error}</p>
+              <button type="button" onClick={() => setPreparacionMes(null)} className="mt-2 text-sm underline">
+                Cerrar
+              </button>
+            </div>
+          )}
+          {preparacionMes?.estado === "lista" &&
+            validarContextoPreparacion(preparacionMes.contexto, {
+              turnoId: turnoActivo,
+              mesOrigen: obtenerMesAnterior(mesActivo),
+              mesDestino: mesActivo,
+              revisionDestino: String(metadatosActivos?.revisionConfirmada ?? "")
+            }) && (
+              <PanelPrepararMes
+                analisis={preparacionMes.analisis}
+                posicionesSeleccionadas={preparacionMes.posicionesSeleccionadas}
+                error={preparacionMes.error}
+                onAlternarPosicion={(fila) => {
+                  setPreparacionMes((actual) => {
+                    const seleccionadas = actual.posicionesSeleccionadas.includes(fila)
+                      ? actual.posicionesSeleccionadas.filter((item) => item !== fila)
+                      : [...actual.posicionesSeleccionadas, fila];
+                    return { ...actual, posicionesSeleccionadas: seleccionadas, error: "" };
+                  });
+                }}
+                onCancelar={() => setPreparacionMes(null)}
+                onConfirmar={confirmarPreparacionMes}
+              />
+            )}
+        </div>
+      )}
+
       <Seccion
         titulo="👥 Personal"
         className="order-3"
@@ -1563,13 +1821,6 @@ return (
             });
           }}
         />
-        <button
-  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
-  onClick={copiarMesAnterior}
-  disabled={!puedeEditarActivo}
->
-  🔁 <span>Copiar mes anterior</span>
-</button>
       </Seccion>
 
       
@@ -1646,167 +1897,6 @@ return (
   )}
 
 
-
-      {puedeEditarActivo && mesActivo === mesSiguiente && (
-        <div className="mb-4">
-          <button
-  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
-            onClick={async () => {
-              const turnoSolicitud = turnoActivo;
-              const mesDestino = mesActivo;
-              const claveSolicitud = claveActiva;
-              const [year, month] = mesDestino.split("-").map(Number);
-
-              const fechaAnterior = new Date(year, month - 2);
-              const keyAnterior = `${fechaAnterior.getFullYear()}-${String(
-                fechaAnterior.getMonth() + 1
-              ).padStart(2, "0")}`;
-
-              let resultado;
-
-              try {
-                resultado = await cargarEstadoTurnoMesConRevision(
-                  turnoSolicitud,
-                  keyAnterior
-                );
-              } catch {
-                alert("No hay planilla anterior");
-                return;
-              }
-
-              if (!esSolicitudContinuidadVigente(
-                claveSolicitud,
-                cargaActualRef.current.clave
-              )) return;
-
-              const estadoAnterior = resultado.existe ? resultado.estado : null;
-              if (!estadoAnterior) {
-                alert("No hay planilla anterior");
-                return;
-              }
-
-              const estrategiaEnfermeros = obtenerEstrategiaRotacionPlanilla({
-                turnoId: turnoSolicitud,
-                tipo: "enfermero",
-                mesActivo: mesDestino
-              });
-              const semanasAnteriores = obtenerSemanasDelMes(keyAnterior);
-              const ultimaSemanaAnterior =
-                semanasAnteriores.at(-1)?.clave || "semana5";
-              const baseLicenciadaCandidata =
-                estadoAnterior?.planillas.licenciados[ultimaSemanaAnterior] ||
-                estadoAnterior?.planillas.licenciados.semana5;
-              const baseLic = baseLicenciadaCandidata &&
-                Object.keys(baseLicenciadaCandidata).length > 0
-                ? baseLicenciadaCandidata
-                : null;
-              const coberturaLic = baseLic
-                ? estadoAnterior?.planillas.licenciados.coberturaLibreSM?.[
-                    ultimaSemanaAnterior
-                  ]
-                : null;
-
-              if (estrategiaEnfermeros.tipo === "cada_3_dias") {
-                const rotacionAnterior =
-                  estadoAnterior.planillas?.enfermeros?.rotacion3Dias;
-                if (!tieneAsignacionBaseRotacion3Dias(rotacionAnterior)) {
-                  alert(
-                    "El mes anterior no tiene una asignación base válida para continuar la rotación de tres días."
-                  );
-                  return;
-                }
-
-                const periodosDestino = obtenerBloquesQueIntersectanMes({
-                  mesActivo: mesDestino,
-                  fechaBase: estrategiaEnfermeros.fechaBase,
-                  duracionDias: estrategiaEnfermeros.duracionDias
-                });
-                const filas = obtenerFilasRotacion(configuracionSectores.enfermero);
-
-                setEstadoPorTurnoMes((prev) => {
-                  if (
-                    !esSolicitudContinuidadVigente(
-                      claveSolicitud,
-                      cargaActualRef.current.clave
-                    ) ||
-                    !puedeEditarTurno(perfil, turnoSolicitud) ||
-                    erroresCargaRef.current.has(claveSolicitud)
-                  ) return prev;
-
-                  const actual = prev[claveSolicitud] || crearEstadoMensualVacio();
-                  const rotacionActual = actual.planillas?.enfermeros?.rotacion3Dias;
-                  const rotacionContinuada = continuarRotacion3DiasEntreMeses({
-                    rotacionAnterior,
-                    rotacionActual,
-                    periodosDestino,
-                    filas,
-                    filasFijas: ["SM"],
-                    estrategia: estrategiaEnfermeros
-                  });
-                  const estadoConLicenciados = continuarPlanillasDesdeMesAnterior(
-                    actual,
-                    {
-                      planillaVacia: crearPlanillaMensualVacia,
-                      baseLicenciados: baseLic,
-                      coberturaLicenciados: coberturaLic
-                    }
-                  );
-
-                  return {
-                    ...prev,
-                    [claveSolicitud]: {
-                      ...estadoConLicenciados,
-                      planillas: {
-                        ...estadoConLicenciados.planillas,
-                        enfermeros: {
-                          ...estadoConLicenciados.planillas.enfermeros,
-                          rotacion3Dias: rotacionContinuada
-                        }
-                      }
-                    }
-                  };
-                });
-                return;
-              }
-
-              const baseEnf =
-                estadoAnterior?.planillas.enfermeros[ultimaSemanaAnterior] ||
-                estadoAnterior?.planillas.enfermeros.semana5;
-              const coberturaEnf =
-                estadoAnterior?.planillas.enfermeros.coberturaLibreSM?.[ultimaSemanaAnterior];
-
-              if (!baseEnf && !baseLic) {
-                alert("No hay planilla anterior");
-                return;
-              }
-
-              setEstadoPorTurnoMes((prev) => {
-                if (
-                  !esSolicitudContinuidadVigente(
-                    claveSolicitud,
-                    cargaActualRef.current.clave
-                  ) ||
-                  !puedeEditarTurno(perfil, turnoSolicitud) ||
-                  erroresCargaRef.current.has(claveSolicitud)
-                ) return prev;
-                const actual = prev[claveSolicitud] || crearEstadoMensualVacio();
-                return {
-                  ...prev,
-                  [claveSolicitud]: continuarPlanillasDesdeMesAnterior(actual, {
-                    planillaVacia: crearPlanillaMensualVacia,
-                    baseEnfermeros: baseEnf,
-                    baseLicenciados: baseLic,
-                    coberturaEnfermeros: coberturaEnf,
-                    coberturaLicenciados: coberturaLic
-                  })
-                };
-              });
-            }}
-          >
-            ⚡ <span>Continuar desde mes anterior</span>
-          </button>
-        </div>
-      )}
 
       </Seccion>
 

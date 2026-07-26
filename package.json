@@ -17,6 +17,7 @@
     "test:etapa24d2": "node tests/etapa24d2-restauracion-historial.test.mjs",
     "test:etapa25": "node tests/etapa25-generacion-flexible.test.mjs",
     "test:etapa26": "node tests/etapa26-intercambio-seguro.test.mjs",
+    "test:etapa27": "node tests/etapa27-mes-nuevo-protegido.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

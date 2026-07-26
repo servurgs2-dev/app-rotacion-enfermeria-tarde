@@ -68,6 +68,7 @@ export const continuarRotacion3DiasEntreMeses = ({
   periodosDestino,
   filas,
   filasFijas = [],
+  posicionesNoAplicables = [],
   estrategia
 } = {}) => {
   if (!tieneAsignacionBaseRotacion3Dias(rotacionAnterior)) {
@@ -128,7 +129,8 @@ export const continuarRotacion3DiasEntreMeses = ({
     rotacion3Dias: baseContinuada,
     periodos,
     filas,
-    filasFijas
+    filasFijas,
+    posicionesNoAplicables
   });
 
   return {

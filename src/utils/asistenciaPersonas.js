@@ -20,7 +20,8 @@ export const obtenerPersonasPrevistas = (asignaciones) => [
 
 export const obtenerEstadoAsistencia = (registros, persona) => {
   const clave = obtenerClaveIdentidadPersona(persona);
-  const estado = clave && esObjeto(registros) ? registros[clave] : undefined;
+  const registro = clave && esObjeto(registros) ? registros[clave] : undefined;
+  const estado = esObjeto(registro) ? registro.estado : registro;
   return estado === ESTADOS_ASISTENCIA.PRESENTE || estado === ESTADOS_ASISTENCIA.AUSENTE
     ? estado
     : ESTADOS_ASISTENCIA.PENDIENTE;

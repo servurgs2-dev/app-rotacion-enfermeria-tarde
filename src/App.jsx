@@ -2116,6 +2116,9 @@ return (
     licencias={licenciasMes}
     certificaciones={certificacionesMes}
     calendario={mesData.calendario.enfermeros}
+    obtenerCalendarioActual={() =>
+      estadoPorTurnoMesRef.current[claveActiva]?.calendario?.enfermeros
+    }
     esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
      onDataReady={setDataPDFEnf}
     fecha={fecha}
@@ -2163,6 +2166,9 @@ return (
     licencias={licenciasMes}
     certificaciones={certificacionesMes}
     calendario={mesData.calendario.licenciados}
+    obtenerCalendarioActual={() =>
+      estadoPorTurnoMesRef.current[claveActiva]?.calendario?.licenciados
+    }
     esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
     onDataReady={setDataPDFLic}
     fecha={fecha}

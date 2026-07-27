@@ -7,6 +7,7 @@ import {
 import { licenciaCorrespondeAPersona } from "./licenciasPersonas.js";
 import { certificacionCorrespondeAPersona } from "./certificacionesPersonas.js";
 import { personasCompartenId } from "./extrasPersonas.js";
+import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
 
 const esObjetoPlano = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -147,6 +148,35 @@ const limpiarNoDisponiblesPorDia = (noDisponiblesPorDia, persona, personal) => {
   return huboCambios ? noDisponiblesLimpios : noDisponiblesPorDia;
 };
 
+const limpiarAsistenciaPorDia = (asistenciaPorDia, persona, personal) => {
+  if (!esObjetoPlano(asistenciaPorDia)) return asistenciaPorDia;
+  const clavePersona = obtenerClaveIdentidadPersona(persona);
+  let huboCambios = false;
+  const resultado = {};
+
+  Object.entries(asistenciaPorDia).forEach(([fecha, registros]) => {
+    if (!esObjetoPlano(registros)) {
+      resultado[fecha] = registros;
+      return;
+    }
+    const registrosLimpios = Object.fromEntries(
+      Object.entries(registros).filter(([clave, registro]) => {
+        const coincide =
+          clave === clavePersona ||
+          (
+            esObjetoPlano(registro) &&
+            referenciaCorrespondeAPersona(registro.persona, persona, personal)
+          );
+        if (coincide) huboCambios = true;
+        return !coincide;
+      })
+    );
+    if (Object.keys(registrosLimpios).length > 0) resultado[fecha] = registrosLimpios;
+  });
+
+  return huboCambios ? resultado : asistenciaPorDia;
+};
+
 export const limpiarPersonaDeCalendario = (calendario, persona, personal = []) => {
   if (!esObjetoPlano(calendario)) return calendario;
 
@@ -170,12 +200,18 @@ export const limpiarPersonaDeCalendario = (calendario, persona, personal = []) =
     persona,
     personal
   );
+  const asistenciaDia = limpiarAsistenciaPorDia(
+    calendario.asistenciaDia,
+    persona,
+    personal
+  );
 
   if (
     cambiosDia === calendario.cambiosDia &&
     cambiosParoDia === calendario.cambiosParoDia &&
     extras === calendario.extras &&
-    noDisponibles === calendario.noDisponibles
+    noDisponibles === calendario.noDisponibles &&
+    asistenciaDia === calendario.asistenciaDia
   ) {
     return calendario;
   }
@@ -185,7 +221,8 @@ export const limpiarPersonaDeCalendario = (calendario, persona, personal = []) =
     ...(cambiosDia !== calendario.cambiosDia ? { cambiosDia } : {}),
     ...(cambiosParoDia !== calendario.cambiosParoDia ? { cambiosParoDia } : {}),
     ...(extras !== calendario.extras ? { extras } : {}),
-    ...(noDisponibles !== calendario.noDisponibles ? { noDisponibles } : {})
+    ...(noDisponibles !== calendario.noDisponibles ? { noDisponibles } : {}),
+    ...(asistenciaDia !== calendario.asistenciaDia ? { asistenciaDia } : {})
   };
 };
 

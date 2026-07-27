@@ -67,6 +67,28 @@ const renombrarExtrasPorDia = (extrasPorDia, personaId, nombre) => {
   );
 };
 
+const renombrarAsistenciaPorDia = (asistenciaPorDia, personaId, nombre) => {
+  if (!esObjeto(asistenciaPorDia)) return asistenciaPorDia;
+  return Object.fromEntries(
+    Object.entries(asistenciaPorDia).map(([fecha, registros]) => [
+      fecha,
+      esObjeto(registros)
+        ? Object.fromEntries(
+            Object.entries(registros).map(([clave, registro]) => [
+              clave,
+              esObjeto(registro)
+                ? {
+                    ...registro,
+                    persona: renombrarReferencia(registro.persona, personaId, nombre)
+                  }
+                : registro
+            ])
+          )
+        : registros
+    ])
+  );
+};
+
 const renombrarCalendario = (calendario, personaId, nombre) => {
   if (!esObjeto(calendario)) return calendario;
   return Object.fromEntries(
@@ -87,6 +109,9 @@ const renombrarCalendario = (calendario, personaId, nombre) => {
             : {}),
           ...(Object.hasOwn(datos, "extras")
             ? { extras: renombrarExtrasPorDia(datos.extras, personaId, nombre) }
+            : {}),
+          ...(Object.hasOwn(datos, "asistenciaDia")
+            ? { asistenciaDia: renombrarAsistenciaPorDia(datos.asistenciaDia, personaId, nombre) }
             : {})
         }
       ];

@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { configuracionSectores } from "../../data/sectores";
-import { obtenerEstrategiaRotacionPlanilla } from "../../config/turnos.js";
+import {
+  obtenerConfiguracionTurno,
+  obtenerEstrategiaRotacionPlanilla
+} from "../../config/turnos.js";
 import {
   estaCertificado,
   estaDeLicencia,
@@ -34,12 +37,17 @@ import {
 } from "../../utils/validacionPersonal.js";
 import {
   ESTADOS_ASISTENCIA,
-  actualizarAsistenciaPersona,
-  limpiarAsistenciaFecha,
-  marcarPersonasPresentes,
   obtenerEstadoAsistencia,
   obtenerPersonasPrevistas
 } from "../../utils/asistenciaPersonas.js";
+import {
+  cambiarAsistenciaCalendario,
+  filtrarAsignacionesAusentes,
+  obtenerAusentesDelDia,
+  obtenerPersonasParaSinAsignar,
+  prepararCambioAsistencia,
+  quitarPersonasDeSinAsignar
+} from "../../utils/ausenciasCalendario.js";
 import {
   aplicarCoberturaLibreSaludMental,
   obtenerSectorSaludMental,
@@ -85,6 +93,7 @@ function CalendarioDiario({
   licencias,
   certificaciones,
   calendario,
+  obtenerCalendarioActual,
   setCalendario,
   esDiaParo,
   onDataReady,
@@ -121,6 +130,7 @@ const [nuevoNombre, setNuevoNombre] = useState("");
   const [seleccionResponsable, setSeleccionResponsable] = useState({ contexto: "", personaId: "" });
   const [errorResponsable, setErrorResponsable] = useState({ contexto: "", mensaje: "" });
   const [confirmacionRedistribucion, setConfirmacionRedistribucion] = useState(null);
+  const [errorAsistencia, setErrorAsistencia] = useState("");
   const prevDataRef = useRef(null);
   const altaExtraEnCursoRef = useRef(false);
 
@@ -204,6 +214,14 @@ const mensajeErrorResponsable = errorResponsable.contexto === contextoResponsabl
   : "";
 const licenciadosResponsables = obtenerResponsablesCierre(personal);
 const asistenciaFecha = asistenciaDia[keyDia] || {};
+const ausentesDelDia = obtenerAusentesDelDia({
+  registros: asistenciaFecha,
+  personal: [
+    ...personalFiltrado,
+    ...(Array.isArray(extras[keyDia]) ? extras[keyDia].filter(Boolean) : [])
+  ]
+});
+const configTurnoCalendario = obtenerConfiguracionTurno(turnoActivo);
 const cambiosActivos = esDiaParo ? cambiosParoDia : cambiosDia;
 const claveCambiosActivos = esDiaParo ? "cambiosParoDia" : "cambiosDia";
 const fechaMinima = `${mesActivo}-01`;
@@ -250,9 +268,11 @@ const esLibreReal = useCallback(
   [fecha]
 );
 
-const libres = useMemo(
-  () => personalFiltrado.filter(esLibreReal),
-  [esLibreReal, personalFiltrado]
+const libres = personalFiltrado.filter(
+  (persona) =>
+    esLibreReal(persona) &&
+    obtenerEstadoAsistencia(asistenciaFecha, persona) !==
+      ESTADOS_ASISTENCIA.AUSENTE
 );
 
 const estaLibre = (e) => {
@@ -294,7 +314,8 @@ const estaAusente = (e) =>
       (esLibreReal(e) && !extrasDia.some((ex) => personasCompartenIdentidad(ex, e))) ||
       estaNoDisponible(e) ||
       estaDeLicenciaHoy(e) ||
-      estaCertificadoHoy(e)
+      estaCertificadoHoy(e) ||
+      obtenerEstadoAsistencia(asistenciaFecha, e) === ESTADOS_ASISTENCIA.AUSENTE
     );
 
 const borrarExtra = (extra) => {
@@ -332,6 +353,7 @@ let asignacionCompleta = filasCalendario.map((fila) => {
   return {
     nombre: fila,
     enfermero: enfermero || null,
+    vacioManual: override === "__EMPTY__",
     tipo: turnantesLabels.includes(fila) ? "turnante" : "sector"
   };
 });
@@ -432,13 +454,13 @@ const tomarExtraDisponible = () => {
 };
 
 asignacionBase.forEach((item) => {
-  if (!item.enfermero) {
+  if (!item.enfermero && !item.vacioManual) {
     item.enfermero = tomarExtraDisponible();
   }
 });
 
 asignacionBase.forEach((item) => {
-  if (!item.enfermero) {
+  if (!item.enfermero && !item.vacioManual) {
     const eFinal = tomarTurnanteDisponible();
     if (eFinal) item.enfermero = eFinal;
   }
@@ -448,7 +470,7 @@ asignacionBase.forEach((item) => {
     sectoresCriticos.forEach((critico) => {
       const sectorCritico = asignacionBase.find((item) => item.nombre === critico);
 
-      if (sectorCritico && !sectorCritico.enfermero) {
+      if (sectorCritico && !sectorCritico.enfermero && !sectorCritico.vacioManual) {
         for (const sectorBajaPrioridad of sectoresBajaPrioridad) {
           const donante = asignacionBase.find((item) => item.nombre === sectorBajaPrioridad);
 
@@ -467,7 +489,7 @@ asignacionBase.forEach((item) => {
         (item) => normalizar(item.nombre) === normalizar(sector)
       );
 
-      if (!destino || destino.enfermero) return;
+      if (!destino || destino.enfermero || destino.vacioManual) return;
 
       for (let indiceDonante = prioridadSectores.length - 1; indiceDonante > indiceSector; indiceDonante--) {
         const donante = asignacionBase.find(
@@ -742,6 +764,27 @@ if (esDiaParo) {
   return asignacionParo;
 }
 
+const personasParaSinAsignar = obtenerPersonasParaSinAsignar({
+  registros: asistenciaFecha,
+  personal: [...personalFiltrado, ...extrasDia]
+});
+const identidadesAsignadas = new Set(
+  asignacionParaMostrar
+    .map((item) => obtenerClaveIdentidadPersona(item.enfermero))
+    .filter(Boolean)
+);
+personasParaSinAsignar.forEach((persona) => {
+  const identidad = obtenerClaveIdentidadPersona(persona);
+  if (!identidad || identidadesAsignadas.has(identidad)) return;
+  identidadesAsignadas.add(identidad);
+  asignacionParaMostrar.push({
+    nombre: "SIN ASIGNAR",
+    enfermero: persona,
+    tipo: "sector",
+    regresoAusencia: true
+  });
+});
+
 const resultadoOrdenado = [];
 
 ordenVisualActivo.forEach((item) => {
@@ -908,42 +951,139 @@ useEffect(() => {
 
   const cambiarAsistencia = (persona, estado) => {
     if (soloLecturaEfectiva) return;
-    setCalendario((prev) => ({
-      ...prev,
-      asistenciaDia: actualizarAsistenciaPersona(prev.asistenciaDia, keyDia, persona, estado)
-    }));
+    const asignacionActual = asignacionOrdenada.find(
+      (item) => personasCompartenIdentidad(item.enfermero, persona)
+    );
+    const estabaAusente =
+      obtenerEstadoAsistencia(asistenciaFecha, persona) ===
+      ESTADOS_ASISTENCIA.AUSENTE;
+    if (
+      (estado === ESTADOS_ASISTENCIA.AUSENTE && !asignacionActual) ||
+      (
+        estado !== ESTADOS_ASISTENCIA.AUSENTE &&
+        !asignacionActual &&
+        !estabaAusente
+      )
+    ) {
+      setErrorAsistencia("El calendario cambió. Revisá nuevamente la asistencia.");
+      return;
+    }
+    const sectorActual = asignacionActual?.nombre || "";
+    const resultado = prepararCambioAsistencia({
+      calendarioActual: obtenerCalendarioActual
+        ? obtenerCalendarioActual()
+        : calendario,
+      calendarioEsperado: calendario,
+      fecha: keyDia,
+      persona,
+      sectorActual,
+      estado,
+      sectoresVisibles: asignacionOrdenada
+        .filter((item) => item.tipo !== "divider")
+        .map((item) => item.nombre)
+    });
+    if (resultado.tipo !== "aplicado") {
+      setErrorAsistencia(resultado.mensaje);
+      return;
+    }
+
+    setErrorAsistencia("");
+    setCalendario((prev) =>
+      prev === calendario ? resultado.calendario : prev
+    );
   };
 
   const marcarTodosPresentes = () => {
     if (soloLecturaEfectiva || personasPrevistas.length === 0) return;
-    setCalendario((prev) => ({
-      ...prev,
-      asistenciaDia: marcarPersonasPresentes(prev.asistenciaDia, keyDia, personasPrevistas)
-    }));
+    setCalendario((prev) => {
+      if (prev !== calendario) return prev;
+      return personasPrevistas.reduce(
+        (actual, persona) => cambiarAsistenciaCalendario({
+          calendario: actual,
+          fecha: keyDia,
+          persona,
+          sectorActual: asignacionOrdenada.find(
+            (item) => personasCompartenIdentidad(item.enfermero, persona)
+          )?.nombre || "",
+          estado: ESTADOS_ASISTENCIA.PRESENTE,
+          sectoresVisibles: asignacionOrdenada
+            .filter((item) => item.tipo !== "divider")
+            .map((item) => item.nombre)
+        }),
+        prev
+      );
+    });
   };
 
   const limpiarAsistencia = () => {
     if (soloLecturaEfectiva || !Object.hasOwn(asistenciaDia, keyDia)) return;
     if (!confirm("¿Limpiar la asistencia de esta fecha y categoría?")) return;
-    setCalendario((prev) => ({
-      ...prev,
-      asistenciaDia: limpiarAsistenciaFecha(prev.asistenciaDia, keyDia)
-    }));
+    setCalendario((prev) => {
+      if (prev !== calendario) return prev;
+      const conAusenciasResueltas = ausentesDelDia.reduce(
+        (actual, ausente) => ausente.persona
+          ? cambiarAsistenciaCalendario({
+              calendario: actual,
+              fecha: keyDia,
+              persona: ausente.persona,
+              estado: ESTADOS_ASISTENCIA.PENDIENTE,
+              sectoresVisibles: asignacionOrdenada
+                .filter((item) => item.tipo !== "divider")
+                .map((item) => item.nombre)
+            })
+          : actual,
+        prev
+      );
+      const asistenciaActual = { ...(conAusenciasResueltas.asistenciaDia || {}) };
+      const registrosPendientes = Object.fromEntries(
+        Object.entries(asistenciaActual[keyDia] || {}).filter(
+          ([, registro]) =>
+            registro &&
+            typeof registro === "object" &&
+            registro.sinAsignar === true
+        )
+      );
+      if (Object.keys(registrosPendientes).length > 0) {
+        asistenciaActual[keyDia] = registrosPendientes;
+      } else {
+        delete asistenciaActual[keyDia];
+      }
+      return {
+        ...conAusenciasResueltas,
+        asistenciaDia: asistenciaActual
+      };
+    });
   };
 
   const handleClick = (item) => {
     if (soloLecturaEfectiva) return;
     const guardarMovimientos = (movimientos) => {
-      const nuevo = aplicarMovimientosCalendario({
-        cambios: cambiosActivos[keyDia],
-        movimientos
-      });
+      const movimientosReales = movimientos.filter(
+        (movimiento) => normalizar(movimiento.sector) !== "SIN ASIGNAR"
+      );
+      const personasAsignadas = movimientosReales
+        .map((movimiento) => movimiento.persona)
+        .filter(Boolean);
 
-      setCalendario({
-        [claveCambiosActivos]: {
-          ...cambiosActivos,
-          [keyDia]: nuevo
-        }
+      setCalendario((prev) => {
+        if (prev !== calendario) return prev;
+        const cambiosPrevios = prev[claveCambiosActivos] || {};
+        const nuevo = aplicarMovimientosCalendario({
+          cambios: cambiosPrevios[keyDia],
+          movimientos: movimientosReales
+        });
+        return {
+          ...prev,
+          [claveCambiosActivos]: {
+            ...cambiosPrevios,
+            [keyDia]: nuevo
+          },
+          asistenciaDia: quitarPersonasDeSinAsignar({
+            asistenciaDia: prev.asistenciaDia,
+            fecha: keyDia,
+            personas: personasAsignadas
+          })
+        };
       });
     };
 
@@ -1079,16 +1219,20 @@ useEffect(() => {
       return;
     }
 
+    const asignacionesSinAusentes = filtrarAsignacionesAusentes({
+      asignaciones: asignacionOrdenada,
+      registros: asistenciaFecha
+    });
     const redistribucion = confirmacionRedistribucion.tipo === "comun"
       ? null
       : confirmacionRedistribucion.tipo === "boxes"
         ? redistribuirPorBoxes({
-            asignaciones: asignacionOrdenada,
+            asignaciones: asignacionesSinAusentes,
             ordenVisual,
             prioridadSectores
           })
         : redistribuirCritica({
-            asignaciones: asignacionOrdenada,
+            asignaciones: asignacionesSinAusentes,
             ordenVisual,
             prioridadSectores
           });
@@ -1193,6 +1337,12 @@ useEffect(() => {
 
       <h3>Día {fecha.getDate()}</h3>
 
+      {errorAsistencia && (
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {errorAsistencia}
+        </p>
+      )}
+
 <div className="rounded-2xl border border-slate-100 bg-white">
   {asignacionesMostradas.map((item, i) => {
 
@@ -1202,6 +1352,9 @@ useEffect(() => {
       );
     }
 
+    const sectorLiberadoPorAusencia = !item.enfermero && ausentesDelDia.some(
+      (ausente) => normalizar(ausente.sectorOrigen) === normalizar(item.nombre)
+    );
     const bg = bloqueadoPorCierre
       ? item.sacrificado
         ? "bg-slate-200"
@@ -1228,7 +1381,11 @@ useEffect(() => {
 
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="text-sm text-slate-600">
-            {item.enfermero ? item.enfermero.nombre : "Sin cobertura"}
+            {item.enfermero
+              ? item.enfermero.nombre
+              : sectorLiberadoPorAusencia
+                ? "Sin asignar — ausencia"
+                : "Sin cobertura"}
           </span>
           {item.enfermero && (
             <select
@@ -1258,6 +1415,53 @@ useEffect(() => {
     );
   })}
 </div>
+
+{ausentesDelDia.length > 0 && (
+  <section className="mt-5" aria-labelledby={`ausentes-${tipo}-${keyDia}`}>
+    <h4 id={`ausentes-${tipo}-${keyDia}`} className="text-sm font-semibold text-slate-800">
+      Ausentes del día
+    </h4>
+    <div className="mt-2 grid gap-3 sm:grid-cols-2">
+      {ausentesDelDia.map((ausente) => {
+        const horario = configTurnoCalendario.horarios[
+          ausente.horario
+        ] || configTurnoCalendario.horarios.normal;
+        return (
+          <article
+            key={ausente.clave}
+            className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-slate-700"
+          >
+            <p className="font-semibold text-slate-900">{ausente.nombre}</p>
+            <p className="mt-1">
+              Sector al marcar ausencia: {ausente.sectorOrigen || "No registrado"}
+            </p>
+            <p>Horario: {horario?.textoVisible || "No disponible"}</p>
+            <p>
+              Categoría: {ausente.categoria === "licenciado" ? "Licenciados" : "Enfermeros"}
+            </p>
+            <label className="mt-2 block font-medium">
+              Estado
+              <select
+                aria-label={`Asistencia de ${ausente.nombre}`}
+                value={ESTADOS_ASISTENCIA.AUSENTE}
+                disabled={soloLecturaEfectiva || !ausente.persona}
+                onChange={(evento) => {
+                  if (!ausente.persona) return;
+                  cambiarAsistencia(ausente.persona, evento.target.value);
+                }}
+                className="mt-1 w-full rounded-md border border-violet-300 bg-white px-2 py-1.5"
+              >
+                <option value={ESTADOS_ASISTENCIA.PENDIENTE}>Pendiente</option>
+                <option value={ESTADOS_ASISTENCIA.PRESENTE}>✓ Presente</option>
+                <option value={ESTADOS_ASISTENCIA.AUSENTE}>✕ Ausente</option>
+              </select>
+            </label>
+          </article>
+        );
+      })}
+    </div>
+  </section>
+)}
 
 <h4 className="text-sm font-semibold text-slate-700">Libres</h4>
 

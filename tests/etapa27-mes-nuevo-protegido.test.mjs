@@ -17,7 +17,7 @@ import {
 import { configuracionSectores } from "../src/data/sectores.js";
 import { obtenerSemanasDelMes } from "../src/utils/fechas.js";
 import { obtenerBloquesQueIntersectanMes } from "../src/utils/periodosRotacionPlanilla.js";
-import { continuarRotacion3DiasEntreMeses } from "../src/utils/continuidadRotacionPlanilla.js";
+import { generarRotacionMensual } from "../src/utils/rotacionPlanilla.js";
 
 let total = 0;
 const probar = async (nombre, prueba) => {
@@ -118,17 +118,17 @@ const casosContenido = [
   ["4 Semana 1", (e) => { e.planillas.enfermeros.semana1.T1 = referencia(personasEnf[0]); }],
   ["5 semana posterior", (e) => { e.planillas.licenciados.semana3.T1 = referencia(personasLic[0]); }],
   ["6 asignacionBase", (e) => { e.planillas.enfermeros.rotacion3Dias.asignacionBase.T1 = referencia(personasEnf[0]); }],
-  ["7 bloque nocturno", (e) => { e.planillas.enfermeros.rotacion3Dias.bloques["2026-08-01"] = {}; }],
+  ["7 bloque nocturno", (e) => { e.planillas.enfermeros.rotacion3Dias.bloques["2026-08-01"] = { T1: referencia(personasEnf[0]) }; }],
   ["8 cobertura", (e) => { e.planillas.enfermeros.coberturaLibreSM.semana1 = referencia(personasEnf[0]); }],
   ["9 generacionFlexible", (e) => { e.planillas.enfermeros.generacionFlexible = { version: 1 }; }],
-  ["10 extras", (e) => { e.calendario.enfermeros.extras["2026-08-01"] = [{}]; }],
-  ["11 no disponibles", (e) => { e.calendario.enfermeros.noDisponibles["2026-08-01"] = [{}]; }],
-  ["12 asistencia", (e) => { e.calendario.enfermeros.asistenciaDia["2026-08-01"] = {}; }],
-  ["13 cambios diarios", (e) => { e.calendario.enfermeros.cambiosDia["2026-08-01"] = {}; }],
+  ["10 extras", (e) => { e.calendario.enfermeros.extras["2026-08-01"] = [{ id: "extra-1" }]; }],
+  ["11 no disponibles", (e) => { e.calendario.enfermeros.noDisponibles["2026-08-01"] = [referencia(personasEnf[0])]; }],
+  ["12 asistencia", (e) => { e.calendario.enfermeros.asistenciaDia["2026-08-01"] = { presente: true }; }],
+  ["13 cambios diarios", (e) => { e.calendario.enfermeros.cambiosDia["2026-08-01"] = { T1: referencia(personasEnf[0]) }; }],
   ["14 licencias", (e) => e.licencias.push({ desde: "2026-08-01", hasta: "2026-08-02" })],
   ["15 certificaciones", (e) => e.certificaciones.push({ desde: "2026-08-01", hasta: "2026-08-02" })],
   ["16 días de paro", (e) => { e.calendario.diasParo["2026-08-01"] = true; }],
-  ["17 cierres", (e) => { e.calendario.licenciados.cierresDia["2026-08-01"] = {}; }]
+  ["17 cierres", (e) => { e.calendario.licenciados.cierresDia["2026-08-01"] = { cerrado: true }; }]
 ];
 for (const [nombre, mutar] of casosContenido) {
   await probar(`${nombre} bloquea destino`, () => {
@@ -194,8 +194,111 @@ await probar("35 Licenciados de Noche continúa semanal", () => {
 await probar("36 Semana 1 usa última distribución real", () => {
   assert.deepEqual(construidoBase.estado.planillas.enfermeros.semana1, analisisBase.enfermeros.base);
 });
-await probar("37 semanas posteriores se generan", () => {
-  assert.equal(tieneAsignaciones(construidoBase.estado.planillas.enfermeros.semana2), true);
+await probar("37 semanas posteriores de Enfermeros quedan vacías", () => {
+  for (let numero = 2; numero <= 6; numero += 1) {
+    assert.deepEqual(construidoBase.estado.planillas.enfermeros[`semana${numero}`], {});
+  }
+});
+await probar("37b preparar copia únicamente Semana 1 de Licenciados", () => {
+  assert.deepEqual(
+    construidoBase.estado.planillas.licenciados.semana1,
+    analisisBase.licenciados.base
+  );
+  for (let numero = 2; numero <= 6; numero += 1) {
+    assert.deepEqual(construidoBase.estado.planillas.licenciados[`semana${numero}`], {});
+  }
+});
+await probar("37c constructor de preparación no genera rotaciones", async () => {
+  const fuente = await readFile(
+    new URL("../src/utils/preparacionMesNuevo.js", import.meta.url),
+    "utf8"
+  );
+  const inicio = fuente.indexOf("export const construirEstadoMesNuevo");
+  const fin = fuente.indexOf("export const validarContextoPreparacion", inicio);
+  const constructor = fuente.slice(inicio, fin);
+  assert.doesNotMatch(constructor, /generarRotacionMensual|generarBloquesFaltantes|continuarRotacion3DiasEntreMeses/);
+});
+await probar("37d PanelPrepararMes no solicita posiciones no aplicables", async () => {
+  const panel = await readFile(
+    new URL("../src/components/mes/PanelPrepararMes.jsx", import.meta.url),
+    "utf8"
+  );
+  assert.doesNotMatch(panel, /checkbox|No aplicables requeridas|Seleccioná exactamente/);
+  assert.match(panel, /Semanas 2 a 6 quedarán vacías/);
+});
+await probar("37e Personal copiado continúa editable", () => {
+  const personalPreparado = clone(construidoBase.estado.personal);
+  personalPreparado.pop();
+  personalPreparado.push({
+    id: "enf-nuevo",
+    nombre: "Persona nueva",
+    categoria: "enfermero"
+  });
+  assert.notDeepEqual(personalPreparado, construidoBase.estado.personal);
+  assert.equal(analisisBase.personal.some((persona) => persona.id === "enf-nuevo"), false);
+});
+await probar("37f una persona eliminada antes de generar no aparece después", () => {
+  const planilla = clone(construidoBase.estado.planillas.enfermeros);
+  const personaEliminada = construidoBase.estado.personal.find(
+    (persona) => persona.categoria === "enfermero"
+  );
+  const fila = filasEnf.find(
+    (actual) => planilla.semana1[actual]?.personaId === personaEliminada.id
+  );
+  planilla.semana1[fila] = "";
+  const personalActual = construidoBase.estado.personal.filter(
+    (persona) => persona.id !== personaEliminada.id
+  );
+  const generada = generarRotacionMensual({
+    planilla,
+    filas: filasEnf,
+    semanas: obtenerSemanasDelMes("2026-08"),
+    filaFija: "SM",
+    personal: personalActual,
+    posicionesNoAplicables: [fila]
+  });
+  assert.equal(
+    Object.values(generada).some((periodo) =>
+      Object.values(periodo || {}).some(
+        (referenciaActual) => referenciaActual?.personaId === personaEliminada.id
+      )
+    ),
+    false
+  );
+});
+await probar("37g una persona agregada puede incorporarse antes de generar", () => {
+  const origen = crearOrigenSemanal({ faltantesEnf: 1 });
+  const preparado = construirEstadoMesNuevo({
+    analisis: analizarSemanal({ origen })
+  }).estado;
+  const filaVacia = filasEnf.find((fila) => !preparado.planillas.enfermeros.semana1[fila]);
+  const nueva = {
+    id: "enf-nuevo",
+    nombre: "Persona nueva",
+    categoria: "enfermero"
+  };
+  preparado.personal.push(nueva);
+  preparado.planillas.enfermeros.semana1[filaVacia] = referencia(nueva);
+  const generada = generarRotacionMensual({
+    planilla: preparado.planillas.enfermeros,
+    filas: filasEnf,
+    semanas: obtenerSemanasDelMes("2026-08"),
+    filaFija: "SM",
+    personal: preparado.personal
+  });
+  assert.ok(
+    Object.values(generada.semana2).some(
+      (referenciaActual) => referenciaActual?.personaId === nueva.id
+    )
+  );
+});
+await probar("37h Noche expone asignacionBase editable antes de generar", async () => {
+  const planilla = await readFile(
+    new URL("../src/components/planilla/PlanillaMensual.jsx", import.meta.url),
+    "utf8"
+  );
+  assert.match(planilla, /Base editable de la rotación nocturna/);
+  assert.match(planilla, /actualizarAsignacionBaseNocturna/);
 });
 await probar("38 cobertura semanal conserva solo base pertinente", () => {
   assert.deepEqual(Object.keys(construidoBase.estado.planillas.enfermeros.coberturaLibreSM), ["semana1"]);
@@ -216,29 +319,29 @@ function tieneAsignaciones(valor) {
   return Object.values(valor || {}).some(Boolean);
 }
 
-for (const [numero, faltantes, requeridas] of [[41, 0, 0], [42, 1, 1], [43, 2, 2]]) {
-  await probar(`${numero} faltantes ${faltantes} requiere ${requeridas}`, () => {
+for (const [numero, faltantes] of [[41, 0], [42, 1], [43, 2]]) {
+  await probar(`${numero} base con ${faltantes} vacantes se prepara sin decidir exclusiones`, () => {
     const analisis = analizarSemanal({ origen: crearOrigenSemanal({ faltantesEnf: faltantes }) });
-    assert.equal(analisis.enfermeros.analisis.cantidadPosicionesNoAplicables, requeridas);
+    const resultado = construirEstadoMesNuevo({ analisis });
+    assert.equal(resultado.ok, true);
+    assert.equal(Object.hasOwn(resultado.estado.planillas.enfermeros, "generacionFlexible"), false);
   });
 }
 const analisis19 = analizarSemanal({ origen: crearOrigenSemanal({ faltantesEnf: 1 }) });
 const excluida = analisis19.enfermeros.analisis.filasVacias[0];
-const construido19 = construirEstadoMesNuevo({ analisis: analisis19, posicionesNoAplicables: [excluida] });
-await probar("44 exclusión permanece vacía", () => {
-  obtenerSemanasDelMes("2026-08").forEach(({ clave }) =>
-    assert.equal(construido19.estado.planillas.enfermeros[clave][excluida], "")
-  );
+const construido19 = construirEstadoMesNuevo({ analisis: analisis19 });
+await probar("44 vacante permanece en la Semana 1 editable", () => {
+  assert.equal(construido19.estado.planillas.enfermeros.semana1[excluida], "");
 });
-await probar("45 vacío no se desplaza", () => {
-  assert.equal(
-    Object.entries(construido19.estado.planillas.enfermeros.semana2)
-      .filter(([, valor]) => !valor).map(([fila]) => fila).includes(excluida),
-    true
-  );
+await probar("45 no se rota el vacío durante la preparación", () => {
+  assert.deepEqual(construido19.estado.planillas.enfermeros.semana2, {});
 });
-await probar("46 sectores críticos quedan informados", () => {
-  assert.ok(analisis19.enfermeros.sectoresCriticos.length > 0);
+await probar("46 la selección de sectores críticos se posterga a Generar", async () => {
+  const panel = await readFile(
+    new URL("../src/components/mes/PanelPrepararMes.jsx", import.meta.url),
+    "utf8"
+  );
+  assert.doesNotMatch(panel, /sectoresCriticos|posicionesSeleccionadas/);
 });
 await probar("47 metadata anterior no se hereda", () => {
   const origen = crearOrigenSemanal({ faltantesEnf: 1 });
@@ -246,11 +349,11 @@ await probar("47 metadata anterior no se hereda", () => {
   const analisis = analizarSemanal({ origen });
   assert.notDeepEqual(analisis.enfermeros.analisis.filasVacias, ["REA 1"]);
 });
-await probar("48 metadata nueva se crea", () => {
-  assert.deepEqual(construido19.estado.planillas.enfermeros.generacionFlexible.posicionesNoAplicables, [excluida]);
+await probar("48 metadata nueva no se crea durante preparación", () => {
+  assert.equal(Object.hasOwn(construido19.estado.planillas.enfermeros, "generacionFlexible"), false);
 });
-await probar("49 exclusiones incompletas bloquean", () => {
-  assert.equal(construirEstadoMesNuevo({ analisis: analisis19, posicionesNoAplicables: [] }).ok, false);
+await probar("49 preparación no exige exclusiones", () => {
+  assert.equal(construirEstadoMesNuevo({ analisis: analisis19 }).ok, true);
 });
 
 const crearOrigenNoche = (faltantes = 0) => {
@@ -296,10 +399,11 @@ await probar("51 bloque compartido se conserva", () => {
     .find((clave) => clavesOrigen.has(clave));
   assert.ok(compartida);
 });
-await probar("52 bloques faltantes se generan", () => {
-  assert.equal(
-    Object.keys(construidoNoche.estado.planillas.enfermeros.rotacion3Dias.bloques).length,
-    analisisNoche.enfermeros.bloquesDestino.length
+await probar("52 bloques faltantes no se generan", () => {
+  const clavesOrigen = new Set(Object.keys(analisisNoche.rotacionEnfermerosOrigen.bloques));
+  assert.ok(
+    Object.keys(construidoNoche.estado.planillas.enfermeros.rotacion3Dias.bloques)
+      .every((clave) => clavesOrigen.has(clave))
   );
 });
 await probar("53 bloque existente conserva contenido", () => {
@@ -321,34 +425,26 @@ await probar("55 fecha base y duración permanecen", () => {
 });
 const analisisNoche19 = analizarSemanal({ turnoId: "noche", origen: crearOrigenNoche(1) });
 const excluidaNoche = analisisNoche19.enfermeros.analisis.filasVacias[0];
-const construidoNoche19 = construirEstadoMesNuevo({
-  analisis: analisisNoche19,
-  posicionesNoAplicables: [excluidaNoche]
-});
-await probar("56 exclusión nocturna permanece fija", () => {
-  Object.values(construidoNoche19.estado.planillas.enfermeros.rotacion3Dias.bloques)
-    .forEach((bloque) => assert.equal(bloque[excluidaNoche], ""));
-});
-await probar("57 vacío nocturno no se desplaza", () => {
+const construidoNoche19 = construirEstadoMesNuevo({ analisis: analisisNoche19 });
+await probar("56 vacante nocturna permanece en asignacionBase", () => {
   assert.equal(
-    Object.values(construidoNoche19.estado.planillas.enfermeros.rotacion3Dias.bloques)
-      .every((bloque) => bloque[excluidaNoche] === ""),
-    true
+    construidoNoche19.estado.planillas.enfermeros.rotacion3Dias.asignacionBase[excluidaNoche],
+    ""
+  );
+});
+await probar("57 preparación nocturna no rota el vacío", () => {
+  assert.equal(
+    Object.hasOwn(construidoNoche19.estado.planillas.enfermeros, "generacionFlexible"),
+    false
   );
 });
 await probar("58 análisis nocturno no genera bloques", () => {
   assert.equal(Object.hasOwn(analisisNoche19, "estado"), false);
 });
-await probar("59 sin exclusiones coincide con continuidad anterior", () => {
-  const esperado = continuarRotacion3DiasEntreMeses({
-    rotacionAnterior: analisisNoche.rotacionEnfermerosOrigen,
-    rotacionActual: {},
-    periodosDestino: analisisNoche.enfermeros.bloquesDestino,
-    filas: filasEnf,
-    filasFijas: ["SM"],
-    estrategia: analisisNoche.enfermeros.estrategia
-  });
-  assert.deepEqual(construidoNoche.estado.planillas.enfermeros.rotacion3Dias, esperado);
+await probar("59 preparación nocturna conserva estructura sin completar continuidad", () => {
+  const rotacion = construidoNoche.estado.planillas.enfermeros.rotacion3Dias;
+  assert.equal(rotacion.fechaBase, analisisNoche.enfermeros.estrategia.fechaBase);
+  assert.ok(Object.keys(rotacion.bloques).length < analisisNoche.enfermeros.bloquesDestino.length);
 });
 await probar("60 intercambio sincronizado en base afecta destino", () => {
   const origen = crearOrigenNoche();
@@ -483,8 +579,9 @@ await probar("93 detector reporta contenido real", () => {
 await probar("94 panel informa datos descartados", () => {
   assert.match(panel, /Extras, no disponibles, asistencia, cambios diarios/);
 });
-await probar("95 panel exige selector de exclusiones", () => {
-  assert.match(panel, /type="checkbox"/);
+await probar("95 panel posterga el selector de exclusiones", () => {
+  assert.doesNotMatch(panel, /type="checkbox"|posicionesSeleccionadas/);
+  assert.match(panel, /generes la rotación/);
 });
 await probar("96 gestión del mes aparece antes de las secciones principales", () => {
   const gestion = app.indexOf("Gestión del mes");
@@ -500,7 +597,10 @@ await probar("97 preparación no está dentro de Planilla mensual", () => {
 });
 await probar("98 condiciones de visibilidad permanecen agrupadas", () => {
   const inicioGestion = app.indexOf("Gestión del mes");
-  const inicioTarjeta = app.lastIndexOf("{mesActivo === mesSiguiente", inicioGestion);
+  const inicioTarjeta = app.lastIndexOf(
+    "{(mesActivo === mesSiguiente || !destinoActivoPreparacion.permitido)",
+    inicioGestion
+  );
   const finGestion = app.indexOf("<Seccion", inicioGestion);
   const bloqueGestion = app.slice(inicioTarjeta, finGestion);
   for (const condicion of [
@@ -519,8 +619,15 @@ await probar("98 condiciones de visibilidad permanecen agrupadas", () => {
 await probar("99 sigue existiendo una sola acción visible de preparación", () => {
   assert.equal((app.match(/Preparar mes siguiente/g) || []).length, 1);
 });
-await probar("100 tarjeta Gestión del mes depende del mes siguiente", () => {
-  assert.match(app, /\{mesActivo === mesSiguiente && \(\s*<div className="mb-4 rounded-xl/);
+await probar("100 preparación depende del mes siguiente y la gestión admite reinicio", () => {
+  assert.match(
+    app,
+    /\{\(mesActivo === mesSiguiente \|\| !destinoActivoPreparacion\.permitido\) && \(/
+  );
+  assert.match(
+    app,
+    /\{mesActivo === mesSiguiente &&\s*destinoActivoPreparacion\.permitido/
+  );
 });
 await probar("101 destino con contenido muestra explicación", () => {
   assert.match(app, /Este mes ya fue iniciado y no puede prepararse nuevamente\./);

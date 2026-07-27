@@ -9,6 +9,7 @@ import Estadisticas from "./components/estadisticas/Estadisticas";
 import HistorialCambios from "./components/historial/HistorialCambios";
 import PanelConflictoEdicion from "./components/concurrencia/PanelConflictoEdicion";
 import PanelPrepararMes from "./components/mes/PanelPrepararMes";
+import PanelReiniciarMes from "./components/mes/PanelReiniciarMes";
 import SelectorTurno from "./components/turnos/SelectorTurno";
 import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
@@ -91,6 +92,7 @@ import {
   validarContextoAdopcionRestauracion,
   validarRespuestaRestaurada
 } from "./utils/restauracionHistorial.js";
+import { reiniciarMesEnEstado } from "./utils/limpiezaSegura.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
@@ -154,6 +156,7 @@ const [cerrandoSesion, setCerrandoSesion] = useState(false);
 const [errorCierreSesion, setErrorCierreSesion] = useState("");
 const [historialAbierto, setHistorialAbierto] = useState(false);
 const [preparacionMes, setPreparacionMes] = useState(null);
+const [reinicioMes, setReinicioMes] = useState(null);
 const [restauracionHistorialEnCurso, setRestauracionHistorialEnCurso] = useState(null);
 const restauracionHistorialEnCursoRef = useRef(null);
 const [clavesBloqueadasTrasRestauracion, setClavesBloqueadasTrasRestauracion] =
@@ -173,6 +176,11 @@ useEffect(() => {
   sesionActivaRef.current = String(perfil?.usuario || "");
   contextoActivoRef.current = { turno: turnoActivo, mes: mesActivo };
 }, [mesActivo, perfil?.usuario, turnoActivo]);
+
+useEffect(() => {
+  const timeout = setTimeout(() => setReinicioMes(null), 0);
+  return () => clearTimeout(timeout);
+}, [claveActiva]);
 
 //console.log("🔁 TAB ACTUAL:", tabCalendario);
 
@@ -1406,6 +1414,80 @@ const hayPendientesEnClave = (clave) => {
   });
 };
 
+const abrirReinicioMes = () => {
+  const metadatos = metadatosPorClaveRef.current.get(claveActiva);
+  const estadoEsperado = estadoPorTurnoMesRef.current[claveActiva];
+  if (
+    !claveActiva ||
+    destinoActivoPreparacion.permitido ||
+    !puedeEditarActivo ||
+    modoSoloLecturaEfectiva ||
+    cargandoRef.current ||
+    erroresCargaRef.current.has(claveActiva) ||
+    metadatos?.conflicto ||
+    clavesBloqueadasTrasRestauracionRef.current.has(claveActiva) ||
+    hayPendientesEnClave(claveActiva) ||
+    !String(metadatos?.revisionConfirmada ?? "")
+  ) return;
+
+  setReinicioMes({
+    turnoId: turnoActivo,
+    mesActivo,
+    clave: claveActiva,
+    revision: String(metadatos.revisionConfirmada),
+    estadoEsperado,
+    texto: "",
+    error: ""
+  });
+};
+
+const confirmarReinicioMes = () => {
+  if (!reinicioMes || reinicioMes.texto.trim() !== "REINICIAR") return;
+  const metadatos = metadatosPorClaveRef.current.get(reinicioMes.clave);
+  const estadoActual = estadoPorTurnoMesRef.current[reinicioMes.clave];
+  const contextoValido =
+    reinicioMes.turnoId === turnoActivo &&
+    reinicioMes.mesActivo === mesActivo &&
+    reinicioMes.clave === claveActiva &&
+    reinicioMes.revision === String(metadatos?.revisionConfirmada ?? "") &&
+    reinicioMes.estadoEsperado === estadoActual &&
+    puedeEditarActivo &&
+    !modoSoloLecturaEfectiva &&
+    !cargandoRef.current &&
+    !erroresCargaRef.current.has(claveActiva) &&
+    !metadatos?.conflicto &&
+    !clavesBloqueadasTrasRestauracionRef.current.has(claveActiva) &&
+    !hayPendientesEnClave(claveActiva) &&
+    !clasificarEstadoMesDestino({
+      existeRemoto: metadatos?.existeRemoto === true,
+      estado: estadoActual
+    }).permitido;
+
+  if (!contextoValido) {
+    setReinicioMes((actual) => actual
+      ? {
+          ...actual,
+          error: "El estado del mes cambió mientras confirmabas el reinicio. Revisá nuevamente."
+        }
+      : actual);
+    return;
+  }
+
+  const claveEsperada = reinicioMes.clave;
+  const estadoEsperado = reinicioMes.estadoEsperado;
+  setEstadoPorTurnoMes((prev) => {
+    if (prev[claveEsperada] !== estadoEsperado) return prev;
+    return reiniciarMesEnEstado({
+      estadoPorTurnoMes: prev,
+      clave: claveEsperada,
+      crearEstadoVacio: crearEstadoMensualVacio
+    });
+  });
+  setReinicioMes(null);
+  setPreparacionMes(null);
+  setEstadoGuardado("pending");
+};
+
 const iniciarPreparacionMes = async () => {
   const mesDestino = mesActivo;
   const mesOrigen = obtenerMesAnterior(mesDestino);
@@ -1548,7 +1630,6 @@ const iniciarPreparacionMes = async () => {
       ...analisis,
       turnoNombre: TURNOS[turnoId]?.nombre || turnoId
     },
-    posicionesSeleccionadas: [...analisis.enfermeros.analisis.filasVacias],
     error: ""
   });
 };
@@ -1583,8 +1664,7 @@ const confirmarPreparacionMes = () => {
     return;
   }
   const construccion = construirEstadoMesNuevo({
-    analisis: preparacionMes.analisis,
-    posicionesNoAplicables: preparacionMes.posicionesSeleccionadas
+    analisis: preparacionMes.analisis
   });
   if (!construccion.ok) {
     setPreparacionMes((actual) => ({ ...actual, error: construccion.mensaje }));
@@ -1699,10 +1779,11 @@ return (
         />
       )}
 
-      {mesActivo === mesSiguiente && (
+      {(mesActivo === mesSiguiente || !destinoActivoPreparacion.permitido) && (
         <div className="mb-4 rounded-xl border border-purple-200 bg-white p-4 shadow-sm">
           <h2 className="text-base font-semibold text-slate-900">Gestión del mes</h2>
-          {destinoActivoPreparacion.permitido &&
+          {mesActivo === mesSiguiente &&
+          destinoActivoPreparacion.permitido &&
           puedeEditarActivo &&
           !modoSoloLecturaEfectiva &&
           !cargando &&
@@ -1742,9 +1823,25 @@ return (
                   </ul>
                 </div>
               )}
+              {puedeEditarActivo && !modoSoloLecturaEfectiva && (
+                <button
+                  type="button"
+                  onClick={abrirReinicioMes}
+                  disabled={
+                    cargando ||
+                    Boolean(metadatosActivos?.conflicto) ||
+                    clavesBloqueadasTrasRestauracion.has(claveActiva) ||
+                    hayPendientesEnClave(claveActiva)
+                  }
+                  className="mt-4 rounded-lg border border-red-300 bg-white px-4 py-2 font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                >
+                  Reiniciar mes completo
+                </button>
+              )}
             </div>
           )}
-          {destinoActivoPreparacion.permitido &&
+          {mesActivo === mesSiguiente &&
+            destinoActivoPreparacion.permitido &&
             (cargando ||
               metadatosActivos?.conflicto ||
               clavesBloqueadasTrasRestauracion.has(claveActiva) ||
@@ -1768,6 +1865,7 @@ return (
             </div>
           )}
           {preparacionMes?.estado === "lista" &&
+            mesActivo === mesSiguiente &&
             validarContextoPreparacion(preparacionMes.contexto, {
               turnoId: turnoActivo,
               mesOrigen: obtenerMesAnterior(mesActivo),
@@ -1776,21 +1874,31 @@ return (
             }) && (
               <PanelPrepararMes
                 analisis={preparacionMes.analisis}
-                posicionesSeleccionadas={preparacionMes.posicionesSeleccionadas}
                 error={preparacionMes.error}
-                onAlternarPosicion={(fila) => {
-                  setPreparacionMes((actual) => {
-                    const seleccionadas = actual.posicionesSeleccionadas.includes(fila)
-                      ? actual.posicionesSeleccionadas.filter((item) => item !== fila)
-                      : [...actual.posicionesSeleccionadas, fila];
-                    return { ...actual, posicionesSeleccionadas: seleccionadas, error: "" };
-                  });
-                }}
                 onCancelar={() => setPreparacionMes(null)}
                 onConfirmar={confirmarPreparacionMes}
               />
             )}
         </div>
+      )}
+
+      {reinicioMes?.clave === claveActiva && (
+        <PanelReiniciarMes
+          turnoNombre={configTurno.nombre}
+          periodoVisible={new Intl.DateTimeFormat("es-UY", {
+            month: "long",
+            year: "numeric"
+          }).format(new Date(`${mesActivo}-01T12:00:00`))}
+          textoConfirmacion={reinicioMes.texto}
+          error={reinicioMes.error}
+          onCambiarTexto={(texto) => setReinicioMes((actual) => ({
+            ...actual,
+            texto,
+            error: ""
+          }))}
+          onCancelar={() => setReinicioMes(null)}
+          onConfirmar={confirmarReinicioMes}
+        />
       )}
 
       <Seccion

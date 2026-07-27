@@ -8,16 +8,14 @@ import {
 import { obtenerSemanasDelMes } from "./fechas.js";
 import { obtenerBloquesQueIntersectanMes } from "./periodosRotacionPlanilla.js";
 import {
-  continuarRotacion3DiasEntreMeses,
   tieneAsignacionBaseRotacion3Dias
 } from "./continuidadRotacionPlanilla.js";
-import { generarRotacionMensual, tieneAsignacionesUtiles } from "./rotacionPlanilla.js";
+import { tieneAsignacionesUtiles } from "./rotacionPlanilla.js";
 import {
-  analizarDistribucionBaseEnfermeros,
-  crearMetadataGeneracionFlexible,
-  validarPosicionesNoAplicables
+  analizarDistribucionBaseEnfermeros
 } from "./generacionFlexiblePlanilla.js";
 import { resolverPersonaDesdeReferencia } from "./referenciasPersonas.js";
+import { tieneContenidoSignificativo } from "./limpiezaSegura.js";
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -43,9 +41,6 @@ export const obtenerFilasPlanilla = (configuracion) => {
   return filas;
 };
 
-const tieneContenidoObjeto = (valor) =>
-  esObjeto(valor) && Object.keys(valor).length > 0;
-
 const registrar = (contenido, clave, condicion) => {
   if (condicion) contenido.push(clave);
 };
@@ -53,12 +48,12 @@ const registrar = (contenido, clave, condicion) => {
 export const detectarContenidoMensual = (estado) => {
   if (!esObjeto(estado)) return [];
   const contenido = [];
-  registrar(contenido, "Personal", Array.isArray(estado.personal) && estado.personal.length > 0);
-  registrar(contenido, "Licencias", Array.isArray(estado.licencias) && estado.licencias.length > 0);
+  registrar(contenido, "Personal", tieneContenidoSignificativo(estado.personal));
+  registrar(contenido, "Licencias", tieneContenidoSignificativo(estado.licencias));
   registrar(
     contenido,
     "Certificaciones",
-    Array.isArray(estado.certificaciones) && estado.certificaciones.length > 0
+    tieneContenidoSignificativo(estado.certificaciones)
   );
 
   for (const categoria of ["enfermeros", "licenciados"]) {
@@ -68,34 +63,34 @@ export const detectarContenidoMensual = (estado) => {
       registrar(
         contenido,
         `${categoria}.semana${semana}`,
-        tieneAsignacionesUtiles(planilla[`semana${semana}`])
+        tieneContenidoSignificativo(planilla[`semana${semana}`])
       );
     }
     registrar(
       contenido,
       `${categoria}.coberturaLibreSM`,
-      tieneContenidoObjeto(planilla.coberturaLibreSM)
+      tieneContenidoSignificativo(planilla.coberturaLibreSM)
     );
     registrar(
       contenido,
       `${categoria}.generacionFlexible`,
-      tieneContenidoObjeto(planilla.generacionFlexible)
+      tieneContenidoSignificativo(planilla.generacionFlexible)
     );
     if (categoria === "enfermeros") {
       registrar(
         contenido,
         "enfermeros.asignacionBase",
-        tieneAsignacionesUtiles(planilla.rotacion3Dias?.asignacionBase)
+        tieneContenidoSignificativo(planilla.rotacion3Dias?.asignacionBase)
       );
       registrar(
         contenido,
         "enfermeros.bloques",
-        tieneContenidoObjeto(planilla.rotacion3Dias?.bloques)
+        tieneContenidoSignificativo(planilla.rotacion3Dias?.bloques)
       );
       registrar(
         contenido,
         "enfermeros.coberturaNocturna",
-        tieneContenidoObjeto(planilla.rotacion3Dias?.coberturaLibreSM)
+        tieneContenidoSignificativo(planilla.rotacion3Dias?.coberturaLibreSM)
       );
     }
     const clavesPlanillaConocidas = new Set([
@@ -108,12 +103,16 @@ export const detectarContenidoMensual = (estado) => {
         contenido,
         `${categoria}.${clave}`,
         !clavesPlanillaConocidas.has(clave) &&
-          (Array.isArray(valor) ? valor.length > 0 : esObjeto(valor) ? Object.keys(valor).length > 0 : Boolean(valor))
+          tieneContenidoSignificativo(valor)
       );
     });
   }
 
-  registrar(contenido, "Días de paro", tieneContenidoObjeto(estado.calendario?.diasParo));
+  registrar(
+    contenido,
+    "Días de paro",
+    tieneContenidoSignificativo(estado.calendario?.diasParo)
+  );
   for (const categoria of ["enfermeros", "licenciados"]) {
     const calendario = estado.calendario?.[categoria];
     for (const [clave, etiqueta] of [
@@ -127,7 +126,7 @@ export const detectarContenidoMensual = (estado) => {
       registrar(
         contenido,
         `${categoria}.${etiqueta}`,
-        tieneContenidoObjeto(calendario?.[clave])
+        tieneContenidoSignificativo(calendario?.[clave])
       );
     }
   }
@@ -139,7 +138,7 @@ export const detectarContenidoMensual = (estado) => {
       contenido,
       clave,
       !clavesEstadoConocidas.has(clave) &&
-        (Array.isArray(valor) ? valor.length > 0 : esObjeto(valor) ? Object.keys(valor).length > 0 : Boolean(valor))
+        tieneContenidoSignificativo(valor)
     );
   });
   return contenido;
@@ -461,23 +460,10 @@ export const analizarPreparacionMesNuevo = ({
   };
 };
 
-export const construirEstadoMesNuevo = ({
-  analisis,
-  posicionesNoAplicables = []
-} = {}) => {
+export const construirEstadoMesNuevo = ({ analisis } = {}) => {
   if (!analisis?.ok) {
     return { ok: false, mensaje: "La preparación del mes no es válida." };
   }
-  const flex = analisis.enfermeros.analisis;
-  const seleccion = validarPosicionesNoAplicables({
-    seleccionadas: posicionesNoAplicables,
-    filas: analisis.enfermeros.filas,
-    filasVacias: flex.filasVacias,
-    cantidadRequerida: flex.cantidadPosicionesNoAplicables
-  });
-  if (!seleccion.ok) return seleccion;
-
-  const semanasDestino = obtenerSemanasDelMes(analisis.mesDestino);
   const planillaLicBase = {
     ...crearPlanillaMensualVacia(),
     semana1: clonar(analisis.licenciados.base),
@@ -485,55 +471,50 @@ export const construirEstadoMesNuevo = ({
   };
   const coberturaLic = analisis.coberturaLicenciadosBase;
   if (coberturaLic) planillaLicBase.coberturaLibreSM.semana1 = clonar(coberturaLic);
-  const planillaLicenciados = generarRotacionMensual({
-    planilla: planillaLicBase,
-    filas: analisis.licenciados.filas,
-    semanas: semanasDestino,
-    filaFija: "Salud Mental",
-    personal: analisis.personal
-  });
 
-  const metadata = crearMetadataGeneracionFlexible({
-    estrategia: analisis.enfermeros.estrategia.tipo,
-    turnoId: analisis.turnoId,
-    posicionesNoAplicables,
-    cantidadPersonasConsideradas: flex.cantidadPersonas
-  });
   let planillaEnfermeros;
   if (analisis.enfermeros.estrategia.tipo === "cada_3_dias") {
-    const rotacion = continuarRotacion3DiasEntreMeses({
-      rotacionAnterior: analisis.rotacionEnfermerosOrigen,
-      rotacionActual: {},
-      periodosDestino: analisis.enfermeros.bloquesDestino,
-      filas: analisis.enfermeros.filas,
-      filasFijas: ["SM"],
-      posicionesNoAplicables,
-      estrategia: analisis.enfermeros.estrategia
-    });
+    const rotacionOrigen = analisis.rotacionEnfermerosOrigen;
+    const clavesDestino = new Set(
+      analisis.enfermeros.bloquesDestino.map((periodo) => periodo.clave)
+    );
+    const bloquesCompartidos = Object.fromEntries(
+      Object.entries(rotacionOrigen.bloques || {}).flatMap(([clave, bloque]) =>
+        clavesDestino.has(clave) ? [[clave, clonar(bloque)]] : []
+      )
+    );
+    const coberturasCompartidas = Object.fromEntries(
+      Object.entries(rotacionOrigen.coberturaLibreSM || {}).flatMap(
+        ([clave, cobertura]) =>
+          clavesDestino.has(clave) ? [[clave, clonar(cobertura)]] : []
+      )
+    );
+    const rotacion = {
+      ...clonar(rotacionOrigen),
+      version: rotacionOrigen.version ?? 1,
+      fechaBase:
+        rotacionOrigen.fechaBase || analisis.enfermeros.estrategia.fechaBase,
+      duracionDias:
+        rotacionOrigen.duracionDias ||
+        analisis.enfermeros.estrategia.duracionDias,
+      asignacionBase: clonar(analisis.enfermeros.base),
+      bloques: bloquesCompartidos,
+      coberturaLibreSM: coberturasCompartidas
+    };
     planillaEnfermeros = {
       ...crearPlanillaMensualVacia(),
-      rotacion3Dias: rotacion,
-      generacionFlexible: metadata
+      rotacion3Dias: rotacion
     };
   } else {
-    const base = {
+    planillaEnfermeros = {
       ...crearPlanillaMensualVacia(),
       semana1: clonar(analisis.enfermeros.base),
       coberturaLibreSM: {}
     };
     const cobertura = analisis.coberturaEnfermerosBase;
-    if (cobertura) base.coberturaLibreSM.semana1 = clonar(cobertura);
-    planillaEnfermeros = {
-      ...generarRotacionMensual({
-        planilla: base,
-        filas: analisis.enfermeros.filas,
-        semanas: semanasDestino,
-        filaFija: "SM",
-        personal: analisis.personal,
-        posicionesNoAplicables
-      }),
-      generacionFlexible: metadata
-    };
+    if (cobertura) {
+      planillaEnfermeros.coberturaLibreSM.semana1 = clonar(cobertura);
+    }
   }
 
   const vacio = crearEstadoMensualVacio();
@@ -542,7 +523,7 @@ export const construirEstadoMesNuevo = ({
     personal: clonar(analisis.personal),
     planillas: {
       enfermeros: planillaEnfermeros,
-      licenciados: planillaLicenciados
+      licenciados: planillaLicBase
     },
     licencias: clonar(analisis.licencias),
     certificaciones: clonar(analisis.certificaciones)

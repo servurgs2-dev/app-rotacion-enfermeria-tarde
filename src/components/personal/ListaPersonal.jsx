@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { obtenerDiasLibresDelMes } from "../../utils/fechas";
 import {
   TIPOS_MATERNAL,
@@ -16,6 +16,7 @@ import {
   obtenerClaveRenderPersona,
   obtenerIdsPersonalDuplicados
 } from "../../utils/validacionPersonal.js";
+import PanelConfirmacionLimpieza from "../ui/PanelConfirmacionLimpieza.jsx";
 
 const MENSAJE_NOMBRE_DUPLICADO =
   "Ya existe una persona con ese nombre. Agregá el segundo apellido para poder diferenciarla.";
@@ -50,6 +51,7 @@ function ListaPersonal({
   const [nombreEdicion, setNombreEdicion] = useState("");
   const [errorEdicion, setErrorEdicion] = useState("");
   const [verificandoExclusividad, setVerificandoExclusividad] = useState(false);
+  const [limpiezaPersonal, setLimpiezaPersonal] = useState(null);
   const validacionNombreIdRef = useRef(0);
   const validacionEnCursoRef = useRef(false);
 
@@ -74,6 +76,16 @@ function ListaPersonal({
   const periodoVisible = nombreMes && mesActivo
     ? `${nombreMes.toLowerCase()} de ${mesActivo.slice(0, 4)}`
     : mesActivo;
+  const claveContextoLimpieza = [
+    configTurno?.id,
+    mesActivo,
+    soloLectura ? "lectura" : "edicion"
+  ].join("|");
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setLimpiezaPersonal(null), 0);
+    return () => clearTimeout(timeout);
+  }, [claveContextoLimpieza]);
 
   const textoDiasGrupo = (grupo) => {
     const dias = obtenerDiasLibresDelMes(grupo, mesActivo);
@@ -191,14 +203,36 @@ function ListaPersonal({
   
 
   const limpiarTodo = () => {
-    if (soloLectura) return;
+    if (soloLectura || personal.length === 0) return;
     if (idsDuplicados.size > 0) {
       setErrorIdentidad(MENSAJE_IDENTIDAD_DUPLICADA);
       return;
     }
-    if (confirm("¿Seguro querés borrar todo?")) {
-      onLimpiarPersonal();
+    setLimpiezaPersonal({
+      contextoClave: claveContextoLimpieza,
+      personalEsperado: personal,
+      cantidad: personal.length,
+      error: ""
+    });
+  };
+
+  const confirmarLimpiezaPersonal = () => {
+    if (
+      !limpiezaPersonal ||
+      limpiezaPersonal.contextoClave !== claveContextoLimpieza ||
+      limpiezaPersonal.personalEsperado !== personal ||
+      soloLectura
+    ) {
+      setLimpiezaPersonal((actual) => actual
+        ? {
+            ...actual,
+            error: "El Personal cambió mientras confirmabas la limpieza. Revisá nuevamente."
+          }
+        : actual);
+      return;
     }
+    onLimpiarPersonal();
+    setLimpiezaPersonal(null);
   };
 
   const iniciarEdicionNombre = (persona) => {
@@ -330,11 +364,12 @@ function ListaPersonal({
 
       {/* 🧹 LIMPIAR */}
       <button
+        type="button"
         onClick={limpiarTodo}
-        disabled={soloLectura}
-        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm transition"
+        disabled={soloLectura || personal.length === 0}
+        className="bg-red-500 hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-slate-300 text-white px-3 py-1.5 rounded-lg text-sm transition"
       >
-        🗑 Limpiar lista
+        Eliminar todo el Personal
       </button>
 
       {hayNombresDuplicados && (
@@ -352,6 +387,18 @@ function ListaPersonal({
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
           {errorIdentidad}
         </p>
+      )}
+
+      {limpiezaPersonal?.contextoClave === claveContextoLimpieza && (
+        <PanelConfirmacionLimpieza
+          titulo="¿Eliminar todo el Personal?"
+          descripcion={`Se eliminarán ${limpiezaPersonal.cantidad} personas del turno ${configTurno.nombre} de ${periodoVisible}.`}
+          advertencia="La limpieza actual también elimina las referencias de esas personas en planillas, Calendario Diario, licencias y certificaciones. No elimina otros datos mensuales."
+          error={limpiezaPersonal.error}
+          textoConfirmar="Sí, eliminar todo el Personal"
+          onCancelar={() => setLimpiezaPersonal(null)}
+          onConfirmar={confirmarLimpiezaPersonal}
+        />
       )}
 
     <div className="overflow-x-auto">

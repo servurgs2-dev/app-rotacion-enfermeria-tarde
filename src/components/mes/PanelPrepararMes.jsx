@@ -1,19 +1,11 @@
 function PanelPrepararMes({
   analisis,
-  posicionesSeleccionadas,
   error,
-  onAlternarPosicion,
   onCancelar,
   onConfirmar
 }) {
   const enfermeros = analisis.enfermeros;
   const flex = enfermeros.analisis;
-  const seleccionadas = new Set(posicionesSeleccionadas);
-  const criticos = posicionesSeleccionadas.filter((fila) =>
-    enfermeros.sectoresCriticos.includes(fila)
-  );
-  const seleccionCompleta =
-    posicionesSeleccionadas.length === flex.cantidadPosicionesNoAplicables;
 
   return (
     <div
@@ -26,6 +18,11 @@ function PanelPrepararMes({
         <h3 id="titulo-preparar-mes" className="text-xl font-bold text-slate-900">
           Preparar mes siguiente
         </h3>
+        <p className="mt-3 rounded-xl border border-purple-200 bg-purple-50 p-3 text-sm text-purple-950">
+          Se copiará la base del mes anterior como referencia. Las semanas o
+          bloques restantes quedarán vacíos hasta que revises el Personal y
+          generes la rotación.
+        </p>
         <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
           <p><strong>Turno:</strong> {analisis.turnoNombre}</p>
           <p><strong>Origen:</strong> {analisis.mesOrigen}</p>
@@ -54,46 +51,28 @@ function PanelPrepararMes({
               <p>Posiciones: {enfermeros.filas.length}</p>
               <p>Personas válidas: {flex.cantidadPersonas}</p>
               <p>Posiciones vacías: {flex.filasVacias.join(", ") || "Ninguna"}</p>
-              <p>No aplicables requeridas: {flex.cantidadPosicionesNoAplicables}</p>
-              {enfermeros.estrategia.tipo === "cada_3_dias" && (
-                <p>Bloques del destino: {enfermeros.bloquesDestino.length}</p>
+              {enfermeros.estrategia.tipo === "semanal" ? (
+                <>
+                  <p>Se preparará Semana 1 con la última semana real del origen.</p>
+                  <p>Semanas 2 a 6 quedarán vacías.</p>
+                </>
+              ) : (
+                <>
+                  <p>Se copiará asignacionBase como base editable.</p>
+                  <p>
+                    Bloques compartidos disponibles: {
+                      enfermeros.bloquesDestino.filter((periodo) =>
+                        Object.hasOwn(
+                          analisis.rotacionEnfermerosOrigen.bloques || {},
+                          periodo.clave
+                        )
+                      ).length
+                    }
+                  </p>
+                  <p>Los bloques faltantes quedarán sin generar.</p>
+                </>
               )}
             </div>
-
-            {flex.cantidadPosicionesNoAplicables > 0 && (
-              <fieldset className="mt-4">
-                <legend className="text-sm font-semibold text-slate-800">
-                  Seleccioná exactamente {flex.cantidadPosicionesNoAplicables}
-                </legend>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {enfermeros.filas.map((fila) => {
-                    const vacia = flex.filasVacias.includes(fila);
-                    return (
-                      <label
-                        key={fila}
-                        className={`flex items-center gap-2 rounded-lg border p-2 text-sm ${
-                          vacia ? "bg-white" : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={seleccionadas.has(fila)}
-                          disabled={!vacia}
-                          onChange={() => onAlternarPosicion(fila)}
-                        />
-                        <span>{fila} — {flex.nombresPorFila[fila] || "Vacía"}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </fieldset>
-            )}
-            {criticos.length > 0 && (
-              <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                Advertencia: seleccionaste sectores críticos: {criticos.join(", ")}.
-                Podés continuar si la selección es intencional.
-              </p>
-            )}
           </section>
 
           <section className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
@@ -103,6 +82,8 @@ function PanelPrepararMes({
               <p>Base: {analisis.licenciados.claveBase}</p>
               <p>Posiciones: {analisis.licenciados.filas.length}</p>
               <p>Personas válidas: {analisis.licenciados.cantidadPersonas}</p>
+              <p>Se preparará Semana 1 con la última semana real del origen.</p>
+              <p>Semanas 2 a 6 quedarán vacías.</p>
               <p>Salud Mental conserva su comportamiento fijo.</p>
             </div>
           </section>
@@ -124,8 +105,7 @@ function PanelPrepararMes({
           <button
             type="button"
             onClick={onConfirmar}
-            disabled={!seleccionCompleta}
-            className="rounded-lg bg-purple-600 px-4 py-2 text-white disabled:bg-slate-300"
+            className="rounded-lg bg-purple-600 px-4 py-2 text-white"
           >
             Confirmar preparación
           </button>

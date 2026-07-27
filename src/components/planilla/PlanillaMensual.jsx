@@ -5,7 +5,10 @@ import {
   obtenerSemanasDelMes,
   parsearFechaLocal
 } from "../../utils/fechas";
-import { obtenerEstrategiaRotacionPlanilla } from "../../config/turnos.js";
+import {
+  obtenerConfiguracionTurno,
+  obtenerEstrategiaRotacionPlanilla
+} from "../../config/turnos.js";
 import {
   obtenerBloquesQueIntersectanMes
 } from "../../utils/periodosRotacionPlanilla.js";
@@ -38,6 +41,7 @@ import {
 } from "../../utils/generacionFlexiblePlanilla.js";
 import SelectorPosicionesNoAplicables from "./SelectorPosicionesNoAplicables.jsx";
 import PanelIntercambioPlanilla from "./PanelIntercambioPlanilla.jsx";
+import PanelConfirmacionLimpieza from "../ui/PanelConfirmacionLimpieza.jsx";
 import {
   aplicarIntercambioPlanilla,
   debeSincronizarAsignacionBase,
@@ -45,6 +49,12 @@ import {
   obtenerOpcionesOcupadas,
   validarIntercambioPlanilla
 } from "../../utils/intercambioPlanilla.js";
+import {
+  describirContenidoAEliminar,
+  estaPlanillaVacia,
+  vaciarPlanillaMensual,
+  validarContextoLimpieza
+} from "../../utils/limpiezaSegura.js";
 
 function PlanillaMensual({
   personal,
@@ -87,6 +97,7 @@ function PlanillaMensual({
   const [posicionesSeleccionadas, setPosicionesSeleccionadas] = useState([]);
   const [errorSeleccion, setErrorSeleccion] = useState("");
   const [intercambio, setIntercambio] = useState(null);
+  const [limpiezaPlanilla, setLimpiezaPlanilla] = useState(null);
   const claveContextoIntercambio = [
     turnoId,
     mesActivo,
@@ -108,9 +119,34 @@ function PlanillaMensual({
   });
 
   useEffect(() => {
-    const timeout = setTimeout(() => setIntercambio(null), 0);
+    const timeout = setTimeout(() => {
+      setIntercambio(null);
+      setLimpiezaPlanilla(null);
+    }, 0);
     return () => clearTimeout(timeout);
   }, [claveContextoIntercambio]);
+
+  const contextoLimpiezaActual = {
+    turnoId,
+    mesActivo,
+    tipo,
+    estrategia: estrategia.tipo,
+    soloLectura,
+    versionHistoricaActiva
+  };
+  const planillaEstaVacia = estaPlanillaVacia({
+    planilla,
+    tipo,
+    usaRotacionTresDias
+  });
+  const nombreCategoria = tipo === "enfermero" ? "Enfermeros" : "Licenciados";
+  const nombreTurno = obtenerConfiguracionTurno(turnoId).nombre;
+  const periodoVisible = /^\d{4}-(0[1-9]|1[0-2])$/.test(mesActivo || "")
+    ? new Intl.DateTimeFormat("es-UY", {
+        month: "long",
+        year: "numeric"
+      }).format(new Date(`${mesActivo}-01T12:00:00`))
+    : mesActivo;
 
   const obtenerContextoBaseEnfermeros = () => {
     if (!usaRotacionTresDias) {
@@ -429,6 +465,24 @@ function PlanillaMensual({
     }));
   }
 
+  function actualizarAsignacionBaseNocturna(sector, personaId) {
+    if (soloLectura || !usaRotacionTresDias || tipo !== "enfermero") return;
+    const persona = personalFiltrado.find((item) => item.id === personaId);
+    const valor = personaId ? crearReferenciaPersona(persona) : "";
+    if (personaId && !valor) return;
+
+    setPlanilla((prev) => ({
+      ...prev,
+      rotacion3Dias: {
+        ...(prev?.rotacion3Dias || {}),
+        asignacionBase: {
+          ...(prev?.rotacion3Dias?.asignacionBase || {}),
+          [sector]: valor
+        }
+      }
+    }));
+  }
+
   const obtenerValoresPeriodo = (periodo) => usaRotacionTresDias
     ? planilla?.rotacion3Dias?.bloques?.[periodo.clave] || {}
     : planilla?.[periodo.clave] || {};
@@ -481,6 +535,42 @@ function PlanillaMensual({
         personaIdDestinoEsperada: intercambio.personaIdDestinoEsperada
       })
     : null;
+
+  const abrirLimpiezaPlanilla = () => {
+    if (soloLectura || versionHistoricaActiva || planillaEstaVacia) return;
+    setLimpiezaPlanilla({
+      contexto: contextoLimpiezaActual,
+      planillaEsperada: planilla,
+      error: ""
+    });
+  };
+
+  const confirmarLimpiezaPlanilla = () => {
+    if (
+      !limpiezaPlanilla ||
+      !validarContextoLimpieza(limpiezaPlanilla.contexto, contextoLimpiezaActual) ||
+      limpiezaPlanilla.planillaEsperada !== planilla
+    ) {
+      setLimpiezaPlanilla((actual) => actual
+        ? {
+            ...actual,
+            error: "La planilla cambió mientras confirmabas la limpieza. Revisá nuevamente."
+          }
+        : actual);
+      return;
+    }
+
+    const planillaEsperada = limpiezaPlanilla.planillaEsperada;
+    setPlanilla((prev) => {
+      if (prev !== planillaEsperada) return prev;
+      return vaciarPlanillaMensual({
+        planilla: prev,
+        tipo,
+        usaRotacionTresDias
+      });
+    });
+    setLimpiezaPlanilla(null);
+  };
 
   const abrirIntercambio = () => {
     if (soloLectura || versionHistoricaActiva) return;
@@ -554,7 +644,86 @@ function PlanillaMensual({
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-slate-800">Planilla Mensual</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-slate-800">Planilla Mensual</h2>
+        {!soloLectura && !versionHistoricaActiva && (
+          <button
+            type="button"
+            onClick={abrirLimpiezaPlanilla}
+            disabled={planillaEstaVacia}
+            className="rounded-xl border border-red-300 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+          >
+            Vaciar planilla
+          </button>
+        )}
+      </div>
+
+      {usaRotacionTresDias && tipo === "enfermero" && (
+        <section className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
+          <h3 className="font-semibold text-indigo-950">
+            Base editable de la rotación nocturna
+          </h3>
+          <p className="mt-1 text-sm text-indigo-900">
+            Revisá esta distribución antes de generar los bloques faltantes.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {filas.map((sector) => {
+              const distribucion = planilla?.rotacion3Dias?.asignacionBase || {};
+              const referenciaActual = distribucion[sector] || "";
+              const personaActual = resolverPersonaDesdeReferencia(
+                referenciaActual,
+                personal
+              );
+              const nombreHistorico = obtenerNombreDesdeReferencia(
+                referenciaActual,
+                personalFiltrado
+              );
+              const valor = personaActual?.id ||
+                (nombreHistorico ? "__REFERENCIA_NO_RESUELTA__" : "");
+              return (
+                <label key={sector} className="text-sm text-slate-700">
+                  <span className="mb-1 block font-medium">{sector}</span>
+                  <select
+                    disabled={soloLectura}
+                    value={valor}
+                    onChange={(evento) =>
+                      actualizarAsignacionBaseNocturna(sector, evento.target.value)
+                    }
+                    className="w-full rounded-lg border border-indigo-200 bg-white px-2 py-1.5"
+                  >
+                    <option value="">-- elegir --</option>
+                    {!personaActual && nombreHistorico && (
+                      <option value="__REFERENCIA_NO_RESUELTA__" disabled>
+                        {nombreHistorico}
+                      </option>
+                    )}
+                    {personalFiltrado
+                      .filter((persona) =>
+                        !Object.entries(distribucion).some(
+                          ([otraFila, referencia]) =>
+                            otraFila !== sector &&
+                            referenciaCorrespondeAPersona(
+                              referencia,
+                              persona,
+                              personal
+                            )
+                        )
+                      )
+                      .map((persona, indice) => (
+                        <option
+                          key={obtenerClaveRenderPersona(persona, indice, idsDuplicados)}
+                          value={persona.id}
+                        >
+                          {obtenerEtiquetaPersona(persona, personal)}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <div className="overflow-x-auto">
         <table className="min-w-[900px] border border-slate-200 rounded-xl overflow-hidden text-sm table-auto">
@@ -808,6 +977,21 @@ function PlanillaMensual({
           }}
           onCancelar={() => setIntercambio(null)}
           onConfirmar={confirmarIntercambio}
+        />
+      )}
+      {limpiezaPlanilla && (
+        <PanelConfirmacionLimpieza
+          titulo={`¿Vaciar la Planilla de ${nombreCategoria}?`}
+          descripcion={`Se eliminarán todas las asignaciones del turno ${nombreTurno} correspondientes a ${periodoVisible}.`}
+          detalles={describirContenidoAEliminar({
+            tipo,
+            usaRotacionTresDias
+          }).map((detalle) => `Se eliminarán ${detalle}.`)}
+          advertencia="Personal, licencias, certificaciones, extras y Calendario Diario no se modificarán."
+          error={limpiezaPlanilla.error}
+          textoConfirmar="Sí, vaciar planilla"
+          onCancelar={() => setLimpiezaPlanilla(null)}
+          onConfirmar={confirmarLimpiezaPlanilla}
         />
       )}
     </div>

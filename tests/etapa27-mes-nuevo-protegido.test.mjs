@@ -583,11 +583,13 @@ await probar("95 panel posterga el selector de exclusiones", () => {
   assert.doesNotMatch(panel, /type="checkbox"|posicionesSeleccionadas/);
   assert.match(panel, /generes la rotación/);
 });
-await probar("96 gestión del mes aparece antes de las secciones principales", () => {
+await probar("96 gestión del mes aparece entre Certificaciones y Estadísticas", () => {
+  const certificaciones = app.indexOf('<Seccion titulo="🩺 Certificaciones médicas"');
   const gestion = app.indexOf("Gestión del mes");
-  const primeraSeccion = app.indexOf("<Seccion", gestion);
-  assert.ok(gestion >= 0);
-  assert.ok(primeraSeccion > gestion);
+  const estadisticas = app.indexOf('<Seccion titulo="📈 Estadísticas"');
+  assert.ok(certificaciones >= 0);
+  assert.ok(certificaciones < gestion);
+  assert.ok(gestion < estadisticas);
 });
 await probar("97 preparación no está dentro de Planilla mensual", () => {
   const inicioPlanilla = app.indexOf('<Seccion titulo="📊 Planilla mensual"');

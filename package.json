@@ -19,6 +19,7 @@
     "test:etapa26": "node tests/etapa26-intercambio-seguro.test.mjs",
     "test:etapa27": "node tests/etapa27-mes-nuevo-protegido.test.mjs",
     "test:limpieza-segura": "node tests/limpieza-segura.test.mjs",
+    "test:redistribucion-calendario": "node tests/redistribucion-calendario.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -220,32 +220,6 @@ const alertasHorarios = useMemo(() => {
   });
 }, [configTurno, dataPDFEnf, dataPDFLic, esDiaParoActual, keyDiaActual]);
 
-const setDiaParo = (keyDia, activo) => {
-  setEstadoPorTurnoMes(prev => {
-    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
-    const actual = prev[claveActiva] || crearEstadoMensualVacio();
-    const diasActuales = actual.calendario?.diasParo || {};
-    const nuevosDiasParo = { ...diasActuales };
-
-    if (activo) {
-      nuevosDiasParo[keyDia] = true;
-    } else {
-      delete nuevosDiasParo[keyDia];
-    }
-
-    return {
-      ...prev,
-      [claveActiva]: {
-        ...actual,
-        calendario: {
-          ...actual.calendario,
-          diasParo: nuevosDiasParo
-        }
-      }
-    };
-  });
-};
-
 // 🔹 PERSONAL
 const personal = mesData.personal;
 
@@ -1779,109 +1753,6 @@ return (
         />
       )}
 
-      {(mesActivo === mesSiguiente || !destinoActivoPreparacion.permitido) && (
-        <div className="mb-4 rounded-xl border border-purple-200 bg-white p-4 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-900">Gestión del mes</h2>
-          {mesActivo === mesSiguiente &&
-          destinoActivoPreparacion.permitido &&
-          puedeEditarActivo &&
-          !modoSoloLecturaEfectiva &&
-          !cargando &&
-          !metadatosActivos?.conflicto &&
-          !clavesBloqueadasTrasRestauracion.has(claveActiva) &&
-          !hayPendientesEnClave(claveActiva) && (
-            <button
-              type="button"
-              onClick={iniciarPreparacionMes}
-              disabled={
-                cargando ||
-                Boolean(metadatosActivos?.conflicto) ||
-                clavesBloqueadasTrasRestauracion.has(claveActiva)
-              }
-              className="mt-3 flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm text-white shadow-sm transition hover:bg-purple-700 disabled:bg-slate-300"
-            >
-              Preparar mes siguiente
-            </button>
-          )}
-          {!destinoActivoPreparacion.permitido && (
-            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              <p className="font-medium">
-                Este mes ya fue iniciado y no puede prepararse nuevamente.
-              </p>
-              {contenidoDestinoPresentable.length > 0 && (
-                <div className="mt-3">
-                  <p className="font-medium">Información encontrada:</p>
-                  <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-                    {contenidoDestinoPresentable.map((etiqueta) => (
-                      <li
-                        key={etiqueta}
-                        className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2"
-                      >
-                        • {etiqueta}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {puedeEditarActivo && !modoSoloLecturaEfectiva && (
-                <button
-                  type="button"
-                  onClick={abrirReinicioMes}
-                  disabled={
-                    cargando ||
-                    Boolean(metadatosActivos?.conflicto) ||
-                    clavesBloqueadasTrasRestauracion.has(claveActiva) ||
-                    hayPendientesEnClave(claveActiva)
-                  }
-                  className="mt-4 rounded-lg border border-red-300 bg-white px-4 py-2 font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
-                >
-                  Reiniciar mes completo
-                </button>
-              )}
-            </div>
-          )}
-          {mesActivo === mesSiguiente &&
-            destinoActivoPreparacion.permitido &&
-            (cargando ||
-              metadatosActivos?.conflicto ||
-              clavesBloqueadasTrasRestauracion.has(claveActiva) ||
-              hayPendientesEnClave(claveActiva)) && (
-              <p className="mt-3 text-sm text-slate-600">
-                La preparación estará disponible cuando finalicen las operaciones pendientes.
-              </p>
-            )}
-
-          {preparacionMes?.estado === "cargando" && (
-            <p aria-live="polite" className="mt-3 text-sm text-slate-600">
-              Preparando vista previa…
-            </p>
-          )}
-          {preparacionMes?.estado === "error" && (
-            <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
-              <p role="alert" className="text-sm text-rose-700">{preparacionMes.error}</p>
-              <button type="button" onClick={() => setPreparacionMes(null)} className="mt-2 text-sm underline">
-                Cerrar
-              </button>
-            </div>
-          )}
-          {preparacionMes?.estado === "lista" &&
-            mesActivo === mesSiguiente &&
-            validarContextoPreparacion(preparacionMes.contexto, {
-              turnoId: turnoActivo,
-              mesOrigen: obtenerMesAnterior(mesActivo),
-              mesDestino: mesActivo,
-              revisionDestino: String(metadatosActivos?.revisionConfirmada ?? "")
-            }) && (
-              <PanelPrepararMes
-                analisis={preparacionMes.analisis}
-                error={preparacionMes.error}
-                onCancelar={() => setPreparacionMes(null)}
-                onConfirmar={confirmarPreparacionMes}
-              />
-            )}
-        </div>
-      )}
-
       {reinicioMes?.clave === claveActiva && (
         <PanelReiniciarMes
           turnoNombre={configTurno.nombre}
@@ -2038,6 +1909,109 @@ return (
         />
       </Seccion>
 
+      {(mesActivo === mesSiguiente || !destinoActivoPreparacion.permitido) && (
+        <div className="order-4 mb-4 rounded-xl border border-purple-200 bg-white p-4 shadow-sm">
+          <h2 className="text-base font-semibold text-slate-900">Gestión del mes</h2>
+          {mesActivo === mesSiguiente &&
+          destinoActivoPreparacion.permitido &&
+          puedeEditarActivo &&
+          !modoSoloLecturaEfectiva &&
+          !cargando &&
+          !metadatosActivos?.conflicto &&
+          !clavesBloqueadasTrasRestauracion.has(claveActiva) &&
+          !hayPendientesEnClave(claveActiva) && (
+            <button
+              type="button"
+              onClick={iniciarPreparacionMes}
+              disabled={
+                cargando ||
+                Boolean(metadatosActivos?.conflicto) ||
+                clavesBloqueadasTrasRestauracion.has(claveActiva)
+              }
+              className="mt-3 flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm text-white shadow-sm transition hover:bg-purple-700 disabled:bg-slate-300"
+            >
+              Preparar mes siguiente
+            </button>
+          )}
+          {!destinoActivoPreparacion.permitido && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <p className="font-medium">
+                Este mes ya fue iniciado y no puede prepararse nuevamente.
+              </p>
+              {contenidoDestinoPresentable.length > 0 && (
+                <div className="mt-3">
+                  <p className="font-medium">Información encontrada:</p>
+                  <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {contenidoDestinoPresentable.map((etiqueta) => (
+                      <li
+                        key={etiqueta}
+                        className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2"
+                      >
+                        • {etiqueta}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {puedeEditarActivo && !modoSoloLecturaEfectiva && (
+                <button
+                  type="button"
+                  onClick={abrirReinicioMes}
+                  disabled={
+                    cargando ||
+                    Boolean(metadatosActivos?.conflicto) ||
+                    clavesBloqueadasTrasRestauracion.has(claveActiva) ||
+                    hayPendientesEnClave(claveActiva)
+                  }
+                  className="mt-4 rounded-lg border border-red-300 bg-white px-4 py-2 font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                >
+                  Reiniciar mes completo
+                </button>
+              )}
+            </div>
+          )}
+          {mesActivo === mesSiguiente &&
+            destinoActivoPreparacion.permitido &&
+            (cargando ||
+              metadatosActivos?.conflicto ||
+              clavesBloqueadasTrasRestauracion.has(claveActiva) ||
+              hayPendientesEnClave(claveActiva)) && (
+              <p className="mt-3 text-sm text-slate-600">
+                La preparación estará disponible cuando finalicen las operaciones pendientes.
+              </p>
+            )}
+
+          {preparacionMes?.estado === "cargando" && (
+            <p aria-live="polite" className="mt-3 text-sm text-slate-600">
+              Preparando vista previa…
+            </p>
+          )}
+          {preparacionMes?.estado === "error" && (
+            <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
+              <p role="alert" className="text-sm text-rose-700">{preparacionMes.error}</p>
+              <button type="button" onClick={() => setPreparacionMes(null)} className="mt-2 text-sm underline">
+                Cerrar
+              </button>
+            </div>
+          )}
+          {preparacionMes?.estado === "lista" &&
+            mesActivo === mesSiguiente &&
+            validarContextoPreparacion(preparacionMes.contexto, {
+              turnoId: turnoActivo,
+              mesOrigen: obtenerMesAnterior(mesActivo),
+              mesDestino: mesActivo,
+              revisionDestino: String(metadatosActivos?.revisionConfirmada ?? "")
+            }) && (
+              <PanelPrepararMes
+                analisis={preparacionMes.analisis}
+                error={preparacionMes.error}
+                onCancelar={() => setPreparacionMes(null)}
+                onConfirmar={confirmarPreparacionMes}
+              />
+            )}
+        </div>
+      )}
+
       <Seccion titulo="📈 Estadísticas" className="order-5">
         <Estadisticas
           calendario={mesData.calendario}
@@ -2134,7 +2108,7 @@ return (
     turnoActivo={turnoActivo}
     usuarioActual={perfil.usuario}
     puedeReabrirCierre={esPerfilSupervision(perfil)}
-  key="enfermeros"
+  key={`enfermeros|${turnoActivo}|${mesActivo}|${keyDiaFromDate(fecha)}|${modoSoloLecturaEfectiva}`}
     personal={personal}
     planilla={planillaEnfermeros}
     tipo="enfermero"
@@ -2143,7 +2117,6 @@ return (
     certificaciones={certificacionesMes}
     calendario={mesData.calendario.enfermeros}
     esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
-    setDiaParo={setDiaParo}
      onDataReady={setDataPDFEnf}
     fecha={fecha}
     setFecha={setFecha}
@@ -2182,7 +2155,7 @@ return (
     turnoActivo={turnoActivo}
     usuarioActual={perfil.usuario}
     puedeReabrirCierre={esPerfilSupervision(perfil)}
-  key="licenciados"
+  key={`licenciados|${turnoActivo}|${mesActivo}|${keyDiaFromDate(fecha)}|${modoSoloLecturaEfectiva}`}
     personal={personal}
     planilla={planillaLicenciados}
     tipo="licenciado"
@@ -2191,7 +2164,6 @@ return (
     certificaciones={certificacionesMes}
     calendario={mesData.calendario.licenciados}
     esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
-    setDiaParo={setDiaParo}
     onDataReady={setDataPDFLic}
     fecha={fecha}
     setFecha={setFecha}

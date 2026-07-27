@@ -57,6 +57,17 @@ import {
   reabrirFechaCategoria,
   snapshotAAsignacionesVisibles
 } from "../../utils/cierreTurno.js";
+import {
+  esDistribucionOpcion1,
+  esDistribucionPorBoxes,
+  obtenerSectoresVisiblesBoxes,
+  obtenerSectoresVisiblesOpcion1,
+  quitarRedistribucionFecha,
+  redistribuirCritica,
+  redistribuirPorBoxes,
+  validarContextoRedistribucion
+} from "../../utils/redistribucionEnfermeros.js";
+import PanelConfirmacionRedistribucion from "./PanelConfirmacionRedistribucion.jsx";
 
 const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
   const clave = obtenerClaveIdentidadPersona({
@@ -76,7 +87,6 @@ function CalendarioDiario({
   calendario,
   setCalendario,
   esDiaParo,
-  setDiaParo,
   onDataReady,
   fecha,
   setFecha,
@@ -110,6 +120,7 @@ const [nuevoNombre, setNuevoNombre] = useState("");
   const [cierreVisible, setCierreVisible] = useState(false);
   const [seleccionResponsable, setSeleccionResponsable] = useState({ contexto: "", personaId: "" });
   const [errorResponsable, setErrorResponsable] = useState({ contexto: "", mensaje: "" });
+  const [confirmacionRedistribucion, setConfirmacionRedistribucion] = useState(null);
   const prevDataRef = useRef(null);
   const altaExtraEnCursoRef = useRef(false);
 
@@ -200,6 +211,35 @@ const [yearMesActivo, monthMesActivo] = mesActivo.split("-").map(Number);
 const ultimoDiaDelMes = new Date(yearMesActivo, monthMesActivo, 0).getDate();
 const fechaMaxima = `${mesActivo}-${String(ultimoDiaDelMes).padStart(2, "0")}`;
 const extrasDia = Array.isArray(extras[keyDia]) ? extras[keyDia].filter(Boolean) : [];
+const cambiosFechaActual = cambiosDia[keyDia] || {};
+const distribucionPorBoxesActiva =
+  tipo === "enfermero" && esDistribucionPorBoxes(cambiosFechaActual);
+const distribucionOpcion1Activa =
+  tipo === "enfermero" && esDistribucionOpcion1(cambiosFechaActual);
+const tipoRedistribucionActiva = distribucionOpcion1Activa
+  ? "critica"
+  : distribucionPorBoxesActiva
+    ? "boxes"
+    : null;
+const obtenerFilasRedistribucion = (filasOriginales) => {
+  if (distribucionPorBoxesActiva) {
+    return obtenerSectoresVisiblesBoxes(filasOriginales);
+  }
+  if (distribucionOpcion1Activa) {
+    return obtenerSectoresVisiblesOpcion1(filasOriginales);
+  }
+  return filasOriginales;
+};
+const filasCalendario = obtenerFilasRedistribucion(filas);
+
+const confirmacionRedistribucionVisible = Boolean(
+  confirmacionRedistribucion &&
+  confirmacionRedistribucion.contexto.turno === turnoActivo &&
+  confirmacionRedistribucion.contexto.mes === mesActivo &&
+  confirmacionRedistribucion.contexto.fecha === keyDia &&
+  confirmacionRedistribucion.contexto.categoria === tipo &&
+  confirmacionRedistribucion.contexto.soloLectura === soloLecturaEfectiva
+);
 
 useEffect(() => {
   altaExtraEnCursoRef.current = false;
@@ -272,7 +312,7 @@ const borrarExtra = (extra) => {
 };
 
 const asignacionOrdenada = (() => {
-let asignacionCompleta = filas.map((fila) => {
+let asignacionCompleta = filasCalendario.map((fila) => {
   const override = cambiosDia[keyDia]?.[normalizar(fila)];
 
   let enfermero;
@@ -475,7 +515,7 @@ const seDivideReanimacionSillones =
   sobrantes.length > 0;
 
 let asignacionParaMostrar = asignacionFinal;
-let ordenVisualActivo = ordenVisual;
+let ordenVisualActivo = obtenerFilasRedistribucion(ordenVisual);
 
 if (seDivideReanimacionSillones) {
   const filasDivididas = [
@@ -754,9 +794,11 @@ useEffect(() => {
         ? ["Reanimación", "Sillones"]
         : [sector]
     );
-    const sectoresReales = expandirReanimacion(
-      esDiaParo ? sectoresParo : sectoresFijos
-    );
+    const sectoresReales = distribucionPorBoxesActiva || distribucionOpcion1Activa
+      ? obtenerFilasRedistribucion(ordenVisual).filter(
+          (fila) => fila !== "DIVIDER" && normalizar(fila) !== "SIN ASIGNAR"
+        )
+      : expandirReanimacion(esDiaParo ? sectoresParo : sectoresFijos);
     const criticosPanel = expandirReanimacion(sectoresCriticos);
     const personasConLicencia = personalFiltrado.filter(estaDeLicenciaHoy);
     const personasNoDisponibles = personalFiltrado.filter(estaNoDisponible);
@@ -973,6 +1015,103 @@ useEffect(() => {
     setSeleccionado(null);
   };
 
+  const abrirRedistribucion = (tipoRedistribucion) => {
+    if (
+      tipo !== "enfermero" ||
+      soloLecturaEfectiva ||
+      esDiaParo
+    ) return;
+
+    setSeleccionado(null);
+    setConfirmacionRedistribucion({
+      tipo: tipoRedistribucion,
+      error: "",
+      contexto: {
+        turno: turnoActivo,
+        mes: mesActivo,
+        fecha: keyDia,
+        categoria: tipo,
+        tipo: tipoRedistribucion,
+        tipoRedistribucionActiva,
+        calendario,
+        soloLectura: soloLecturaEfectiva
+      }
+    });
+  };
+
+  const confirmarRedistribucion = () => {
+    if (!confirmacionRedistribucion) return;
+
+    const contextoActual = {
+      turno: turnoActivo,
+      mes: mesActivo,
+      fecha: keyDia,
+      categoria: tipo,
+      tipo: confirmacionRedistribucion.tipo,
+      calendario,
+      soloLectura: soloLecturaEfectiva
+    };
+
+    if (
+      !validarContextoRedistribucion(
+        confirmacionRedistribucion.contexto,
+        contextoActual
+      )
+    ) {
+      setConfirmacionRedistribucion((actual) => ({
+        ...actual,
+        error: actual.tipo === "comun"
+          ? "El calendario cambió mientras confirmabas. Revisá nuevamente."
+          : "El calendario cambió mientras confirmabas la redistribución. Revisá nuevamente."
+      }));
+      return;
+    }
+
+    if (
+      confirmacionRedistribucion.tipo === "comun" &&
+      tipoRedistribucionActiva !==
+        confirmacionRedistribucion.contexto.tipoRedistribucionActiva
+    ) {
+      setConfirmacionRedistribucion((actual) => ({
+        ...actual,
+        error: "El calendario cambió mientras confirmabas. Revisá nuevamente."
+      }));
+      return;
+    }
+
+    const redistribucion = confirmacionRedistribucion.tipo === "comun"
+      ? null
+      : confirmacionRedistribucion.tipo === "boxes"
+        ? redistribuirPorBoxes({
+            asignaciones: asignacionOrdenada,
+            ordenVisual,
+            prioridadSectores
+          })
+        : redistribuirCritica({
+            asignaciones: asignacionOrdenada,
+            ordenVisual,
+            prioridadSectores
+          });
+
+    setCalendario((prev) => {
+      if (prev !== confirmacionRedistribucion.contexto.calendario) return prev;
+
+      if (confirmacionRedistribucion.tipo === "comun") {
+        return quitarRedistribucionFecha(prev, keyDia);
+      }
+
+      return {
+        ...prev,
+        cambiosDia: {
+          ...(prev.cambiosDia || {}),
+          [keyDia]: redistribucion.cambios
+        }
+      };
+    });
+    setSeleccionado(null);
+    setConfirmacionRedistribucion(null);
+  };
+
   return (
     <div className="min-h-fit">
       <h2 className="text-xl font-semibold text-slate-800">
@@ -997,23 +1136,60 @@ useEffect(() => {
     setFecha(new Date(y, m - 1, d, 12));
   }}
 />
-      <button
-        type="button"
-        disabled={soloLecturaEfectiva}
-        onClick={() => {
-          if (soloLecturaEfectiva) return;
-          setSeleccionado(null);
-          setDiaParo(keyDia, !esDiaParo);
-        }}
-        className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-          esDiaParo
-            ? "bg-amber-600 text-white"
-            : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-        }`}
-      >
-        Día de paro
-      </button>
+      {tipo === "enfermero" && !esDiaParo && !tipoRedistribucionActiva && (
+        <>
+          <button
+            type="button"
+            disabled={soloLecturaEfectiva}
+            onClick={() => abrirRedistribucion("critica")}
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Redistribución opción 1
+          </button>
+          <button
+            type="button"
+            disabled={soloLecturaEfectiva}
+            onClick={() => abrirRedistribucion("boxes")}
+            className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-900 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Redistribución opción 2
+          </button>
+        </>
+      )}
+      {tipo === "enfermero" &&
+        !esDiaParo &&
+        tipoRedistribucionActiva && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800">
+              Redistribución opción {tipoRedistribucionActiva === "critica" ? "1" : "2"} aplicada
+            </span>
+            {!soloLecturaEfectiva && (
+              <button
+                type="button"
+                onClick={() => abrirRedistribucion("comun")}
+                className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 transition hover:bg-amber-50"
+              >
+                Volver a distribución común
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {esDiaParo && (
+        <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Esta fecha conserva una redistribución histórica por paro.
+        </p>
+      )}
+
+      {confirmacionRedistribucionVisible && (
+        <PanelConfirmacionRedistribucion
+          tipo={confirmacionRedistribucion.tipo}
+          error={confirmacionRedistribucion.error}
+          onCancelar={() => setConfirmacionRedistribucion(null)}
+          onConfirmar={confirmarRedistribucion}
+        />
+      )}
 
       <h3>Día {fecha.getDate()}</h3>
 

@@ -12,6 +12,7 @@ import {
   resolverPersonaDesdeReferencia
 } from "./referenciasPersonas.js";
 import { resolverPersonaDeCertificacion } from "./certificacionesPersonas.js";
+import { obtenerNombreConMarcaTurnante } from "./etiquetaTurnante.js";
 
 
 // 🔹 PLANILLA
@@ -446,7 +447,9 @@ export const prepararFilasCalendarioPDF = (asignaciones) =>
     .filter((item) => item?.nombre && item.tipo !== "divider")
     .map((item) => [
       item.nombre,
-      item.enfermero?.nombre || item.etiquetaVacio || "Sin cobertura"
+      obtenerNombreConMarcaTurnante(item.enfermero) ||
+        item.etiquetaVacio ||
+        "Sin cobertura"
     ]);
 
 const dibujarListaCompactaPDF = ({

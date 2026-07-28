@@ -7,6 +7,18 @@ import {
   prepararFilasCalendarioPDF
 } from "../src/utils/exportPDF.js";
 import { obtenerSemanasDelMes } from "../src/utils/fechas.js";
+import {
+  crearPersonaPresentacionTurnante,
+  esPersonaTurnante,
+  obtenerIdentidadesTurnantes,
+  obtenerNombreConMarcaTurnante
+} from "../src/utils/etiquetaTurnante.js";
+import { obtenerClaveIdentidadPersona } from "../src/utils/identidadPersonas.js";
+import {
+  redistribuirCritica,
+  redistribuirPorBoxes
+} from "../src/utils/redistribucionEnfermeros.js";
+import { configuracionSectores } from "../src/data/sectores.js";
 
 let total = 0;
 const probar = (nombre, prueba) => {
@@ -19,7 +31,10 @@ const fecha = new Date(2026, 7, 5, 12);
 const personas = Array.from({ length: 45 }, (_, indice) => ({
   id: `p${indice + 1}`,
   nombre: `Persona sintética con nombre extenso ${indice + 1}`,
-  categoria: indice < 28 ? "enfermero" : "licenciado"
+  categoria: indice < 28 ? "enfermero" : "licenciado",
+  rol: indice === 0 || indice === 19 || indice === 28
+    ? "suplente"
+    : "titular"
 }));
 const crearAsignaciones = (prefijo, cantidad, desplazamiento = 0) =>
   Array.from({ length: cantidad }, (_, indice) => ({
@@ -218,6 +233,196 @@ probar("26 ambos PDFs usan generadores separados", () => {
   );
   assert.match(fuente, /export const crearCalendarioDiarioPDF/);
   assert.match(fuente, /export const crearPlanillaSemanalPDF/);
+});
+
+const titularTurnanteEnfermero = personas[1];
+const segundoTurnanteEnfermero = personas[2];
+const suplenteEnSectorFijo = personas[0];
+const titularTurnanteLicenciado = { ...personas[28], rol: "titular" };
+const identidadesTurnantesEnfermeros = obtenerIdentidadesTurnantes({
+  distribucion: {
+    T1: { personaId: titularTurnanteEnfermero.id, nombre: titularTurnanteEnfermero.nombre },
+    T2: { personaId: segundoTurnanteEnfermero.id, nombre: segundoTurnanteEnfermero.nombre },
+    "REA 1": { personaId: suplenteEnSectorFijo.id, nombre: suplenteEnSectorFijo.nombre }
+  },
+  posicionesTurnantes: configuracionSectores.enfermero.turnantes,
+  personal: personas
+});
+const personalConLicenciadoTitular = [
+  ...personas.filter((persona) => persona.id !== titularTurnanteLicenciado.id),
+  titularTurnanteLicenciado
+];
+const identidadesTurnantesLicenciados = obtenerIdentidadesTurnantes({
+  distribucion: {
+    T1: {
+      personaId: titularTurnanteLicenciado.id,
+      nombre: titularTurnanteLicenciado.nombre
+    }
+  },
+  posicionesTurnantes: configuracionSectores.licenciado.turnantes,
+  personal: personalConLicenciadoTitular
+});
+const enfermeroTurnantePresentacion = crearPersonaPresentacionTurnante(
+  titularTurnanteEnfermero,
+  identidadesTurnantesEnfermeros
+);
+const segundoTurnantePresentacion = crearPersonaPresentacionTurnante(
+  segundoTurnanteEnfermero,
+  identidadesTurnantesEnfermeros
+);
+const licenciadoTurnantePresentacion = crearPersonaPresentacionTurnante(
+  titularTurnanteLicenciado,
+  identidadesTurnantesLicenciados
+);
+
+probar("27 un titular asignado a T1 muestra la marca Turnante", () => {
+  assert.equal(titularTurnanteEnfermero.rol, "titular");
+  assert.equal(
+    esPersonaTurnante(titularTurnanteEnfermero, identidadesTurnantesEnfermeros),
+    true
+  );
+  assert.match(obtenerNombreConMarcaTurnante(enfermeroTurnantePresentacion), /\(T\)$/);
+});
+probar("28 un suplente asignado a REA 1 no muestra la marca", () => {
+  assert.equal(suplenteEnSectorFijo.rol, "suplente");
+  assert.equal(
+    esPersonaTurnante(suplenteEnSectorFijo, identidadesTurnantesEnfermeros),
+    false
+  );
+  assert.equal(
+    obtenerNombreConMarcaTurnante(
+      suplenteEnSectorFijo,
+      "",
+      identidadesTurnantesEnfermeros
+    ),
+    suplenteEnSectorFijo.nombre
+  );
+});
+probar("29 una persona de T1 cubriendo DX conserva la marca", () => {
+  assert.equal(
+    prepararFilasCalendarioPDF([
+      { nombre: "DX 25-30", enfermero: enfermeroTurnantePresentacion, tipo: "sector" }
+    ])[0][1],
+    `${titularTurnanteEnfermero.nombre} (T)`
+  );
+});
+probar("30 una persona de T2 movida manualmente conserva la marca", () => {
+  assert.equal(
+    prepararFilasCalendarioPDF([
+      { nombre: "REA 1", enfermero: segundoTurnantePresentacion, tipo: "sector" }
+    ])[0][1],
+    `${segundoTurnanteEnfermero.nombre} (T)`
+  );
+});
+probar("31 un titular de una fila fija no recibe la marca", () => {
+  const titularFijo = personas[3];
+  assert.equal(
+    obtenerNombreConMarcaTurnante(titularFijo, "", identidadesTurnantesEnfermeros),
+    titularFijo.nombre
+  );
+});
+probar("32 la marca funciona en Enfermeros", () => {
+  assert.equal(enfermeroTurnantePresentacion.esTurnante, true);
+});
+probar("33 la marca funciona en Licenciados", () => {
+  assert.equal(licenciadoTurnantePresentacion.esTurnante, true);
+});
+probar("34 la semana activa es la fuente de identidades Turnantes", () => {
+  assert.match(calendarioFuente, /distribucion: planillaPeriodo/);
+  assert.match(calendarioFuente, /posicionesTurnantes: turnantesLabels/);
+});
+probar("35 Noche cada tres días usa el bloque activo", () => {
+  assert.match(
+    calendarioFuente,
+    /planilla\?\.rotacion3Dias\?\.bloques\?\.\[clavePeriodo\]/
+  );
+});
+probar("36 cambios manuales y SIN ASIGNAR conservan la marca", () => {
+  assert.match(calendarioFuente, /crearPersonaPresentacionTurnante/);
+  assert.match(calendarioFuente, /handleClick\(item\)/);
+  assert.equal(
+    prepararFilasCalendarioPDF([
+      { nombre: "SIN ASIGNAR", enfermero: segundoTurnantePresentacion, tipo: "sector" }
+    ])[0][1],
+    `${segundoTurnanteEnfermero.nombre} (T)`
+  );
+});
+probar("37 extras solo muestran marca si su identidad proviene de T", () => {
+  assert.match(
+    calendarioFuente,
+    /obtenerNombreConMarcaTurnante\(e, "", identidadesTurnantes\)/
+  );
+  assert.equal(
+    obtenerNombreConMarcaTurnante(
+      suplenteEnSectorFijo,
+      "",
+      identidadesTurnantesEnfermeros
+    ).includes("(T)"),
+    false
+  );
+});
+probar("38 Redistribución opción 1 conserva la marca de origen", () => {
+  const resultado = redistribuirCritica({
+    asignaciones: [
+      { nombre: "REA 1", enfermero: enfermeroTurnantePresentacion },
+      { nombre: "REA 2", enfermero: suplenteEnSectorFijo }
+    ],
+    ordenVisual: configuracionSectores.enfermero.ordenVisual,
+    prioridadSectores: configuracionSectores.enfermero.prioridadSectores
+  });
+  assert.ok(
+    prepararFilasCalendarioPDF(resultado.asignaciones)
+      .some(([, nombre]) => nombre.endsWith("(T)"))
+  );
+});
+probar("39 Redistribución opción 2 conserva la marca de origen", () => {
+  const resultado = redistribuirPorBoxes({
+    asignaciones: [
+      { nombre: "REA 1", enfermero: enfermeroTurnantePresentacion },
+      { nombre: "REA 2", enfermero: suplenteEnSectorFijo }
+    ],
+    ordenVisual: configuracionSectores.enfermero.ordenVisual,
+    prioridadSectores: configuracionSectores.enfermero.prioridadSectores
+  });
+  assert.ok(
+    prepararFilasCalendarioPDF(resultado.asignaciones)
+      .some(([, nombre]) => nombre.endsWith("(T)"))
+  );
+});
+probar("40 no modifica nombre, identidad ni referencia", () => {
+  const nombreOriginal = titularTurnanteEnfermero.nombre;
+  const identidadOriginal = obtenerClaveIdentidadPersona(titularTurnanteEnfermero);
+  assert.equal(enfermeroTurnantePresentacion.nombre, nombreOriginal);
+  assert.equal(
+    obtenerClaveIdentidadPersona(enfermeroTurnantePresentacion),
+    identidadOriginal
+  );
+  assert.equal(nombreOriginal.includes("(T)"), false);
+});
+probar("41 el PDF diario con marcas continúa en una página", () => {
+  const pdfConTurnante = crearCalendarioDiarioPDF({
+    ...opciones,
+    enfermeros: {
+      ...opciones.enfermeros,
+      asignaciones: [
+        {
+          nombre: "DX 25-30",
+          enfermero: enfermeroTurnantePresentacion,
+          tipo: "sector"
+        },
+        ...opciones.enfermeros.asignaciones
+      ]
+    }
+  });
+  assert.equal(pdfConTurnante.getNumberOfPages(), 1);
+  assert.ok(
+    prepararFilasCalendarioPDF([
+      { nombre: "DX 25-30", enfermero: enfermeroTurnantePresentacion, tipo: "sector" }
+    ])[0][1].endsWith("(T)")
+  );
+});
+probar("42 la Planilla semanal continúa en dos páginas", () => {
+  assert.equal(pdfSemanal.getNumberOfPages(), 2);
 });
 
 console.log(`\n${total} pruebas de PDF de Calendario Diario pasaron.`);

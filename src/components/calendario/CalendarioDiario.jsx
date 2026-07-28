@@ -76,6 +76,12 @@ import {
   validarContextoRedistribucion
 } from "../../utils/redistribucionEnfermeros.js";
 import PanelConfirmacionRedistribucion from "./PanelConfirmacionRedistribucion.jsx";
+import {
+  crearPersonaPresentacionTurnante,
+  esPersonaTurnante,
+  obtenerIdentidadesTurnantes,
+  obtenerNombreConMarcaTurnante
+} from "../../utils/etiquetaTurnante.js";
 
 const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
   const clave = obtenerClaveIdentidadPersona({
@@ -201,6 +207,14 @@ const {
   planillaPeriodo,
   coberturasSaludMental
 } = periodoPlanilla;
+const identidadesTurnantes = useMemo(
+  () => obtenerIdentidadesTurnantes({
+    distribucion: planillaPeriodo,
+    posicionesTurnantes: turnantesLabels,
+    personal
+  }),
+  [personal, planillaPeriodo, turnantesLabels]
+);
 const bloqueadoPorCierre = estaFechaCategoriaCerrada(cierresDia, keyDia);
 const soloLecturaEfectiva = soloLectura || bloqueadoPorCierre;
 const versionCierre = obtenerUltimaVersionCierre(cierresDia, keyDia);
@@ -808,7 +822,17 @@ ordenVisualActivo.forEach((item) => {
   }
 });
 
-return resultadoOrdenado;
+return resultadoOrdenado.map((item) =>
+  item?.enfermero
+    ? {
+        ...item,
+        enfermero: crearPersonaPresentacionTurnante(
+          item.enfermero,
+          identidadesTurnantes
+        )
+      }
+    : item
+);
 })();
 
 useEffect(() => {
@@ -1414,14 +1438,26 @@ useEffect(() => {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="text-sm text-slate-600">
             {item.enfermero
-              ? item.enfermero.nombre
+              ? (
+                  <>
+                    {item.enfermero.nombre}
+                    {esPersonaTurnante(item.enfermero) && (
+                      <span
+                        className="ml-1 text-xs font-semibold text-blue-700"
+                        aria-label="Turnante"
+                      >
+                        (T)
+                      </span>
+                    )}
+                  </>
+                )
               : sectorLiberadoPorAusencia
                 ? "Sin asignar — ausencia"
                 : "Sin cobertura"}
           </span>
           {item.enfermero && (
             <select
-              aria-label={`Asistencia de ${item.enfermero.nombre}`}
+              aria-label={`Asistencia de ${obtenerNombreConMarcaTurnante(item.enfermero)}`}
               value={obtenerEstadoAsistencia(asistenciaMostrada, item.enfermero)}
               disabled={soloLecturaEfectiva}
               onClick={(evento) => evento.stopPropagation()}
@@ -1463,7 +1499,13 @@ useEffect(() => {
             key={ausente.clave}
             className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-slate-700"
           >
-            <p className="font-semibold text-slate-900">{ausente.nombre}</p>
+            <p className="font-semibold text-slate-900">
+              {obtenerNombreConMarcaTurnante(
+                ausente.persona,
+                ausente.nombre,
+                identidadesTurnantes
+              )}
+            </p>
             <p className="mt-1">
               Sector al marcar ausencia: {ausente.sectorOrigen || "No registrado"}
             </p>
@@ -1525,7 +1567,7 @@ useEffect(() => {
           }));
         }}
       >
-        {e.nombre}
+        {obtenerNombreConMarcaTurnante(e, "", identidadesTurnantes)}
       </button>
     );
   })}
@@ -1556,7 +1598,9 @@ useEffect(() => {
       key={e.id}
       className="flex items-center gap-2 bg-blue-100 px-3 py-1.5 rounded-lg text-sm"
     >
-      <span>{e.nombre}</span>
+      <span>
+        {obtenerNombreConMarcaTurnante(e, "", identidadesTurnantes)}
+      </span>
 
       {e.temporal && (
         <button

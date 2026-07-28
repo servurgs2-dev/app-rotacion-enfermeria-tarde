@@ -2059,7 +2059,11 @@ return (
     exportarCalendarioPDF({
       fecha,
       enfermeros: dataPDFEnf,
-      licenciados: dataPDFLic
+      licenciados: dataPDFLic,
+      certificaciones: certificacionesMes,
+      personal,
+      turnoId: turnoActivo,
+      mesActivo
     })
   }
 >

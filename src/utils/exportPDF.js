@@ -1,14 +1,17 @@
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import { configuracionSectores } from "../data/sectores.js";
-import { obtenerEstrategiaRotacionPlanilla } from "../config/turnos.js";
+import {
+  obtenerConfiguracionTurno,
+  obtenerEstrategiaRotacionPlanilla
+} from "../config/turnos.js";
 import { obtenerSemanasDelMes } from "./fechas.js";
 import { obtenerBloquesQueIntersectanMes } from "./periodosRotacionPlanilla.js";
-import { normalizar } from "./texto.js";
 import {
   obtenerNombreDesdeReferencia,
   resolverPersonaDesdeReferencia
 } from "./referenciasPersonas.js";
+import { resolverPersonaDeCertificacion } from "./certificacionesPersonas.js";
 
 
 // 🔹 PLANILLA
@@ -160,6 +163,54 @@ export const dividirPeriodosPlanillaPDF = (periodos, cantidad) => {
   return grupos;
 };
 
+export const renderizarCategoriaPlanillaSemanalPDF = ({
+  pdf,
+  categoria,
+  planilla,
+  periodos,
+  estrategia,
+  personal,
+  turnoId,
+  mesActivo
+}) => {
+  const esEnfermeros = categoria === "enfermero";
+  const etiquetaCategoria = esEnfermeros ? "Enfermeros" : "Licenciados";
+  const tabla = prepararTablaPlanillaPDF({
+    planilla,
+    periodos,
+    estrategia,
+    tipo: categoria,
+    personal,
+    ordenFilas: configuracionSectores[categoria].ordenPDF
+  });
+  const tituloMes = obtenerNombreMes(mesActivo);
+  const turno = obtenerConfiguracionTurno(turnoId).nombre;
+  const color = esEnfermeros ? [41, 128, 185] : [22, 160, 133];
+
+  autoTable(pdf, {
+    startY: 28,
+    margin: { top: 28, left: 14, right: 14 },
+    head: [tabla.encabezados],
+    body: tabla.cuerpo,
+    styles: {
+      halign: "center",
+      ...(periodos.length === 6 ? { fontSize: 7 } : {})
+    },
+    headStyles: { fillColor: color },
+    showHead: "everyPage",
+    didDrawPage: () => {
+      pdf.setFontSize(14);
+      pdf.text(`Planilla semanal - ${etiquetaCategoria}`, 14, 15);
+      pdf.setFontSize(10);
+      pdf.text(`${turno} - ${tituloMes}`, 14, 21);
+      pdf.setDrawColor(200);
+      pdf.line(14, 23, 280, 23);
+    }
+  });
+
+  return pdf.lastAutoTable?.finalY ?? 28;
+};
+
 export const crearPlanillaTresDiasPDF = ({
   planillaEnfermeros,
   planillaLicenciados,
@@ -190,11 +241,13 @@ export const crearPlanillaTresDiasPDF = ({
     const parte = grupos.length > 1 ? ` - Parte ${indice + 1} de ${grupos.length}` : "";
 
     pdf.setFontSize(14);
-    pdf.text(`Planilla mensual - Noche - Enfermeros - ${tituloMes}${parte}`, 14, 15);
+    pdf.text("Planilla semanal - Enfermeros", 14, 15);
+    pdf.setFontSize(10);
+    pdf.text(`Noche - ${tituloMes}${parte}`, 14, 21);
     pdf.setDrawColor(200);
-    pdf.line(14, 17, 406, 17);
+    pdf.line(14, 23, 406, 23);
     autoTable(pdf, {
-      startY: 21,
+      startY: 27,
       head: [tabla.encabezados],
       body: tabla.cuerpo,
       margin: { left: 10, right: 10 },
@@ -227,11 +280,13 @@ export const crearPlanillaTresDiasPDF = ({
 
   pdf.addPage("a3", "landscape");
   pdf.setFontSize(14);
-  pdf.text(`Planilla mensual - Noche - Licenciados - ${tituloMes}`, 14, 15);
+  pdf.text("Planilla semanal - Licenciados", 14, 15);
+  pdf.setFontSize(10);
+  pdf.text(`Noche - ${tituloMes}`, 14, 21);
   pdf.setDrawColor(200);
-  pdf.line(14, 17, 406, 17);
+  pdf.line(14, 23, 406, 23);
   autoTable(pdf, {
-    startY: 21,
+    startY: 27,
     head: [tablaLicenciados.encabezados],
     body: tablaLicenciados.cuerpo,
     margin: { left: 10, right: 10 },
@@ -240,6 +295,47 @@ export const crearPlanillaTresDiasPDF = ({
     headStyles: { fillColor: [22, 160, 133] },
     showHead: "everyPage"
   });
+  return pdf;
+};
+
+export const crearPlanillaSemanalPDF = ({
+  planillaEnfermeros,
+  planillaLicenciados,
+  semanas,
+  personal = [],
+  turnoId,
+  mesActivo
+}) => {
+  const semanasActivas = Array.isArray(semanas)
+    ? semanas
+    : obtenerSemanasDelMes(mesActivo);
+  const pdf = new jsPDF("l");
+  const estrategiaSemanal = { tipo: "semanal" };
+
+  renderizarCategoriaPlanillaSemanalPDF({
+    pdf,
+    categoria: "enfermero",
+    planilla: planillaEnfermeros,
+    periodos: semanasActivas,
+    estrategia: estrategiaSemanal,
+    personal,
+    turnoId,
+    mesActivo
+  });
+
+  pdf.addPage();
+
+  renderizarCategoriaPlanillaSemanalPDF({
+    pdf,
+    categoria: "licenciado",
+    planilla: planillaLicenciados,
+    periodos: semanasActivas,
+    estrategia: estrategiaSemanal,
+    personal,
+    turnoId,
+    mesActivo
+  });
+
   return pdf;
 };
 
@@ -281,235 +377,250 @@ export const exportarPlanillaPDF = (...argumentos) => {
     return;
   }
 
-  const semanas = opciones.semanas || obtenerSemanasDelMes(mesActivo);
-  const semanasActivas = Array.isArray(semanas) ? semanas : [];
-  const pdf = new jsPDF("l"); // 🔥 horizontal (clave)
-
-  pdf.setFontSize(14);
-  pdf.text("Planilla mensual", 14, 15);
-
-  pdf.setDrawColor(200);
-pdf.line(14, 17, 280, 17);
-
-  // 🔹 HEADERS (fechas de semanas)
-  const headers = [
-    "Sector",
-    ...semanasActivas.map(s =>
-      `${s.desde.getDate()}/${s.desde.getMonth() + 1} - ${s.hasta.getDate()}/${s.hasta.getMonth() + 1}`
-    )
-  ];
-
-  const nombreParaPDF = (referencia) => {
-    const nombre = obtenerNombreDesdeReferencia(referencia, personal);
-    const esIdIntermedioNoResuelto = typeof referencia === "string" &&
-      referencia.trim().startsWith("persona-") &&
-      !resolverPersonaDesdeReferencia(referencia, personal);
-    return esIdIntermedioNoResuelto ? "" : nombre;
-  };
-
-  const planillaEnfNorm = {};
-
-Object.keys(planillaEnf || {}).forEach(semana => {
-  planillaEnfNorm[semana] = {};
-
-  Object.keys(planillaEnf[semana] || {}).forEach(sector => {
-    planillaEnfNorm[semana][normalizar(sector)] =
-      nombreParaPDF(planillaEnf[semana][sector]);
+  const pdf = crearPlanillaSemanalPDF({
+    planillaEnfermeros: planillaEnf,
+    planillaLicenciados: planillaLic,
+    semanas: opciones.semanas,
+    personal,
+    turnoId,
+    mesActivo
   });
-});
-
-const planillaLicNorm = {};
-
-Object.keys(planillaLic || {}).forEach(semana => {
-  planillaLicNorm[semana] = {};
-
-  Object.keys(planillaLic[semana] || {}).forEach(sector => {
-    planillaLicNorm[semana][normalizar(sector)] =
-      nombreParaPDF(planillaLic[semana][sector]);
-  });
-});
-  // 🔹 obtener todos los sectores únicos
- const sectores = configuracionSectores.enfermero.ordenPDF;
-
-  // 🔹 armar filas
-  const body = sectores.map(sector => {
-    const fila = [sector];
-
-    semanasActivas.forEach(({ clave }, indice) => {
-      const semanaKey = clave || `semana${indice + 1}`;
-      const valor = planillaEnfNorm[semanaKey]?.[normalizar(sector)] || "-";
-      fila.push(valor);
-    });
-    return fila;
-  });
-pdf.setFontSize(12);
-pdf.text("Enfermeros", 14, 20);
-  // 🔹 tabla
-  autoTable(pdf, {
-    startY: 23,
-    head: [headers],
-    body,
-    styles: {
-      halign: "center",
-      ...(semanasActivas.length === 6 ? { fontSize: 7 } : {})
-    },
-    headStyles: {
-      fillColor: [41, 128, 185]
-    }
-  });
-
-let finalY = pdf.lastAutoTable.finalY + 10;
-
-// 🔥 si no entra, nueva hoja
-if (finalY > 180) {
-  pdf.addPage();
-  finalY = 20;
-}
-
-pdf.setFontSize(12);
-pdf.text("Licenciados", 14, finalY);
-
-const sectoresLic = configuracionSectores.licenciado.ordenPDF;
-
-const bodyLic = sectoresLic.map(sector => {
-  const fila = [sector];
-
-  semanasActivas.forEach(({ clave }, indice) => {
-    const semanaKey = clave || `semana${indice + 1}`;
-    const valor = planillaLicNorm[semanaKey]?.[normalizar(sector)] || "-";
-    fila.push(valor);
-  });
-
-  return fila;
-});
-
-autoTable(pdf, {
-  startY: finalY + 3,
-  head: [headers],
-  body: bodyLic,
-  styles: {
-    halign: "center",
-    ...(semanasActivas.length === 6 ? { fontSize: 7 } : {})
-  },
-  headStyles: {
-    fillColor: [22, 160, 133] // verde
-  }
-});
   pdf.save("planilla_mensual.pdf");
 };
 
 
 
 
-// 🔹 CALENDARIO
-export const exportarCalendarioPDF = ({
+const formatearFechaCortaPDF = (fechaIso) => {
+  const coincidencia = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fechaIso || "");
+  return coincidencia ? `${coincidencia[3]}/${coincidencia[2]}` : fechaIso || "";
+};
+
+const obtenerClaveFechaPDF = (fecha) =>
+  fecha instanceof Date && !Number.isNaN(fecha.getTime())
+    ? `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}-${String(fecha.getDate()).padStart(2, "0")}`
+    : "";
+
+export const prepararCertificacionesDiaPDF = ({
+  certificaciones,
+  fecha,
+  personal
+}) => {
+  const claveFecha = obtenerClaveFechaPDF(fecha);
+  if (!claveFecha) return [];
+
+  return (Array.isArray(certificaciones) ? certificaciones : []).flatMap(
+    (certificacion) => {
+      if (
+        !certificacion ||
+        typeof certificacion !== "object" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(certificacion.desde || "") ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(certificacion.hasta || "") ||
+        certificacion.desde > claveFecha ||
+        certificacion.hasta < claveFecha
+      ) return [];
+
+      const persona = resolverPersonaDeCertificacion(certificacion, personal);
+      const nombre = persona?.nombre || obtenerNombreDesdeReferencia(certificacion, personal);
+      if (!nombre) return [];
+
+      return [{
+        nombre,
+        categoria: persona?.categoria === "licenciado"
+          ? "Licenciado"
+          : "Enfermero",
+        desde: certificacion.desde,
+        hasta: certificacion.hasta,
+        texto: `${nombre} - ${
+          persona?.categoria === "licenciado" ? "Licenciado" : "Enfermero"
+        } - ${formatearFechaCortaPDF(certificacion.desde)} al ${
+          formatearFechaCortaPDF(certificacion.hasta)
+        }`
+      }];
+    }
+  );
+};
+
+export const prepararFilasCalendarioPDF = (asignaciones) =>
+  (Array.isArray(asignaciones) ? asignaciones : [])
+    .filter((item) => item?.nombre && item.tipo !== "divider")
+    .map((item) => [
+      item.nombre,
+      item.enfermero?.nombre || item.etiquetaVacio || "Sin cobertura"
+    ]);
+
+const dibujarListaCompactaPDF = ({
+  pdf,
+  titulo,
+  elementos,
+  x,
+  y,
+  ancho,
+  columnas = 2,
+  mensajeVacio
+}) => {
+  pdf.setFontSize(8);
+  pdf.setFont("helvetica", "bold");
+  pdf.text(titulo, x, y);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(6);
+
+  const textos = elementos.length ? elementos : [mensajeVacio];
+  const anchoColumna = ancho / columnas;
+  const filas = Math.ceil(textos.length / columnas);
+  let altoMaximo = 0;
+
+  textos.forEach((texto, indice) => {
+    const columna = Math.floor(indice / filas);
+    const fila = indice % filas;
+    const lineas = pdf.splitTextToSize(String(texto), anchoColumna - 3).slice(0, 2);
+    const altoFila = Math.max(3.2, lineas.length * 2.6);
+    const posicionY = y + 4 + fila * 5.4;
+    pdf.text(lineas, x + columna * anchoColumna, posicionY);
+    altoMaximo = Math.max(altoMaximo, posicionY - y + altoFila);
+  });
+
+  return Math.max(8, altoMaximo);
+};
+
+export const crearCalendarioDiarioPDF = ({
   fecha,
   enfermeros = {},
-  licenciados = {}
+  licenciados = {},
+  certificaciones = [],
+  personal = [],
+  turnoId,
+  mesActivo
 }) => {
   const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const asignacionesEnfermeros = enfermeros.asignaciones || [];
   const asignacionesLicenciados = licenciados.asignaciones || [];
   const libresEnfermeros = enfermeros.libres || [];
   const libresLicenciados = licenciados.libres || [];
-  const anchoColumna = 133;
-  const columnaIzquierda = 10;
-  const columnaDerecha = 154;
+  const filasEnfermeros = prepararFilasCalendarioPDF(asignacionesEnfermeros);
+  const filasLicenciados = prepararFilasCalendarioPDF(asignacionesLicenciados);
+  const certificacionesDia = prepararCertificacionesDiaPDF({
+    certificaciones,
+    fecha,
+    personal
+  });
+  const maximoFilas = Math.max(filasEnfermeros.length, filasLicenciados.length);
+  const fuenteTabla = maximoFilas > 24 ? 5.5 : maximoFilas > 18 ? 6 : 6.5;
+  const paddingTabla = maximoFilas > 24 ? 0.55 : maximoFilas > 18 ? 0.75 : 1;
+  const anchoColumna = 137;
+  const columnaIzquierda = 8;
+  const columnaDerecha = 152;
+  const turno = obtenerConfiguracionTurno(turnoId).nombre;
+  const tituloMes = obtenerNombreMes(mesActivo);
 
-  pdf.setFontSize(16);
-  pdf.text("Distribución diaria", 10, 14);
-  pdf.setFontSize(10);
+  pdf.setFontSize(11);
+  pdf.setFont("helvetica", "bold");
+  pdf.text("Calendario Diario", 8, 10);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(7);
   pdf.setTextColor(90);
   pdf.text(
-    fecha.toLocaleDateString("es-UY", {
+    `${fecha.toLocaleDateString("es-UY", {
       weekday: "long",
       year: "numeric",
       month: "long",
       day: "numeric"
-    }),
-    10,
-    21
+    })} - Turno ${turno} - ${tituloMes}`,
+    8,
+    16
   );
   pdf.setTextColor(0);
   pdf.setDrawColor(210);
-  pdf.line(10, 24, 287, 24);
+  pdf.line(8, 19, 289, 19);
 
-  const filasAsignacion = (asignaciones) =>
-    asignaciones
-      .filter((item) => item?.nombre && item.tipo !== "divider")
-      .map((item) => [
-        item.nombre,
-        item.enfermero?.nombre ?? "Sin cobertura"
-      ]);
-
-  const renderColumna = (titulo, asignaciones, x, color) => {
-    pdf.setFontSize(11);
-    pdf.text(titulo, x, 31);
+  const renderColumna = (titulo, filas, x, color) => {
+    pdf.setFontSize(8.5);
+    pdf.setFont("helvetica", "bold");
+    pdf.text(titulo, x, 24);
+    pdf.setFont("helvetica", "normal");
 
     autoTable(pdf, {
-      startY: 34,
+      startY: 27,
       margin: { left: x },
       tableWidth: anchoColumna,
       head: [["Sector", "Asignado"]],
-      body: filasAsignacion(asignaciones),
-      styles: { fontSize: 8, cellPadding: 2 },
+      body: filas,
+      styles: {
+        fontSize: fuenteTabla,
+        cellPadding: paddingTabla,
+        overflow: "linebreak",
+        valign: "middle",
+        minCellHeight: 3.2
+      },
       headStyles: { fillColor: color, halign: "center" },
       columnStyles: {
-        0: { cellWidth: 66 },
-        1: { cellWidth: 67 }
-      }
+        0: { cellWidth: 56 },
+        1: { cellWidth: 81 }
+      },
+      pageBreak: "avoid",
+      rowPageBreak: "avoid"
     });
 
     return pdf.lastAutoTable.finalY;
   };
 
-  renderColumna(
+  const finalEnfermeros = renderColumna(
     "Enfermeros",
-    asignacionesEnfermeros,
+    filasEnfermeros,
     columnaIzquierda,
     [41, 128, 185]
   );
   const finalLicenciados = renderColumna(
     "Licenciados",
-    asignacionesLicenciados,
+    filasLicenciados,
     columnaDerecha,
     [22, 160, 133]
   );
+  const inicioLibres = Math.max(finalEnfermeros, finalLicenciados) + 5;
+  pdf.setDrawColor(220);
+  pdf.line(8, inicioLibres - 3, 289, inicioLibres - 3);
 
-  const inicioLibres = finalLicenciados + 10;
-  pdf.setFontSize(11);
-  pdf.text("LIBRES", columnaDerecha, inicioLibres);
+  const altoLibresEnfermeros = dibujarListaCompactaPDF({
+    pdf,
+    titulo: "Libres del día - Enfermeros",
+    elementos: libresEnfermeros.map((persona) => persona.nombre).filter(Boolean),
+    x: columnaIzquierda,
+    y: inicioLibres,
+    ancho: anchoColumna,
+    columnas: 2,
+    mensajeVacio: "Sin libres"
+  });
+  const altoLibresLicenciados = dibujarListaCompactaPDF({
+    pdf,
+    titulo: "Libres del día - Licenciados",
+    elementos: libresLicenciados.map((persona) => persona.nombre).filter(Boolean),
+    x: columnaDerecha,
+    y: inicioLibres,
+    ancho: anchoColumna,
+    columnas: 2,
+    mensajeVacio: "Sin libres"
+  });
+  const inicioCertificaciones =
+    inicioLibres + Math.max(altoLibresEnfermeros, altoLibresLicenciados) + 3;
 
-  const renderLibres = (titulo, libres, startY, color) => {
-    const filas = libres
-      .filter((persona) => persona?.nombre)
-      .map((persona) => [persona.nombre]);
+  pdf.line(8, inicioCertificaciones - 3, 289, inicioCertificaciones - 3);
+  dibujarListaCompactaPDF({
+    pdf,
+    titulo: "Certificaciones médicas del día",
+    elementos: certificacionesDia.map((certificacion) => certificacion.texto),
+    x: 8,
+    y: inicioCertificaciones,
+    ancho: 281,
+    columnas: certificacionesDia.length > 8 ? 4 : 3,
+    mensajeVacio: "Sin certificaciones médicas para esta fecha"
+  });
 
-    autoTable(pdf, {
-      startY,
-      margin: { left: columnaDerecha },
-      tableWidth: anchoColumna,
-      head: [[titulo]],
-      body: filas.length ? filas : [["Ninguno"]],
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: color, halign: "left" }
-    });
+  return pdf;
+};
 
-    return pdf.lastAutoTable.finalY;
-  };
-
-  const finalLibresEnfermeros = renderLibres(
-    "Libres de enfermeros",
-    libresEnfermeros,
-    inicioLibres + 3,
-    [41, 128, 185]
-  );
-  renderLibres(
-    "Libres de licenciados",
-    libresLicenciados,
-    finalLibresEnfermeros + 3,
-    [22, 160, 133]
-  );
-
-  pdf.save("calendario.pdf");
+export const exportarCalendarioPDF = (opciones) => {
+  const pdf = crearCalendarioDiarioPDF(opciones);
+  const fechaClave = obtenerClaveFechaPDF(opciones.fecha) || "fecha";
+  const turno = String(opciones.turnoId || "turno").replace(/[^a-z0-9_-]/gi, "-");
+  pdf.save(`calendario-diario-${fechaClave}-${turno}.pdf`);
 };

@@ -300,7 +300,8 @@ const certificados = useMemo(
   [estaCertificadoHoy, personalFiltrado]
 );
 
-  const estaNoDisponible = (e) => e && (noDisponibles[keyDia] || []).some(
+  const estaNoDisponible = (e) =>
+    e && (noDisponibles[keyDia] || []).some(
       (referencia) => referenciaCorrespondeAPersona(
         referencia,
         e,
@@ -811,9 +812,30 @@ return resultadoOrdenado;
 })();
 
 useEffect(() => {
+  const asignacionesParaPDF = asignacionOrdenada.map((item) => {
+    if (item.tipo === "divider" || item.enfermero) return item;
+    const liberadoPorAusencia = ausentesDelDia.some(
+      (ausente) => normalizar(ausente.sectorOrigen) === normalizar(item.nombre)
+    );
+    return liberadoPorAusencia
+      ? { ...item, etiquetaVacio: "Sin asignar - ausencia" }
+      : item;
+  });
+  const libresParaPDF = libres.filter(
+    (persona) =>
+      !estaDeLicenciaHoy(persona) &&
+      !estaCertificadoHoy(persona) &&
+      !(noDisponibles[keyDia] || []).some((referencia) =>
+        referenciaCorrespondeAPersona(
+          referencia,
+          persona,
+          personalFiltrado
+        )
+      )
+  );
   const datosParaPDF = {
-    asignaciones: asignacionOrdenada,
-    libres,
+    asignaciones: asignacionesParaPDF,
+    libres: libresParaPDF,
     keyDia
   };
   const dataString = JSON.stringify(datosParaPDF);
@@ -825,7 +847,17 @@ useEffect(() => {
       onDataReady(datosParaPDF);
     }
   }
-}, [asignacionOrdenada, keyDia, libres, onDataReady]);
+}, [
+  asignacionOrdenada,
+  ausentesDelDia,
+  estaCertificadoHoy,
+  estaDeLicenciaHoy,
+  keyDia,
+  libres,
+  noDisponibles,
+  onDataReady,
+  personalFiltrado
+]);
 
   const personasPrevistas = obtenerPersonasPrevistas(asignacionOrdenada);
   const datosResumenTurno = (() => {

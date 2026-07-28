@@ -13,6 +13,10 @@ import {
   validarContextoRedistribucion
 } from "../src/utils/redistribucionEnfermeros.js";
 import { configuracionSectores } from "../src/data/sectores.js";
+import {
+  aplicarPrioridadCoberturaParejas,
+  PAREJAS_COBERTURA_ENFERMEROS
+} from "../src/utils/coberturaParejasEnfermeros.js";
 
 let total = 0;
 const probar = (nombre, prueba) => {
@@ -301,6 +305,133 @@ probar("49 los datos históricos de paro siguen separados", () => {
   assert.doesNotMatch(
     fs.readFileSync(new URL("../src/utils/redistribucionEnfermeros.js", import.meta.url), "utf8"),
     /cambiosParoDia|diasParo/
+  );
+});
+
+const crearAsignacionesPareja = (principal, secundario, personaSecundaria = personas[0]) => [
+  { nombre: principal, enfermero: null },
+  { nombre: secundario, enfermero: personaSecundaria },
+  { nombre: "OBSERVACIÓN", enfermero: personas[1] }
+];
+
+PAREJAS_COBERTURA_ENFERMEROS.forEach(({ principal, secundario }, indice) => {
+  probar(`${50 + indice * 2} ${principal} recibe prioritariamente a ${secundario}`, () => {
+    const resultado = aplicarPrioridadCoberturaParejas({
+      asignaciones: crearAsignacionesPareja(principal, secundario)
+    });
+    assert.equal(resultado.find((fila) => fila.nombre === principal).enfermero, personas[0]);
+  });
+  probar(`${51 + indice * 2} ${secundario} permanece visible y sin cobertura`, () => {
+    const resultado = aplicarPrioridadCoberturaParejas({
+      asignaciones: crearAsignacionesPareja(principal, secundario)
+    });
+    const filaSecundaria = resultado.find((fila) => fila.nombre === secundario);
+    assert.ok(filaSecundaria);
+    assert.equal(filaSecundaria.enfermero, null);
+  });
+});
+
+probar("58 la prioridad por parejas ocurre antes de extras y Turnantes", () => {
+  const llamadaParejas = calendario.indexOf("asignacionBase = aplicarPrioridadCoberturaParejas");
+  const buscarTurnante = calendario.indexOf("item.enfermero = tomarTurnanteDisponible()", llamadaParejas);
+  const buscarExtra = calendario.indexOf("asignacionBase.forEach((item)", llamadaParejas);
+  assert.ok(llamadaParejas > 0);
+  assert.ok(llamadaParejas < buscarTurnante);
+  assert.ok(llamadaParejas < buscarExtra);
+});
+probar("59 la prioridad por parejas ocurre antes de sacrificar sectores", () => {
+  assert.ok(
+    calendario.indexOf("asignacionBase = aplicarPrioridadCoberturaParejas") <
+    calendario.indexOf("sectoresCriticos.forEach")
+  );
+  assert.ok(
+    calendario.indexOf("asignacionBase = aplicarPrioridadCoberturaParejas") <
+    calendario.indexOf("prioridadSectores.forEach")
+  );
+});
+probar("60 un sector principal cubierto no mueve la pareja", () => {
+  const resultado = aplicarPrioridadCoberturaParejas({
+    asignaciones: [
+      { nombre: "REA 1", enfermero: personas[2] },
+      { nombre: "REA 2", enfermero: personas[0] }
+    ]
+  });
+  assert.equal(resultado[0].enfermero, personas[2]);
+  assert.equal(resultado[1].enfermero, personas[0]);
+});
+probar("61 una pareja secundaria vacía deja continuar el algoritmo normal", () => {
+  const resultado = aplicarPrioridadCoberturaParejas({
+    asignaciones: crearAsignacionesPareja("REA 1", "REA 2", null)
+  });
+  assert.equal(resultado[0].enfermero, null);
+  assert.equal(resultado[1].enfermero, null);
+});
+
+["ausente", "licencia", "certificación", "no disponible"].forEach((motivo, indice) => {
+  probar(`${62 + indice} una persona secundaria ${motivo} no se mueve`, () => {
+    const resultado = aplicarPrioridadCoberturaParejas({
+      asignaciones: crearAsignacionesPareja("REA 1", "REA 2"),
+      esPersonaDisponible: () => false
+    });
+    assert.equal(resultado[0].enfermero, null);
+    assert.equal(resultado[1].enfermero, personas[0]);
+  });
+});
+
+probar("66 la persona trasladada no se duplica", () => {
+  const resultado = aplicarPrioridadCoberturaParejas({
+    asignaciones: crearAsignacionesPareja("REA 1", "REA 2")
+  });
+  assert.equal(resultado.filter((fila) => fila.enfermero === personas[0]).length, 1);
+});
+probar("67 ninguna tercera persona desaparece", () => {
+  const resultado = aplicarPrioridadCoberturaParejas({
+    asignaciones: crearAsignacionesPareja("REA 1", "REA 2")
+  });
+  assert.equal(
+    resultado.find((fila) => fila.nombre === "OBSERVACIÓN").enfermero,
+    personas[1]
+  );
+});
+probar("68 la prioridad no se aplica a Observación", () => {
+  const resultado = aplicarPrioridadCoberturaParejas({
+    asignaciones: [
+      { nombre: "OBSERVACIÓN 1", enfermero: null },
+      { nombre: "OBSERVACIÓN 2", enfermero: personas[0] }
+    ]
+  });
+  assert.equal(resultado[0].enfermero, null);
+  assert.equal(resultado[1].enfermero, personas[0]);
+});
+probar("69 la prioridad se limita a Enfermeros", () => {
+  assert.match(calendario, /if \(tipo === "enfermero" && !esDiaParo\)/);
+});
+probar("70 los cambios manuales de cualquiera de las dos filas se respetan", () => {
+  for (const clave of ["rea 1", "REA 2"]) {
+    const resultado = aplicarPrioridadCoberturaParejas({
+      asignaciones: crearAsignacionesPareja("REA 1", "REA 2"),
+      cambiosDia: { [clave]: "__EMPTY__" }
+    });
+    assert.equal(resultado[0].enfermero, null);
+    assert.equal(resultado[1].enfermero, personas[0]);
+  }
+});
+probar("71 la marca Turnante de presentación se conserva sin inventarla", () => {
+  const turnante = { ...personas[0], esTurnante: true };
+  const resultadoTurnante = aplicarPrioridadCoberturaParejas({
+    asignaciones: crearAsignacionesPareja("REA 1", "REA 2", turnante)
+  });
+  assert.equal(resultadoTurnante[0].enfermero.esTurnante, true);
+
+  const resultadoTitular = aplicarPrioridadCoberturaParejas({
+    asignaciones: crearAsignacionesPareja("EXPLORA 1", "EXPLORA 2", personas[1])
+  });
+  assert.equal(resultadoTitular[0].enfermero.esTurnante, undefined);
+});
+probar("72 las redistribuciones continúan aisladas de la nueva prioridad", () => {
+  assert.doesNotMatch(
+    fs.readFileSync(new URL("../src/utils/redistribucionEnfermeros.js", import.meta.url), "utf8"),
+    /aplicarPrioridadCoberturaParejas|PAREJAS_COBERTURA/
   );
 });
 

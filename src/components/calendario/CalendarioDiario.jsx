@@ -75,6 +75,7 @@ import {
   redistribuirPorBoxes,
   validarContextoRedistribucion
 } from "../../utils/redistribucionEnfermeros.js";
+import { aplicarPrioridadCoberturaParejas } from "../../utils/coberturaParejasEnfermeros.js";
 import PanelConfirmacionRedistribucion from "./PanelConfirmacionRedistribucion.jsx";
 import {
   crearPersonaPresentacionTurnante,
@@ -441,19 +442,32 @@ const tomarTurnanteDisponible = () => {
 
   return null;
 };
-  const asignacionBase = asignacionCompleta
+  let asignacionBase = asignacionCompleta
     .filter((f) => f.tipo === "sector")
     .map((item) => {
       if (!item.enfermero) return { ...item, enfermero: null };
 
       if (estaAusente(item.enfermero)) {
-        const eFinal = tomarTurnanteDisponible();
-return { ...item, enfermero: eFinal, reemplazo: true };
+        return { ...item, enfermero: null, reemplazo: true };
       }
 
     const eFinal = usarEnfermero(item.enfermero);
 return { ...item, enfermero: eFinal, reemplazo: false };
     });
+
+  if (tipo === "enfermero" && !esDiaParo) {
+    asignacionBase = aplicarPrioridadCoberturaParejas({
+      asignaciones: asignacionBase,
+      cambiosDia: cambiosDia[keyDia],
+      esPersonaDisponible: (persona) => !estaAusente(persona)
+    });
+  }
+
+asignacionBase.forEach((item) => {
+  if (!item.enfermero && item.reemplazo && !item.vacioManual) {
+    item.enfermero = tomarTurnanteDisponible();
+  }
+});
 
   let extraIndex = 0;
 const tomarExtraDisponible = () => {

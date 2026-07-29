@@ -223,8 +223,8 @@ const pdfSemanal = crearPlanillaSemanalPDF({
   turnoId: "tarde",
   mesActivo: "2026-08"
 });
-probar("25 Planilla semanal continúa con exactamente dos páginas", () => {
-  assert.equal(pdfSemanal.getNumberOfPages(), 2);
+probar("25 Planilla semanal continúa con exactamente tres páginas", () => {
+  assert.equal(pdfSemanal.getNumberOfPages(), 3);
 });
 probar("26 ambos PDFs usan generadores separados", () => {
   const fuente = fs.readFileSync(
@@ -421,8 +421,8 @@ probar("41 el PDF diario con marcas continúa en una página", () => {
     ])[0][1].endsWith("(T)")
   );
 });
-probar("42 la Planilla semanal continúa en dos páginas", () => {
-  assert.equal(pdfSemanal.getNumberOfPages(), 2);
+probar("42 la Planilla semanal continúa en tres páginas", () => {
+  assert.equal(pdfSemanal.getNumberOfPages(), 3);
 });
 
 console.log(`\n${total} pruebas de PDF de Calendario Diario pasaron.`);

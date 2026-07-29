@@ -5,7 +5,7 @@ import {
   obtenerConfiguracionTurno,
   obtenerEstrategiaRotacionPlanilla
 } from "../config/turnos.js";
-import { obtenerSemanasDelMes } from "./fechas.js";
+import { obtenerDiasLibresDelMes, obtenerSemanasDelMes } from "./fechas.js";
 import { obtenerBloquesQueIntersectanMes } from "./periodosRotacionPlanilla.js";
 import {
   obtenerNombreDesdeReferencia,
@@ -156,6 +156,106 @@ const obtenerNombreMes = (mesActivo) => {
   return nombre.charAt(0).toUpperCase() + nombre.slice(1);
 };
 
+const GRUPOS_LIBRES_MENSUALES = [1, 2, 3, 4, 5];
+
+export const prepararGruposLibresPDF = (personal = [], mesActivo = "") => {
+  const crearFilas = (categoria) =>
+    GRUPOS_LIBRES_MENSUALES.map((grupo) => {
+      const primerosDias = obtenerDiasLibresDelMes(grupo, mesActivo).slice(0, 2);
+      const funcionarios = personal
+        .filter(
+          (persona) =>
+            String(persona?.categoria || persona?.tipo || "").trim().toLowerCase() === categoria &&
+            Number(persona?.libre) === grupo
+        )
+        .map((persona) => String(persona?.nombre || "").trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, "es"));
+
+      return [
+        String(grupo),
+        primerosDias.length ? primerosDias.join(" y ") : "Sin fechas",
+        funcionarios.length ? funcionarios.join(", ") : "Ninguno"
+      ];
+    });
+
+  return {
+    enfermeros: crearFilas("enfermero"),
+    licenciados: crearFilas("licenciado")
+  };
+};
+
+const obtenerConfiguracionGruposLibres = (grupos) => {
+  const textos = [...grupos.enfermeros, ...grupos.licenciados].map((fila) => fila[2]);
+  const caracteresTotales = textos.reduce((total, texto) => total + texto.length, 0);
+  const mayorGrupo = Math.max(0, ...textos.map((texto) => texto.length));
+
+  if (caracteresTotales > 2400 || mayorGrupo > 500) {
+    return { fontSize: 7, cellPadding: 0.8 };
+  }
+  if (caracteresTotales > 1400 || mayorGrupo > 300) {
+    return { fontSize: 8, cellPadding: 1 };
+  }
+  return { fontSize: 9, cellPadding: 1.25 };
+};
+
+export const renderizarGruposLibresPDF = ({
+  pdf,
+  personal = [],
+  turnoId,
+  mesActivo
+}) => {
+  const grupos = prepararGruposLibresPDF(personal, mesActivo);
+  const visual = obtenerConfiguracionGruposLibres(grupos);
+  const margenHorizontal = 8;
+  const turno = obtenerConfiguracionTurno(turnoId).nombre;
+
+  pdf.addPage("a4", "landscape");
+  pdf.setFontSize(11);
+  pdf.text("Grupos de libres del mes", margenHorizontal, 10);
+  pdf.setFontSize(8);
+  pdf.text(`${turno} - ${obtenerNombreMes(mesActivo)}`, margenHorizontal, 15);
+
+  const renderizarTabla = (titulo, filas, inicioY) => {
+    pdf.setFontSize(9);
+    pdf.text(titulo, margenHorizontal, inicioY);
+    autoTable(pdf, {
+      startY: inicioY + 2,
+      head: [["Grupo", "Primeros libres del mes", "Funcionarios"]],
+      body: filas,
+      theme: "grid",
+      margin: {
+        left: margenHorizontal,
+        right: margenHorizontal,
+        top: 6,
+        bottom: 6
+      },
+      pageBreak: "avoid",
+      rowPageBreak: "avoid",
+      styles: {
+        fontSize: visual.fontSize,
+        cellPadding: visual.cellPadding,
+        overflow: "linebreak",
+        valign: "middle",
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fontSize: visual.fontSize,
+        cellPadding: visual.cellPadding
+      },
+      columnStyles: {
+        0: { cellWidth: 18, halign: "center" },
+        1: { cellWidth: 34, halign: "center" },
+        2: { cellWidth: "auto" }
+      }
+    });
+    return pdf.lastAutoTable.finalY;
+  };
+
+  const finEnfermeros = renderizarTabla("Enfermeros", grupos.enfermeros, 21);
+  renderizarTabla("Licenciados", grupos.licenciados, finEnfermeros + 5);
+};
+
 export const dividirPeriodosPlanillaPDF = (periodos, cantidad) => {
   const grupos = [];
   for (let indice = 0; indice < periodos.length; indice += cantidad) {
@@ -296,6 +396,8 @@ export const crearPlanillaTresDiasPDF = ({
     headStyles: { fillColor: [22, 160, 133] },
     showHead: "everyPage"
   });
+
+  renderizarGruposLibresPDF({ pdf, personal, turnoId, mesActivo });
   return pdf;
 };
 
@@ -337,6 +439,7 @@ export const crearPlanillaSemanalPDF = ({
     mesActivo
   });
 
+  renderizarGruposLibresPDF({ pdf, personal, turnoId, mesActivo });
   return pdf;
 };
 

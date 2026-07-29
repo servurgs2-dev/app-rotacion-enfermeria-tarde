@@ -24,6 +24,7 @@
     "test:pdf-planilla": "node tests/pdf-planilla.test.mjs",
     "test:pdf-calendario-diario": "node tests/pdf-calendario-diario.test.mjs",
     "test:no-disponibles-motivos": "node tests/no-disponibles-motivos.test.mjs",
+    "test:extras-calendario": "node tests/extras-calendario.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

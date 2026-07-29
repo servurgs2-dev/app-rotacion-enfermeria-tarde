@@ -26,8 +26,11 @@ import {
 import { aplicarMovimientosCalendario } from "../../utils/cambiosCalendario.js";
 import {
   agregarExtraALista,
+  crearExtraDesdePersonal,
   crearExtraTemporal,
-  eliminarExtraDelDia
+  eliminarExtraDelDia,
+  obtenerDescripcionExtra,
+  prepararCandidatosExtraOtroTurno
 } from "../../utils/extrasPersonas.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 import {
@@ -76,6 +79,7 @@ import {
 } from "../../utils/redistribucionEnfermeros.js";
 import { aplicarPrioridadCoberturaParejas } from "../../utils/coberturaParejasEnfermeros.js";
 import PanelConfirmacionRedistribucion from "./PanelConfirmacionRedistribucion.jsx";
+import PanelAgregarExtra from "./PanelAgregarExtra.jsx";
 import PanelNoDisponible from "./PanelNoDisponible.jsx";
 import {
   crearRegistroNoDisponible,
@@ -108,6 +112,7 @@ function CalendarioDiario({
   certificaciones,
   calendario,
   obtenerCalendarioActual,
+  cargarPersonalOtrosTurnos,
   setCalendario,
   esDiaParo,
   onDataReady,
@@ -136,8 +141,8 @@ const {
   cierresDia = {}
 } = calendario || {};
 
-const [nuevoNombre, setNuevoNombre] = useState("");
-  const [errorNuevoExtra, setErrorNuevoExtra] = useState("");
+  const [formularioExtra, setFormularioExtra] = useState(null);
+  const [candidatosExtra, setCandidatosExtra] = useState([]);
   const [seleccionado, setSeleccionado] = useState(null);
   const [alertasAbiertas, setAlertasAbiertas] = useState(true);
   const [cierreVisible, setCierreVisible] = useState(false);
@@ -148,6 +153,7 @@ const [nuevoNombre, setNuevoNombre] = useState("");
   const [errorAsistencia, setErrorAsistencia] = useState("");
   const prevDataRef = useRef(null);
   const altaExtraEnCursoRef = useRef(false);
+  const cargaExtrasRef = useRef(0);
 
   const {
     sectoresFijos,
@@ -354,6 +360,114 @@ const borrarExtra = (extra) => {
   if (personasCompartenIdentidad(seleccionado?.enfermero, extra)) {
     setSeleccionado(null);
   }
+};
+
+const abrirFormularioExtra = async () => {
+  if (soloLecturaEfectiva) return;
+  const cargaId = cargaExtrasRef.current + 1;
+  cargaExtrasRef.current = cargaId;
+  const contexto = {
+    turno: turnoActivo,
+    mes: mesActivo,
+    fecha: keyDia,
+    categoria: tipo,
+    calendario
+  };
+  setCandidatosExtra([]);
+  setFormularioExtra({
+    modalidad: "personal_otro_turno",
+    personaId: "",
+    nombre: "",
+    funcionario: "",
+    cargando: true,
+    error: "",
+    contexto
+  });
+
+  try {
+    const candidatos = cargarPersonalOtrosTurnos
+      ? await cargarPersonalOtrosTurnos({ categoria: tipo })
+      : [];
+    if (cargaExtrasRef.current !== cargaId) return;
+    const filtrados = prepararCandidatosExtraOtroTurno({
+      candidatos,
+      categoria: tipo,
+      turnoActivo
+    });
+    setCandidatosExtra(filtrados);
+    setFormularioExtra((actual) => actual?.contexto === contexto
+      ? { ...actual, cargando: false }
+      : actual);
+  } catch {
+    if (cargaExtrasRef.current !== cargaId) return;
+    setFormularioExtra((actual) => actual?.contexto === contexto
+      ? {
+          ...actual,
+          cargando: false,
+          error: "No se pudo cargar el Personal de otros turnos."
+        }
+      : actual);
+  }
+};
+
+const contextoExtraValido = () =>
+  formularioExtra &&
+  formularioExtra.contexto.turno === turnoActivo &&
+  formularioExtra.contexto.mes === mesActivo &&
+  formularioExtra.contexto.fecha === keyDia &&
+  formularioExtra.contexto.categoria === tipo &&
+  formularioExtra.contexto.calendario === calendario &&
+  formularioExtra.contexto.calendario ===
+    (obtenerCalendarioActual ? obtenerCalendarioActual() : calendario) &&
+  !soloLecturaEfectiva;
+
+const confirmarExtra = () => {
+  if (!contextoExtraValido()) {
+    setFormularioExtra((actual) => ({
+      ...actual,
+      error: "El calendario cambió mientras agregabas el Extra. Revisá nuevamente."
+    }));
+    return;
+  }
+  const listaActual = calendario.extras?.[keyDia] || [];
+  let resultado;
+  if (formularioExtra.modalidad === "personal_otro_turno") {
+    const candidato = candidatosExtra.find(
+      (actual) =>
+        `${actual.turnoOrigen}|${actual.persona.id}` === formularioExtra.personaId
+    );
+    resultado = crearExtraDesdePersonal({
+      persona: candidato?.persona,
+      turnoOrigen: candidato?.turnoOrigen,
+      categoria: tipo,
+      extrasDia: listaActual
+    });
+  } else {
+    resultado = crearExtraTemporal({
+      nombre: formularioExtra.nombre,
+      funcionario: formularioExtra.funcionario,
+      categoria: tipo,
+      personal,
+      extrasDia: listaActual
+    });
+  }
+  if (!resultado.extra) {
+    setFormularioExtra((actual) => ({ ...actual, error: resultado.error }));
+    return;
+  }
+
+  altaExtraEnCursoRef.current = true;
+  setCalendario((prev) => {
+    if (prev !== formularioExtra.contexto.calendario) return prev;
+    return {
+      ...prev,
+      extras: {
+        ...(prev.extras || {}),
+        [keyDia]: agregarExtraALista(prev.extras?.[keyDia], resultado.extra)
+      }
+    };
+  });
+  setFormularioExtra(null);
 };
 
 const asignacionOrdenada = (() => {
@@ -1601,6 +1715,23 @@ useEffect(() => {
         />
       )}
 
+      {formularioExtra && (
+        <PanelAgregarExtra
+          formulario={formularioExtra}
+          candidatos={candidatosExtra}
+          onCambiar={(campo, valor) => setFormularioExtra((actual) => ({
+            ...actual,
+            [campo]: valor,
+            error: ""
+          }))}
+          onCancelar={() => {
+            cargaExtrasRef.current += 1;
+            setFormularioExtra(null);
+          }}
+          onConfirmar={confirmarExtra}
+        />
+      )}
+
 <div className="rounded-2xl border border-slate-100 bg-white">
   {asignacionesMostradas.map((item, i) => {
 
@@ -1867,74 +1998,43 @@ useEffect(() => {
   {extrasDia.map((e) => (
     <div
       key={e.id}
-      className="flex items-center gap-2 bg-blue-100 px-3 py-1.5 rounded-lg text-sm"
+      className="flex items-start gap-2 rounded-lg bg-blue-100 px-3 py-2 text-sm"
     >
       <span>
-        {obtenerNombreConMarcaTurnante(e, "", identidadesTurnantes)}
+        <span className="block font-medium">
+          {obtenerNombreConMarcaTurnante(e, "", identidadesTurnantes)}
+        </span>
+        <span className="block text-xs text-slate-600">
+          {obtenerDescripcionExtra(
+            e,
+            (turno) => obtenerConfiguracionTurno(turno).nombre
+          )}
+        </span>
       </span>
 
-      {e.temporal && (
-        <button
-          disabled={soloLecturaEfectiva}
-          onClick={() => borrarExtra(e)}
-          className="text-red-500"
-        >
-          ❌
-        </button>
-      )}
+      <button
+        type="button"
+        disabled={soloLecturaEfectiva}
+        onClick={() => borrarExtra(e)}
+        aria-label={`Quitar Extra ${e.nombre}`}
+        className="text-red-500"
+      >
+        ❌
+      </button>
     </div>
   ))}
 </div>
 
-<div className="flex gap-2 mb-2">
-  <input
-    disabled={soloLecturaEfectiva}
-    value={nuevoNombre}
-    onChange={(e) => {
-      setNuevoNombre(e.target.value);
-      setErrorNuevoExtra("");
-    }}
-    placeholder="Nombre extra"
-    className="border px-2 py-1 rounded text-sm"
-  />
-
+<div className="mb-2 mt-2">
   <button
+    type="button"
     disabled={soloLecturaEfectiva}
-    onClick={() => {
-      if (soloLecturaEfectiva) return;
-      if (altaExtraEnCursoRef.current) return;
-      const resultado = crearExtraTemporal({
-        nombre: nuevoNombre,
-        categoria: tipo,
-        personal,
-        extrasDia
-      });
-      if (!resultado.extra) {
-        setErrorNuevoExtra(resultado.error);
-        return;
-      }
-
-      altaExtraEnCursoRef.current = true;
-      setCalendario((prev) => ({
-  ...prev,
-  extras: {
-    ...prev.extras,
-    [keyDia]: agregarExtraALista(prev.extras?.[keyDia], resultado.extra)
-  }
-}));
-
-      setNuevoNombre("");
-      setErrorNuevoExtra("");
-    }}
-    className="bg-blue-500 text-white px-3 rounded"
+    onClick={abrirFormularioExtra}
+    className="rounded-lg bg-blue-500 px-3 py-2 text-sm text-white"
   >
-    + Agregar
+    + Agregar Extra
   </button>
 </div>
-
-{errorNuevoExtra && (
-  <p className="text-sm text-red-600">{errorNuevoExtra}</p>
-)}
 
 
 <h4 className="text-sm font-semibold text-slate-700">

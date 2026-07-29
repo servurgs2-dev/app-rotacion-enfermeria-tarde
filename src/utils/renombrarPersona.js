@@ -79,7 +79,10 @@ const renombrarExtrasPorDia = (extrasPorDia, personaId, nombre) => {
         ? extras.map((extra) =>
             esObjeto(extra) &&
             !extra.temporal &&
-            obtenerId(extra.id) === personaId
+            (
+              obtenerId(extra.personaId) === personaId ||
+              obtenerId(extra.id) === personaId
+            )
               ? { ...extra, nombre }
               : extra
           )

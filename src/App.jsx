@@ -711,6 +711,31 @@ const validarPersonaDisponibleEnOtrosTurnos = useCallback(
   [validarPersonasDisponiblesEnOtrosTurnos]
 );
 
+const cargarPersonalDeOtrosTurnos = useCallback(async ({ categoria } = {}) => {
+  if (!turnoActivo || !mesActivo) return [];
+  const turnoEsperado = turnoActivo;
+  const mesEsperado = mesActivo;
+  const estadosLeidos = await obtenerEstadosDeOtrosTurnos({
+    turnoActual: turnoEsperado,
+    mes: mesEsperado,
+    turnosIds: Object.keys(TURNOS),
+    estadosPorTurnoMes: estadoPorTurnoMesRef.current,
+    crearClave: crearClaveTurnoMes,
+    cargarEstado: cargarEstadoTurnoMesConRevision
+  });
+  if (turnoActivo !== turnoEsperado || mesActivo !== mesEsperado) return [];
+
+  return Object.entries(estadosLeidos).flatMap(([turnoId, estado]) =>
+    (Array.isArray(estado?.personal) ? estado.personal : [])
+      .filter((persona) => persona?.categoria === categoria)
+      .map((persona) => ({
+        persona,
+        turnoOrigen: turnoId,
+        turnoNombre: TURNOS[turnoId]?.nombre || turnoId
+      }))
+  );
+}, [mesActivo, turnoActivo]);
+
 
 useEffect(() => {
   if (!turnoActivo) {
@@ -2123,6 +2148,7 @@ return (
     obtenerCalendarioActual={() =>
       estadoPorTurnoMesRef.current[claveActiva]?.calendario?.enfermeros
     }
+    cargarPersonalOtrosTurnos={cargarPersonalDeOtrosTurnos}
     esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
      onDataReady={setDataPDFEnf}
     fecha={fecha}
@@ -2173,6 +2199,7 @@ return (
     obtenerCalendarioActual={() =>
       estadoPorTurnoMesRef.current[claveActiva]?.calendario?.licenciados
     }
+    cargarPersonalOtrosTurnos={cargarPersonalDeOtrosTurnos}
     esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
     onDataReady={setDataPDFLic}
     fecha={fecha}

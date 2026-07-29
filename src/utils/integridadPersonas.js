@@ -109,7 +109,10 @@ const limpiarExtrasPorDia = (extrasPorDia, persona) => {
     const personaId = String(persona?.id ?? "").trim();
     const extrasDelDia = extras.filter((extra) => {
       const extraId = String(extra?.id ?? "").trim();
-      return extra?.temporal || !personaId || extraId !== personaId;
+      const extraPersonaId = String(extra?.personaId ?? "").trim();
+      return extra?.temporal ||
+        !personaId ||
+        (extraId !== personaId && extraPersonaId !== personaId);
     });
     if (extrasDelDia.length !== extras.length) huboCambios = true;
 

@@ -25,6 +25,7 @@
     "test:pdf-calendario-diario": "node tests/pdf-calendario-diario.test.mjs",
     "test:no-disponibles-motivos": "node tests/no-disponibles-motivos.test.mjs",
     "test:extras-calendario": "node tests/extras-calendario.test.mjs",
+    "test:alerta-sectores-criticos": "node tests/alerta-sectores-criticos.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

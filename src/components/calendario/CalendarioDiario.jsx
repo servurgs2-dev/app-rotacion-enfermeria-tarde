@@ -78,6 +78,10 @@ import {
   validarContextoRedistribucion
 } from "../../utils/redistribucionEnfermeros.js";
 import { aplicarPrioridadCoberturaParejas } from "../../utils/coberturaParejasEnfermeros.js";
+import {
+  formatearAlertaSectoresCriticos,
+  obtenerSectoresCriticosSinCobertura
+} from "../../utils/alertaSectoresCriticos.js";
 import PanelConfirmacionRedistribucion from "./PanelConfirmacionRedistribucion.jsx";
 import PanelAgregarExtra from "./PanelAgregarExtra.jsx";
 import PanelNoDisponible from "./PanelNoDisponible.jsx";
@@ -1227,6 +1231,13 @@ useEffect(() => {
   const asignacionesMostradas = bloqueadoPorCierre && snapshotCierre
     ? snapshotAAsignacionesVisibles(snapshotCierre)
     : asignacionOrdenada;
+  const sectoresCriticosSinCobertura = obtenerSectoresCriticosSinCobertura({
+    asignaciones: asignacionesMostradas,
+    sectoresCriticos: datosResumenTurno.sectoresCriticos
+  });
+  const alertaSectoresCriticos = formatearAlertaSectoresCriticos(
+    sectoresCriticosSinCobertura
+  );
   const resumenMostrado = bloqueadoPorCierre && snapshotCierre
     ? snapshotCierre.resumen
     : resumenTurno;
@@ -1730,6 +1741,15 @@ useEffect(() => {
           }}
           onConfirmar={confirmarExtra}
         />
+      )}
+
+      {alertaSectoresCriticos && (
+        <p
+          role="alert"
+          className="mb-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800"
+        >
+          {alertaSectoresCriticos}
+        </p>
       )}
 
 <div className="rounded-2xl border border-slate-100 bg-white">

@@ -49,6 +49,27 @@ const renombrarReferenciasPorDia = (valoresPorDia, personaId, nombre) => {
   );
 };
 
+const renombrarNoDisponiblesPorDia = (valoresPorDia, personaId, nombre) => {
+  if (!esObjeto(valoresPorDia)) return valoresPorDia;
+  return Object.fromEntries(
+    Object.entries(valoresPorDia).map(([fecha, valor]) => [
+      fecha,
+      Array.isArray(valor)
+        ? valor.map((item) => {
+            const referencia = renombrarReferencia(item, personaId, nombre);
+            if (
+              esObjeto(referencia) &&
+              obtenerId(referencia.personaCoberturaId) === personaId
+            ) {
+              return { ...referencia, personaCoberturaNombre: nombre };
+            }
+            return referencia;
+          })
+        : valor
+    ])
+  );
+};
+
 const renombrarExtrasPorDia = (extrasPorDia, personaId, nombre) => {
   if (!esObjeto(extrasPorDia)) return extrasPorDia;
   return Object.fromEntries(
@@ -99,7 +120,7 @@ const renombrarCalendario = (calendario, personaId, nombre) => {
         {
           ...datos,
           ...(Object.hasOwn(datos, "noDisponibles")
-            ? { noDisponibles: renombrarReferenciasPorDia(datos.noDisponibles, personaId, nombre) }
+            ? { noDisponibles: renombrarNoDisponiblesPorDia(datos.noDisponibles, personaId, nombre) }
             : {}),
           ...(Object.hasOwn(datos, "cambiosDia")
             ? { cambiosDia: renombrarReferenciasPorDia(datos.cambiosDia, personaId, nombre) }

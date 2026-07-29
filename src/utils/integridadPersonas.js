@@ -135,7 +135,23 @@ const limpiarNoDisponiblesPorDia = (noDisponiblesPorDia, persona, personal) => {
       return;
     }
 
-    const nombresDelDia = quitarPersonaDeListaReferencias(nombres, persona, personal);
+    const personaId = String(persona?.id ?? "").trim();
+    const nombresDelDia = quitarPersonaDeListaReferencias(nombres, persona, personal)
+      .map((registro) => {
+        if (
+          esObjetoPlano(registro) &&
+          personaId &&
+          String(registro.personaCoberturaId ?? "").trim() === personaId
+        ) {
+          huboCambios = true;
+          return {
+            ...registro,
+            personaCoberturaId: null,
+            personaCoberturaNombre: ""
+          };
+        }
+        return registro;
+      });
     if (nombresDelDia.length !== nombres.length) huboCambios = true;
 
     if (nombresDelDia.length > 0) {

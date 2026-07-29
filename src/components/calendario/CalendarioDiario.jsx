@@ -18,7 +18,6 @@ import {
   personasCompartenIdentidad
 } from "../../utils/identidadPersonas.js";
 import {
-  agregarPersonaAListaReferencias,
   crearReferenciaPersona,
   quitarPersonaDeListaReferencias,
   referenciaCorrespondeAPersona,
@@ -77,6 +76,14 @@ import {
 } from "../../utils/redistribucionEnfermeros.js";
 import { aplicarPrioridadCoberturaParejas } from "../../utils/coberturaParejasEnfermeros.js";
 import PanelConfirmacionRedistribucion from "./PanelConfirmacionRedistribucion.jsx";
+import PanelNoDisponible from "./PanelNoDisponible.jsx";
+import {
+  crearRegistroNoDisponible,
+  MOTIVOS_NO_DISPONIBLE,
+  obtenerEtiquetaTurnoDestino,
+  obtenerNoDisponiblesDelDia,
+  reemplazarRegistroNoDisponible
+} from "../../utils/noDisponiblesMotivos.js";
 import {
   crearPersonaPresentacionTurnante,
   esPersonaTurnante,
@@ -137,6 +144,7 @@ const [nuevoNombre, setNuevoNombre] = useState("");
   const [seleccionResponsable, setSeleccionResponsable] = useState({ contexto: "", personaId: "" });
   const [errorResponsable, setErrorResponsable] = useState({ contexto: "", mensaje: "" });
   const [confirmacionRedistribucion, setConfirmacionRedistribucion] = useState(null);
+  const [formularioNoDisponible, setFormularioNoDisponible] = useState(null);
   const [errorAsistencia, setErrorAsistencia] = useState("");
   const prevDataRef = useRef(null);
   const altaExtraEnCursoRef = useRef(false);
@@ -849,14 +857,178 @@ return resultadoOrdenado.map((item) =>
 );
 })();
 
+const obtenerSectorOrigenPersona = (persona) => {
+  if (!persona) return "";
+  const buscarReferencia = (distribucion, sector) => {
+    const clave = Object.keys(distribucion || {}).find(
+      (actual) => normalizar(actual) === normalizar(sector)
+    );
+    return clave ? distribucion[clave] : undefined;
+  };
+  const filasConTurnantes = filas.filter((fila) => fila !== "DIVIDER");
+
+  for (const sector of filasConTurnantes) {
+    const cambio = buscarReferencia(cambiosFechaActual, sector);
+    const referencia = cambio === "__EMPTY__"
+      ? null
+      : cambio || buscarReferencia(planillaPeriodo, sector);
+    const resuelta = resolverPersonaDesdeReferencia(
+      referencia,
+      [...personalFiltrado, ...extrasDia]
+    );
+    if (personasCompartenIdentidad(resuelta, persona)) return sector;
+  }
+  return "";
+};
+
+const noDisponiblesPresentacion = obtenerNoDisponiblesDelDia({
+  registros: noDisponibles[keyDia],
+  certificaciones,
+  personal,
+  fecha: keyDia,
+  categoria: tipo,
+  obtenerSectorOrigen: obtenerSectorOrigenPersona
+}).sort((a, b) => {
+  const ordenA = ordenVisual.findIndex(
+    (sector) => normalizar(sector) === normalizar(a.sectorOrigen)
+  );
+  const ordenB = ordenVisual.findIndex(
+    (sector) => normalizar(sector) === normalizar(b.sectorOrigen)
+  );
+  return (ordenA < 0 ? Number.MAX_SAFE_INTEGER : ordenA) -
+    (ordenB < 0 ? Number.MAX_SAFE_INTEGER : ordenB);
+});
+
+const abrirFormularioNoDisponible = (persona, registro = null) => {
+  if (soloLecturaEfectiva || estaCertificadoHoy(persona)) return;
+  const coberturaRegistrada = extrasDia.find(
+    (extra) => String(extra.id) === String(registro?.personaCoberturaId || "")
+  );
+  setFormularioNoDisponible({
+    persona,
+    registro,
+    editando: Boolean(registro),
+    fecha: keyDia,
+    sectorOrigen: registro?.sectorOrigen || obtenerSectorOrigenPersona(persona),
+    motivo: registro?.motivo || "",
+    detalle: registro?.detalle || "",
+    personaCoberturaId: coberturaRegistrada?.id || "",
+    turnoDestino: registro?.turnoDestino || "",
+    error: "",
+    contexto: {
+      turno: turnoActivo,
+      mes: mesActivo,
+      fecha: keyDia,
+      categoria: tipo,
+      calendario,
+      soloLectura: soloLecturaEfectiva
+    }
+  });
+};
+
+const contextoNoDisponibleValido = () =>
+  formularioNoDisponible &&
+  formularioNoDisponible.contexto.turno === turnoActivo &&
+  formularioNoDisponible.contexto.mes === mesActivo &&
+  formularioNoDisponible.contexto.fecha === keyDia &&
+  formularioNoDisponible.contexto.categoria === tipo &&
+  formularioNoDisponible.contexto.calendario === calendario &&
+  formularioNoDisponible.contexto.calendario ===
+    (obtenerCalendarioActual ? obtenerCalendarioActual() : calendario) &&
+  formularioNoDisponible.contexto.soloLectura === soloLecturaEfectiva &&
+  !soloLecturaEfectiva;
+const formularioNoDisponibleVisible = Boolean(
+  formularioNoDisponible &&
+  formularioNoDisponible.contexto.turno === turnoActivo &&
+  formularioNoDisponible.contexto.mes === mesActivo &&
+  formularioNoDisponible.contexto.fecha === keyDia &&
+  formularioNoDisponible.contexto.categoria === tipo
+);
+
+const confirmarNoDisponible = () => {
+  if (!contextoNoDisponibleValido()) {
+    setFormularioNoDisponible((actual) => ({
+      ...actual,
+      error: "El calendario cambió mientras confirmabas. Revisá nuevamente."
+    }));
+    return;
+  }
+  const personaCobertura = extrasDia.find(
+    (extra) => String(extra.id) === String(formularioNoDisponible.personaCoberturaId)
+  );
+  const resultado = crearRegistroNoDisponible({
+    persona: formularioNoDisponible.persona,
+    motivo: formularioNoDisponible.motivo,
+    detalle: formularioNoDisponible.detalle,
+    personaCobertura,
+    turnoDestino: formularioNoDisponible.turnoDestino,
+    sectorOrigen: formularioNoDisponible.sectorOrigen,
+    creadoEn: formularioNoDisponible.registro?.creadoEn
+  });
+  if (!resultado.registro) {
+    setFormularioNoDisponible((actual) => ({ ...actual, error: resultado.error }));
+    return;
+  }
+
+  setCalendario((prev) => {
+    if (prev !== formularioNoDisponible.contexto.calendario) return prev;
+    const lista = prev.noDisponibles?.[keyDia] || [];
+    return {
+      ...prev,
+      noDisponibles: {
+        ...(prev.noDisponibles || {}),
+        [keyDia]: reemplazarRegistroNoDisponible({
+          lista,
+          persona: formularioNoDisponible.persona,
+          registro: resultado.registro,
+          personal: personalFiltrado
+        })
+      }
+    };
+  });
+  setFormularioNoDisponible(null);
+};
+
+const quitarNoDisponible = () => {
+  if (!contextoNoDisponibleValido()) {
+    setFormularioNoDisponible((actual) => ({
+      ...actual,
+      error: "El calendario cambió mientras confirmabas. Revisá nuevamente."
+    }));
+    return;
+  }
+  setCalendario((prev) => {
+    if (prev !== formularioNoDisponible.contexto.calendario) return prev;
+    const lista = prev.noDisponibles?.[keyDia] || [];
+    return {
+      ...prev,
+      noDisponibles: {
+        ...(prev.noDisponibles || {}),
+        [keyDia]: quitarPersonaDeListaReferencias(
+          lista,
+          formularioNoDisponible.persona,
+          personalFiltrado
+        )
+      }
+    };
+  });
+  setFormularioNoDisponible(null);
+};
+
 useEffect(() => {
   const asignacionesParaPDF = asignacionOrdenada.map((item) => {
     if (item.tipo === "divider" || item.enfermero) return item;
     const liberadoPorAusencia = ausentesDelDia.some(
       (ausente) => normalizar(ausente.sectorOrigen) === normalizar(item.nombre)
     );
-    return liberadoPorAusencia
-      ? { ...item, etiquetaVacio: "Sin asignar - ausencia" }
+    if (liberadoPorAusencia) {
+      return { ...item, etiquetaVacio: "Sin asignar - ausencia" };
+    }
+    const noDisponible = noDisponiblesPresentacion.find(
+      (registro) => normalizar(registro.sectorOrigen) === normalizar(item.nombre)
+    );
+    return noDisponible
+      ? { ...item, etiquetaVacio: `Sin cobertura — ${noDisponible.motivoBreve}` }
       : item;
   });
   const libresParaPDF = libres.filter(
@@ -893,6 +1065,7 @@ useEffect(() => {
   keyDia,
   libres,
   noDisponibles,
+  noDisponiblesPresentacion,
   onDataReady,
   personalFiltrado
 ]);
@@ -1413,6 +1586,21 @@ useEffect(() => {
         </p>
       )}
 
+      {formularioNoDisponibleVisible && (
+        <PanelNoDisponible
+          formulario={formularioNoDisponible}
+          extras={extrasDia}
+          onCambiar={(campo, valor) => setFormularioNoDisponible((actual) => ({
+            ...actual,
+            [campo]: valor,
+            error: ""
+          }))}
+          onCancelar={() => setFormularioNoDisponible(null)}
+          onConfirmar={confirmarNoDisponible}
+          onQuitar={quitarNoDisponible}
+        />
+      )}
+
 <div className="rounded-2xl border border-slate-100 bg-white">
   {asignacionesMostradas.map((item, i) => {
 
@@ -1425,6 +1613,11 @@ useEffect(() => {
     const sectorLiberadoPorAusencia = !item.enfermero && ausentesDelDia.some(
       (ausente) => normalizar(ausente.sectorOrigen) === normalizar(item.nombre)
     );
+    const noDisponibleDelSector = !item.enfermero
+      ? noDisponiblesPresentacion.find(
+          (registro) => normalizar(registro.sectorOrigen) === normalizar(item.nombre)
+        )
+      : null;
     const bg = bloqueadoPorCierre
       ? item.sacrificado
         ? "bg-slate-200"
@@ -1467,7 +1660,15 @@ useEffect(() => {
                 )
               : sectorLiberadoPorAusencia
                 ? "Sin asignar — ausencia"
-                : "Sin cobertura"}
+                : noDisponibleDelSector
+                  ? `Sin cobertura — ${noDisponibleDelSector.motivoBreve}${
+                      noDisponibleDelSector.turnoDestino
+                        ? `: turno ${obtenerEtiquetaTurnoDestino(
+                            noDisponibleDelSector.turnoDestino
+                          ).toLowerCase()}`
+                        : ""
+                    }`
+                  : "Sin cobertura"}
           </span>
           {item.enfermero && (
             <select
@@ -1497,6 +1698,62 @@ useEffect(() => {
     );
   })}
 </div>
+
+{noDisponiblesPresentacion.length > 0 && (
+  <section className="mt-5" aria-labelledby={`no-disponibles-${tipo}-${keyDia}`}>
+    <h4
+      id={`no-disponibles-${tipo}-${keyDia}`}
+      className="text-sm font-semibold text-slate-800"
+    >
+      No disponibles del día
+    </h4>
+    <div className="mt-2 grid gap-3 sm:grid-cols-2">
+      {noDisponiblesPresentacion.map((registro, indice) => (
+        <article
+          key={`${obtenerClaveIdentidadPersona(registro.persona) || registro.nombre}-${indice}`}
+          className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-slate-700"
+        >
+          <p className="font-semibold text-slate-900">
+            {registro.persona
+              ? obtenerNombreConMarcaTurnante(
+                  registro.persona,
+                  registro.nombre,
+                  identidadesTurnantes
+                )
+              : registro.nombre}
+          </p>
+          <p className="mt-1">
+            {registro.sectorOrigen || "Sector no registrado"} · {registro.motivoEtiqueta}
+          </p>
+          {registro.detalle && <p>{registro.detalle}</p>}
+          {registro.personaCoberturaNombre && (
+            <p>Cubierto por: {registro.personaCoberturaNombre}</p>
+          )}
+          {registro.tipo === "manual" &&
+            registro.motivo === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO &&
+            !registro.personaCoberturaNombre && (
+              <p>Cobertura aún no indicada</p>
+            )}
+          {registro.turnoDestino && (
+            <p>Turno destino: {obtenerEtiquetaTurnoDestino(registro.turnoDestino)}</p>
+          )}
+          <p>
+            Categoría: {registro.categoria === "licenciado" ? "Licenciados" : "Enfermeros"}
+          </p>
+          {registro.tipo === "manual" && registro.persona && !soloLecturaEfectiva && (
+            <button
+              type="button"
+              onClick={() => abrirFormularioNoDisponible(registro.persona, registro.registro)}
+              className="mt-2 rounded-lg border border-orange-300 bg-white px-2 py-1 text-xs font-medium text-orange-900"
+            >
+              Editar motivo
+            </button>
+          )}
+        </article>
+      ))}
+    </div>
+  </section>
+)}
 
 {ausentesDelDia.length > 0 && (
   <section className="mt-5" aria-labelledby={`ausentes-${tipo}-${keyDia}`}>
@@ -1693,33 +1950,26 @@ useEffect(() => {
         personalFiltrado
       )
     );
+    const certificado = estaCertificadoHoy(e);
+    const registroActivo = activo
+      ? (noDisponibles[keyDia] || []).find((referencia) =>
+          referenciaCorrespondeAPersona(referencia, e, personalFiltrado)
+        )
+      : null;
 
     return (
       <button
-        disabled={soloLecturaEfectiva}
+        type="button"
+        disabled={soloLecturaEfectiva || certificado}
         key={obtenerClaveRenderPersona(e, indice, idsPersonalDuplicados)}
         className={`px-3 py-1.5 rounded-lg text-sm transition
           ${activo
             ? "bg-red-500 text-white"
             : "bg-slate-200 text-slate-700 hover:bg-slate-300"}`}
-        onClick={() => {
-          if (soloLecturaEfectiva) return;
-          const lista = noDisponibles[keyDia] || [];
-
-          const nueva = activo
-            ? quitarPersonaDeListaReferencias(lista, e, personalFiltrado)
-            : agregarPersonaAListaReferencias(lista, e, personalFiltrado);
-
-          setCalendario((prev) => ({
-  ...prev,
-  noDisponibles: {
-    ...prev.noDisponibles,
-    [keyDia]: nueva
-  }
-}));
-        }}
+        onClick={() => abrirFormularioNoDisponible(e, registroActivo)}
       >
         {obtenerEtiquetaPersona(e, personal)}
+        {certificado ? " · Certificación médica" : ""}
       </button>
     );
   })}

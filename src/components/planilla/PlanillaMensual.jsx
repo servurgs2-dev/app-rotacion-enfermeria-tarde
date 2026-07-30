@@ -49,6 +49,7 @@ import {
 import {
   describirContenidoAEliminar,
   estaPlanillaVacia,
+  vaciarPlanillaDesdeSemana2,
   vaciarPlanillaMensual,
   validarContextoLimpieza
 } from "../../utils/limpiezaSegura.js";
@@ -518,6 +519,15 @@ function PlanillaMensual({
     setMensajeTurnanteMensual("");
   };
 
+  const vaciarDesdeSemana2 = () => {
+    if (soloLectura || versionHistoricaActiva || usaRotacionTresDias) return;
+    const confirmado = window.confirm(
+      "Se vaciarán todas las asignaciones desde la Semana 2 en adelante. La Semana 1 quedará sin cambios y podrá usarse como referencia. ¿Continuar?"
+    );
+    if (!confirmado) return;
+    setPlanilla((prev) => vaciarPlanillaDesdeSemana2({ planilla: prev }));
+  };
+
   function actualizarAsignacionBaseNocturna(sector, personaId) {
     if (soloLectura || !usaRotacionTresDias || tipo !== "enfermero") return;
     const persona = personalFiltrado.find((item) => item.id === personaId);
@@ -793,14 +803,25 @@ function PlanillaMensual({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-800">Planilla Mensual</h2>
         {!soloLectura && !versionHistoricaActiva && (
-          <button
-            type="button"
-            onClick={abrirLimpiezaPlanilla}
-            disabled={planillaEstaVacia}
-            className="rounded-xl border border-red-300 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
-          >
-            Vaciar planilla
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {!usaRotacionTresDias && (
+              <button
+                type="button"
+                onClick={vaciarDesdeSemana2}
+                className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-100"
+              >
+                Vaciar desde Semana 2
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={abrirLimpiezaPlanilla}
+              disabled={planillaEstaVacia}
+              className="rounded-xl border border-red-300 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+            >
+              Vaciar planilla
+            </button>
+          </div>
         )}
       </div>
 

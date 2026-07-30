@@ -6,6 +6,7 @@ import {
   estaPlanillaVacia,
   reiniciarMesEnEstado,
   tieneContenidoSignificativo,
+  vaciarPlanillaDesdeSemana2,
   vaciarPlanillaMensual,
   validarContextoLimpieza
 } from "../src/utils/limpiezaSegura.js";
@@ -298,5 +299,167 @@ probar("reinicio revalida turno, mes, permiso, conflicto y revisión", () => {
     "metadatos?.conflicto"
   ]) assert.ok(bloque.includes(patron), patron);
 });
+
+const semanalDesdeDos = {
+  posicionesMensualesAdicionales: ["T6"],
+  semana1: {
+    "REA 1": referencia("1"),
+    T1: "Persona histórica",
+    T6: referencia("6"),
+    SM: referencia("sm")
+  },
+  semana2: {
+    "REA 1": referencia("2"),
+    T1: referencia("t2"),
+    T6: referencia("t6-2"),
+    SM: referencia("sm2")
+  },
+  semana3: { "REA 1": referencia("3"), T6: referencia("t6-3") },
+  semana4: { "REA 1": referencia("4") },
+  semana5: { "REA 1": referencia("5") },
+  semana6: { "REA 1": referencia("6") },
+  asignacionesParciales: {
+    semana1: [{ id: "p1", sector: "T6" }],
+    semana2: [{ id: "p2", sector: "REA 1" }],
+    semana6: [{ id: "p6", sector: "SM" }],
+    "2026-07-02": [{ id: "n1", sector: "T6" }]
+  },
+  rotacion3Dias: {
+    version: 1,
+    fechaBase: "2026-07-02",
+    duracionDias: 3,
+    asignacionBase: { T6: referencia("base") },
+    bloques: { "2026-07-02": { T6: referencia("bloque") } }
+  },
+  generacionFlexible: { version: 1 },
+  metadataFutura: { conservar: true }
+};
+const limpiaDesdeDos = vaciarPlanillaDesdeSemana2({
+  planilla: semanalDesdeDos,
+  tipo: "enfermero"
+});
+
+probar("desde Semana 2 conserva íntegramente Semana 1", () =>
+  assert.deepEqual(limpiaDesdeDos.semana1, semanalDesdeDos.semana1));
+probar("desde Semana 2 conserva la referencia de Semana 1", () =>
+  assert.equal(limpiaDesdeDos.semana1, semanalDesdeDos.semana1));
+for (let numero = 2; numero <= 6; numero += 1) {
+  probar(`desde Semana 2 vacía Semana ${numero}`, () =>
+    assert.ok(Object.values(limpiaDesdeDos[`semana${numero}`]).every(
+      (valor) => valor === ""
+    )));
+}
+probar("no crea Semana 6 cuando no existía", () => {
+  const resultado = vaciarPlanillaDesdeSemana2({
+    planilla: { semana1: {}, semana2: { A: referencia("1") } }
+  });
+  assert.equal(Object.hasOwn(resultado, "semana6"), false);
+});
+probar("conserva SM de Semana 1", () =>
+  assert.equal(limpiaDesdeDos.semana1.SM, semanalDesdeDos.semana1.SM));
+probar("vacía SM desde Semana 2", () =>
+  assert.equal(limpiaDesdeDos.semana2.SM, ""));
+probar("conserva Turnantes normales de Semana 1", () =>
+  assert.equal(limpiaDesdeDos.semana1.T1, "Persona histórica"));
+probar("vacía Turnantes normales desde Semana 2", () =>
+  assert.equal(limpiaDesdeDos.semana2.T1, ""));
+probar("conserva T6 habilitado", () =>
+  assert.deepEqual(limpiaDesdeDos.posicionesMensualesAdicionales, ["T6"]));
+probar("conserva T6 asignado en Semana 1", () =>
+  assert.equal(limpiaDesdeDos.semana1.T6, semanalDesdeDos.semana1.T6));
+probar("vacía T6 desde Semana 2", () =>
+  assert.equal(limpiaDesdeDos.semana2.T6, ""));
+probar("conserva T3 habilitado y asignado en Semana 1", () => {
+  const semana1 = { T3: referencia("l1") };
+  const resultado = vaciarPlanillaDesdeSemana2({
+    planilla: {
+      posicionesMensualesAdicionales: ["T3"],
+      semana1,
+      semana2: { T3: referencia("l2") }
+    },
+    tipo: "licenciado"
+  });
+  assert.deepEqual(resultado.posicionesMensualesAdicionales, ["T3"]);
+  assert.equal(resultado.semana1, semana1);
+});
+probar("vacía T3 desde Semana 2", () =>
+  assert.equal(vaciarPlanillaDesdeSemana2({
+    planilla: { semana1: {}, semana2: { T3: referencia("l2") } }
+  }).semana2.T3, ""));
+probar("conserva parciales de Semana 1", () =>
+  assert.equal(
+    limpiaDesdeDos.asignacionesParciales.semana1,
+    semanalDesdeDos.asignacionesParciales.semana1
+  ));
+probar("elimina parciales de Semana 2", () =>
+  assert.equal(Object.hasOwn(limpiaDesdeDos.asignacionesParciales, "semana2"), false));
+probar("elimina parciales de todas las semanas posteriores", () =>
+  assert.equal(Object.keys(limpiaDesdeDos.asignacionesParciales).some(
+    (clave) => /^semana\d+$/.test(clave) && clave !== "semana1"
+  ), false));
+probar("no modifica parciales nocturnas", () =>
+  assert.equal(
+    limpiaDesdeDos.asignacionesParciales["2026-07-02"],
+    semanalDesdeDos.asignacionesParciales["2026-07-02"]
+  ));
+probar("no modifica rotacion3Dias ni asignacionBase", () => {
+  assert.equal(limpiaDesdeDos.rotacion3Dias, semanalDesdeDos.rotacion3Dias);
+  assert.equal(
+    limpiaDesdeDos.rotacion3Dias.asignacionBase,
+    semanalDesdeDos.rotacion3Dias.asignacionBase
+  );
+});
+probar("no muta la planilla original", () =>
+  assert.equal(semanalDesdeDos.semana2.T6.personaId, "t6-2"));
+probar("funciona con Enfermeros", () =>
+  assert.equal(limpiaDesdeDos.semana2["REA 1"], ""));
+probar("funciona con Licenciados", () =>
+  assert.equal(vaciarPlanillaDesdeSemana2({
+    planilla: { semana1: {}, semana2: { "Triage 1": referencia("l") } },
+    tipo: "licenciado"
+  }).semana2["Triage 1"], ""));
+probar("conserva referencias personaId de Semana 1", () =>
+  assert.equal(limpiaDesdeDos.semana1["REA 1"].personaId, "1"));
+probar("conserva referencias históricas por nombre", () =>
+  assert.equal(limpiaDesdeDos.semana1.T1, "Persona histórica"));
+probar("funciona sin posicionesMensualesAdicionales", () =>
+  assert.equal(vaciarPlanillaDesdeSemana2({
+    planilla: { semana1: {}, semana2: { A: referencia("1") } }
+  }).semana2.A, ""));
+probar("repetir sobre semanas vacías es seguro", () =>
+  assert.deepEqual(
+    vaciarPlanillaDesdeSemana2({ planilla: limpiaDesdeDos }),
+    limpiaDesdeDos
+  ));
+probar("conserva metadata mensual", () => {
+  assert.equal(limpiaDesdeDos.generacionFlexible, semanalDesdeDos.generacionFlexible);
+  assert.equal(limpiaDesdeDos.metadataFutura, semanalDesdeDos.metadataFutura);
+});
+probar("el botón se oculta en rotación nocturna de tres días", () =>
+  assert.match(
+    planillaFuente,
+    /\{!usaRotacionTresDias && \(\s*<button[\s\S]*Vaciar desde Semana 2/
+  ));
+probar("el botón aparece en planificación nocturna histórica semanal", () =>
+  assert.doesNotMatch(planillaFuente, /turnoId\s*!==\s*["']noche/));
+probar("el botón no aparece en solo lectura ni versión histórica", () =>
+  assert.match(planillaFuente, /\{!soloLectura && !versionHistoricaActiva && \(/));
+probar("cancelar confirmación no llama setPlanilla", () => {
+  const inicio = planillaFuente.indexOf("const vaciarDesdeSemana2");
+  const fin = planillaFuente.indexOf("function actualizarCelda", inicio);
+  const bloque = planillaFuente.slice(inicio, fin);
+  assert.match(bloque, /if \(!confirmado\) return;\s*setPlanilla/);
+});
+probar("Vaciar planilla existente conserva su helper", () =>
+  assert.match(planillaFuente, /vaciarPlanillaMensual\(\{/));
+probar("PDF y grupos de libres no se integran a esta acción", () => {
+  assert.doesNotMatch(planillaFuente, /crearPlanillaSemanalPDF/);
+  assert.doesNotMatch(planillaFuente, /renderizarGruposLibresPDF/);
+});
+probar("no existe SQL nuevo en la limpieza", () =>
+  assert.doesNotMatch(
+    leer("src/utils/limpiezaSegura.js"),
+    /\b(select|insert|update|delete from|create table|alter table)\b/i
+  ));
 
 console.log(`\n${pruebas} pruebas de limpieza segura pasaron.`);

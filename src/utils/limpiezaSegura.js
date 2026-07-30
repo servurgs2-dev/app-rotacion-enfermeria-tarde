@@ -97,6 +97,41 @@ export const vaciarPlanillaMensual = ({
   };
 };
 
+const esClaveSemanaPosterior = (clave) =>
+  /^semana\d+$/.test(clave) && clave !== "semana1";
+
+const vaciarDistribucionExistente = (distribucion) => {
+  if (!esObjeto(distribucion)) return {};
+  return Object.fromEntries(
+    Object.keys(distribucion).map((fila) => [fila, ""])
+  );
+};
+
+export const vaciarPlanillaDesdeSemana2 = ({ planilla } = {}) => {
+  const actual = esObjeto(planilla) ? planilla : {};
+  const resultado = {
+    ...actual,
+    ...Object.fromEntries(
+      Object.entries(actual)
+        .filter(([clave]) => esClaveSemanaPosterior(clave))
+        .map(([clave, distribucion]) => [
+          clave,
+          vaciarDistribucionExistente(distribucion)
+        ])
+    )
+  };
+
+  if (esObjeto(actual.asignacionesParciales)) {
+    resultado.asignacionesParciales = Object.fromEntries(
+      Object.entries(actual.asignacionesParciales)
+        .filter(([clave]) => !esClaveSemanaPosterior(clave))
+        .map(([clave, asignaciones]) => [clave, asignaciones])
+    );
+  }
+
+  return resultado;
+};
+
 export const describirContenidoAEliminar = ({
   tipo,
   usaRotacionTresDias = false

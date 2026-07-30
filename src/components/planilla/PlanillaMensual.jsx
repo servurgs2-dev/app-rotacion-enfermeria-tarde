@@ -61,6 +61,16 @@ import {
   validarAsignacionParcial
 } from "../../utils/asignacionesParcialesPlanilla.js";
 import { obtenerOpcionesSelectorPlanilla } from "../../utils/opcionesSelectorPlanilla.js";
+import {
+  eliminarTurnanteMensual,
+  estaHabilitadoTurnanteMensual,
+  habilitarTurnanteMensual,
+  obtenerCapacidadNormalPlanilla,
+  obtenerFilasBasePlanilla,
+  obtenerFilasEfectivasPlanilla,
+  obtenerPosicionTurnanteMensual,
+  validarEliminacionTurnanteMensual
+} from "../../utils/turnanteMensual.js";
 
 function PlanillaMensual({
   personal,
@@ -108,6 +118,7 @@ function PlanillaMensual({
     periodos[0]?.clave || ""
   );
   const [errorAsignacionParcial, setErrorAsignacionParcial] = useState("");
+  const [mensajeTurnanteMensual, setMensajeTurnanteMensual] = useState("");
   const claveContextoIntercambio = [
     turnoId,
     mesActivo,
@@ -117,16 +128,15 @@ function PlanillaMensual({
     versionHistoricaActiva ? "historica" : "actual"
   ].join("|");
 
-  const filas = [];
-  let tIndex = 0;
-
-  sectoresFijos.forEach((sector, indice) => {
-    filas.push(sector);
-    if (posicionesTurnantes.includes(indice)) {
-      filas.push(turnantes[tIndex]);
-      tIndex += 1;
-    }
+  const filasBase = obtenerFilasBasePlanilla({
+    sectoresFijos,
+    turnantes,
+    posicionesTurnantes
   });
+  const filas = obtenerFilasEfectivasPlanilla(filasBase, planilla, tipo);
+  const posicionTurnanteMensual = obtenerPosicionTurnanteMensual(tipo);
+  const turnanteMensualHabilitado = estaHabilitadoTurnanteMensual(planilla, tipo);
+  const capacidadNormal = obtenerCapacidadNormalPlanilla(tipo);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -281,7 +291,8 @@ function PlanillaMensual({
     const analisis = analizarDistribucionBaseEnfermeros({
       distribucionBase: contexto.distribucionBase,
       filas,
-      personal: personalFiltrado
+      personal: personalFiltrado,
+      cantidadEsperada: filas.length
     });
     if (!analisis.ok) {
       alert(analisis.mensaje);
@@ -483,6 +494,29 @@ function PlanillaMensual({
       }
     }));
   }
+
+  const habilitarPosicionMensual = () => {
+    if (soloLectura || versionHistoricaActiva) return;
+    setPlanilla((prev) => habilitarTurnanteMensual(prev, tipo));
+    setMensajeTurnanteMensual("");
+  };
+
+  const solicitarEliminarPosicionMensual = () => {
+    if (soloLectura || versionHistoricaActiva) return;
+    const validacion = validarEliminacionTurnanteMensual(planilla, tipo);
+    if (!validacion.ok) {
+      setMensajeTurnanteMensual(validacion.mensaje);
+      return;
+    }
+    if (!window.confirm(
+      `¿Eliminar ${posicionTurnanteMensual} mensual? La fila está vacía y dejará de mostrarse en este turno y mes.`
+    )) return;
+    setPlanilla((prev) => {
+      const resultado = eliminarTurnanteMensual(prev, tipo);
+      return resultado.ok ? resultado.planilla : prev;
+    });
+    setMensajeTurnanteMensual("");
+  };
 
   function actualizarAsignacionBaseNocturna(sector, personaId) {
     if (soloLectura || !usaRotacionTresDias || tipo !== "enfermero") return;
@@ -769,6 +803,48 @@ function PlanillaMensual({
           </button>
         )}
       </div>
+
+      <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">
+              {turnanteMensualHabilitado
+                ? `${posicionTurnanteMensual} mensual habilitado`
+                : "Turnante mensual adicional"}
+            </p>
+            {personalFiltrado.length > capacidadNormal && !turnanteMensualHabilitado && (
+              <p className="mt-1 text-sm text-slate-600">
+                Hay {personalFiltrado.length} {nombreCategoria} y {capacidadNormal} posiciones normales.
+                Podés agregar {posicionTurnanteMensual} para este mes.
+              </p>
+            )}
+            {mensajeTurnanteMensual && (
+              <p role="alert" className="mt-1 text-sm text-amber-700">
+                {mensajeTurnanteMensual}
+              </p>
+            )}
+          </div>
+          {!soloLectura && !versionHistoricaActiva && (
+            turnanteMensualHabilitado ? (
+              <button
+                type="button"
+                onClick={solicitarEliminarPosicionMensual}
+                className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50"
+              >
+                Eliminar Turnante mensual
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={habilitarPosicionMensual}
+                className="rounded-lg border border-blue-300 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
+              >
+                + Agregar {posicionTurnanteMensual} mensual
+              </button>
+            )
+          )}
+        </div>
+      </section>
 
       {usaRotacionTresDias && tipo === "enfermero" && (
         <section className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">

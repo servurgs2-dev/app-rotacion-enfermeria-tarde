@@ -329,7 +329,7 @@ probar("33 la marca funciona en Licenciados", () => {
 });
 probar("34 la semana activa es la fuente de identidades Turnantes", () => {
   assert.match(calendarioFuente, /distribucion: planillaPeriodo/);
-  assert.match(calendarioFuente, /posicionesTurnantes: turnantesLabels/);
+  assert.match(calendarioFuente, /posicionesTurnantes: turnantesEfectivos/);
 });
 probar("35 Noche cada tres días usa el bloque activo", () => {
   assert.match(

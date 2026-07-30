@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { configuracionSectores } from "../../data/sectores";
 import {
+  obtenerFilasBasePlanilla,
+  obtenerFilasEfectivasPlanilla,
+  obtenerPosicionesTurnantesEfectivas
+} from "../../utils/turnanteMensual.js";
+import {
   obtenerConfiguracionTurno,
   obtenerEstrategiaRotacionPlanilla
 } from "../../config/turnos.js";
@@ -178,21 +183,26 @@ const {
     ordenVisual
   } = configuracionSectores[tipo];
 
-  const filas = useMemo(() => {
-    const filasCalculadas = [];
-    let tIndex = 0;
-
-    sectoresFijos.forEach((s, i) => {
-      filasCalculadas.push(s);
-
-      if (posicionesTurnantes.includes(i)) {
-        filasCalculadas.push(turnantesLabels[tIndex]);
-        tIndex++;
-      }
-    });
-
-    return filasCalculadas;
-  }, [posicionesTurnantes, sectoresFijos, turnantesLabels]);
+  const filasBase = useMemo(
+    () => obtenerFilasBasePlanilla({
+      sectoresFijos,
+      turnantes: turnantesLabels,
+      posicionesTurnantes
+    }),
+    [posicionesTurnantes, sectoresFijos, turnantesLabels]
+  );
+  const filas = useMemo(
+    () => obtenerFilasEfectivasPlanilla(filasBase, planilla, tipo),
+    [filasBase, planilla, tipo]
+  );
+  const turnantesEfectivos = useMemo(
+    () => obtenerPosicionesTurnantesEfectivas(
+      filasBase.filter((fila) => /^T\d+$/.test(fila)),
+      planilla,
+      tipo
+    ),
+    [filasBase, planilla, tipo]
+  );
 
 const keyDia = keyDiaFromDate(fecha);
 const periodoPlanilla = useMemo(() => {
@@ -379,7 +389,7 @@ const identidadesParcialesAplicadas = new Set(
 );
 const identidadesTurnantes = obtenerIdentidadesTurnantes({
   distribucion: planillaPeriodoEfectiva,
-  posicionesTurnantes: turnantesLabels,
+  posicionesTurnantes: turnantesEfectivos,
   personal
 });
 const reintegrosPeriodo = detectarDisponiblesPorReintegro({
@@ -548,7 +558,7 @@ let asignacionCompleta = filasCalendario.map((fila) => {
     nombre: fila,
     enfermero: enfermero || null,
     vacioManual: override === "__EMPTY__",
-    tipo: turnantesLabels.includes(fila) ? "turnante" : "sector"
+    tipo: turnantesEfectivos.includes(fila) ? "turnante" : "sector"
   };
 });
 

@@ -16,6 +16,7 @@ import {
 } from "./generacionFlexiblePlanilla.js";
 import { resolverPersonaDesdeReferencia } from "./referenciasPersonas.js";
 import { tieneContenidoSignificativo } from "./limpiezaSegura.js";
+import { quitarTurnanteMensualDeDistribucion } from "./turnanteMensual.js";
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -466,7 +467,10 @@ export const construirEstadoMesNuevo = ({ analisis } = {}) => {
   }
   const planillaLicBase = {
     ...crearPlanillaMensualVacia(),
-    semana1: clonar(analisis.licenciados.base),
+    semana1: quitarTurnanteMensualDeDistribucion(
+      clonar(analisis.licenciados.base),
+      "licenciado"
+    ),
     coberturaLibreSM: {}
   };
   const coberturaLic = analisis.coberturaLicenciadosBase;
@@ -480,7 +484,12 @@ export const construirEstadoMesNuevo = ({ analisis } = {}) => {
     );
     const bloquesCompartidos = Object.fromEntries(
       Object.entries(rotacionOrigen.bloques || {}).flatMap(([clave, bloque]) =>
-        clavesDestino.has(clave) ? [[clave, clonar(bloque)]] : []
+        clavesDestino.has(clave)
+          ? [[clave, quitarTurnanteMensualDeDistribucion(
+              clonar(bloque),
+              "enfermero"
+            )]]
+          : []
       )
     );
     const coberturasCompartidas = Object.fromEntries(
@@ -497,7 +506,10 @@ export const construirEstadoMesNuevo = ({ analisis } = {}) => {
       duracionDias:
         rotacionOrigen.duracionDias ||
         analisis.enfermeros.estrategia.duracionDias,
-      asignacionBase: clonar(analisis.enfermeros.base),
+      asignacionBase: quitarTurnanteMensualDeDistribucion(
+        clonar(analisis.enfermeros.base),
+        "enfermero"
+      ),
       bloques: bloquesCompartidos,
       coberturaLibreSM: coberturasCompartidas
     };
@@ -508,7 +520,10 @@ export const construirEstadoMesNuevo = ({ analisis } = {}) => {
   } else {
     planillaEnfermeros = {
       ...crearPlanillaMensualVacia(),
-      semana1: clonar(analisis.enfermeros.base),
+      semana1: quitarTurnanteMensualDeDistribucion(
+        clonar(analisis.enfermeros.base),
+        "enfermero"
+      ),
       coberturaLibreSM: {}
     };
     const cobertura = analisis.coberturaEnfermerosBase;

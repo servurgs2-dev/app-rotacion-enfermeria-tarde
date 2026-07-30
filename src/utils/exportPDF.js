@@ -13,6 +13,10 @@ import {
 } from "./referenciasPersonas.js";
 import { resolverPersonaDeCertificacion } from "./certificacionesPersonas.js";
 import { obtenerNombreConMarcaTurnante } from "./etiquetaTurnante.js";
+import {
+  obtenerFilasBasePlanilla,
+  obtenerFilasEfectivasPlanilla
+} from "./turnanteMensual.js";
 
 
 // 🔹 PLANILLA
@@ -62,21 +66,12 @@ export const ORDEN_PDF_LICENCIADOS_NOCHE = [
   "T2"
 ];
 
-const obtenerFilasPlanilla = (tipo, ordenPresentacion) => {
-  if (Array.isArray(ordenPresentacion)) return [...ordenPresentacion];
-
+const obtenerFilasPlanilla = (tipo, ordenPresentacion, planilla) => {
   const configuracion = configuracionSectores[tipo];
-  const filas = [];
-  let indiceTurnante = 0;
-
-  configuracion.sectoresFijos.forEach((sector, indice) => {
-    filas.push(sector);
-    if (configuracion.posicionesTurnantes.includes(indice)) {
-      filas.push(configuracion.turnantes[indiceTurnante]);
-      indiceTurnante += 1;
-    }
-  });
-  return filas;
+  const filasBase = Array.isArray(ordenPresentacion)
+    ? [...ordenPresentacion]
+    : obtenerFilasBasePlanilla(configuracion);
+  return obtenerFilasEfectivasPlanilla(filasBase, planilla, tipo);
 };
 
 export const obtenerPeriodosPlanillaPDF = ({ turnoId, tipo, mesActivo } = {}) => {
@@ -118,7 +113,7 @@ export const prepararTablaPlanillaPDF = ({
     "Sector",
     ...periodosValidos.map((periodo) => obtenerEtiquetaPeriodoPDF(periodo, estrategia))
   ];
-  const cuerpo = obtenerFilasPlanilla(tipo, ordenFilas).map((filaPlanilla) => [
+  const cuerpo = obtenerFilasPlanilla(tipo, ordenFilas, planilla).map((filaPlanilla) => [
     filaPlanilla,
     ...periodosValidos.map((periodo) => {
       const valores = obtenerValoresPeriodoPDF({ planilla, periodo, estrategia });

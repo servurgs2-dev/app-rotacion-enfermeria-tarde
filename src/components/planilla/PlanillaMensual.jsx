@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import { configuracionSectores } from "../../data/sectores";
-import {
-  estaDeLicencia,
-  obtenerSemanasDelMes,
-  parsearFechaLocal
-} from "../../utils/fechas";
+import { obtenerSemanasDelMes } from "../../utils/fechas";
 import {
   obtenerConfiguracionTurno,
   obtenerEstrategiaRotacionPlanilla
@@ -42,6 +38,7 @@ import {
 import SelectorPosicionesNoAplicables from "./SelectorPosicionesNoAplicables.jsx";
 import PanelIntercambioPlanilla from "./PanelIntercambioPlanilla.jsx";
 import PanelConfirmacionLimpieza from "../ui/PanelConfirmacionLimpieza.jsx";
+import PanelReintegrosPlanilla from "./PanelReintegrosPlanilla.jsx";
 import {
   aplicarIntercambioPlanilla,
   debeSincronizarAsignacionBase,
@@ -55,6 +52,15 @@ import {
   vaciarPlanillaMensual,
   validarContextoLimpieza
 } from "../../utils/limpiezaSegura.js";
+import {
+  crearMetadatosAsignacionParcial,
+  detectarDisponiblesPorReintegro,
+  eliminarAsignacionParcial,
+  guardarAsignacionParcial,
+  obtenerAsignacionesParcialesPeriodo,
+  validarAsignacionParcial
+} from "../../utils/asignacionesParcialesPlanilla.js";
+import { obtenerOpcionesSelectorPlanilla } from "../../utils/opcionesSelectorPlanilla.js";
 
 function PlanillaMensual({
   personal,
@@ -98,6 +104,10 @@ function PlanillaMensual({
   const [errorSeleccion, setErrorSeleccion] = useState("");
   const [intercambio, setIntercambio] = useState(null);
   const [limpiezaPlanilla, setLimpiezaPlanilla] = useState(null);
+  const [periodoReintegros, setPeriodoReintegros] = useState(
+    periodos[0]?.clave || ""
+  );
+  const [errorAsignacionParcial, setErrorAsignacionParcial] = useState("");
   const claveContextoIntercambio = [
     turnoId,
     mesActivo,
@@ -125,6 +135,15 @@ function PlanillaMensual({
     }, 0);
     return () => clearTimeout(timeout);
   }, [claveContextoIntercambio]);
+
+  const primeraClavePeriodo = periodos[0]?.clave || "";
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setPeriodoReintegros(primeraClavePeriodo);
+      setErrorAsignacionParcial("");
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [mesActivo, estrategia.tipo, primeraClavePeriodo]);
 
   const contextoLimpiezaActual = {
     turnoId,
@@ -487,13 +506,106 @@ function PlanillaMensual({
     ? planilla?.rotacion3Dias?.bloques?.[periodo.clave] || {}
     : planilla?.[periodo.clave] || {};
 
-  const obtenerFechaInicioPeriodo = (periodo) => usaRotacionTresDias
-    ? parsearFechaLocal(periodo.fechaInicio)
-    : periodo.desde;
-
   const obtenerEtiquetaPeriodo = (periodo) => usaRotacionTresDias
     ? periodo.etiqueta
     : `${periodo.desde.getDate()}/${periodo.desde.getMonth() + 1} - ${periodo.hasta.getDate()}/${periodo.hasta.getMonth() + 1}`;
+
+  const periodoReintegroActivo = periodos.find(
+    (periodo) => periodo.clave === periodoReintegros
+  ) || periodos[0];
+  const asignacionesParcialesActivas = obtenerAsignacionesParcialesPeriodo(
+    planilla,
+    periodoReintegroActivo?.clave
+  );
+  const reintegrosActivos = periodoReintegroActivo
+    ? detectarDisponiblesPorReintegro({
+        personal,
+        licencias,
+        distribucionBase: obtenerValoresPeriodo(periodoReintegroActivo),
+        asignacionesParciales: asignacionesParcialesActivas,
+        periodo: periodoReintegroActivo,
+        mesActivo,
+        categoria: tipo
+      })
+    : [];
+  const advertenciasAsignacionesParciales = periodoReintegroActivo
+    ? asignacionesParcialesActivas.flatMap((asignacion) => {
+        const validacion = validarAsignacionParcial({
+          asignacion,
+          asignacionIdEditada: asignacion.id,
+          periodo: periodoReintegroActivo,
+          mesActivo,
+          filas,
+          distribucionBase: obtenerValoresPeriodo(periodoReintegroActivo),
+          asignacionesExistentes: asignacionesParcialesActivas,
+          personal,
+          licencias,
+          categoria: tipo
+        });
+        return validacion.ok
+          ? []
+          : [{ id: asignacion.id, mensaje: `${asignacion.nombre}: ${validacion.mensaje}` }];
+      })
+    : [];
+  const periodosReintegros = periodos.map((periodo, indice) => ({
+    clave: periodo.clave,
+    etiqueta: usaRotacionTresDias
+      ? obtenerEtiquetaPeriodo(periodo)
+      : `Semana ${indice + 1} · ${obtenerEtiquetaPeriodo(periodo)}`
+  }));
+
+  const guardarParcial = (borrador, cerrar) => {
+    if (soloLectura || versionHistoricaActiva || !periodoReintegroActivo) return;
+    const metadatos = borrador.id ? {} : crearMetadatosAsignacionParcial();
+    const asignacion = {
+      ...borrador,
+      id: borrador.id || metadatos.id,
+      creadoEn: borrador.creadoEn || metadatos.creadoEn
+    };
+    const validar = (planillaActual) => validarAsignacionParcial({
+      asignacion,
+      asignacionIdEditada: borrador.id,
+      periodo: periodoReintegroActivo,
+      mesActivo,
+      filas,
+      distribucionBase: usaRotacionTresDias
+        ? planillaActual?.rotacion3Dias?.bloques?.[periodoReintegroActivo.clave] || {}
+        : planillaActual?.[periodoReintegroActivo.clave] || {},
+      asignacionesExistentes: obtenerAsignacionesParcialesPeriodo(
+        planillaActual,
+        periodoReintegroActivo.clave
+      ),
+      personal,
+      licencias,
+      categoria: tipo
+    });
+    const validacionActual = validar(planilla);
+    if (!validacionActual.ok) {
+      setErrorAsignacionParcial(validacionActual.mensaje);
+      return;
+    }
+
+    setPlanilla((prev) => {
+      const revalidacion = validar(prev);
+      if (!revalidacion.ok) return prev;
+      return guardarAsignacionParcial({
+        planilla: prev,
+        periodoClave: periodoReintegroActivo.clave,
+        asignacion: revalidacion.asignacion
+      });
+    });
+    setErrorAsignacionParcial("");
+    cerrar();
+  };
+
+  const eliminarParcial = (asignacionId) => {
+    if (soloLectura || versionHistoricaActiva || !periodoReintegroActivo) return;
+    setPlanilla((prev) => eliminarAsignacionParcial({
+      planilla: prev,
+      periodoClave: periodoReintegroActivo.clave,
+      asignacionId
+    }));
+  };
 
   const periodosIntercambiables = periodos.flatMap((periodo, indice) =>
     obtenerDistribucionPeriodo({
@@ -761,6 +873,15 @@ function PlanillaMensual({
                   );
                   const valorSelect = personaActual?.id ||
                     (nombreHistorico ? "__REFERENCIA_NO_RESUELTA__" : "");
+                  const opcionesSelector = obtenerOpcionesSelectorPlanilla({
+                    personalCategoria: personalFiltrado,
+                    personal,
+                    distribucion: valoresPeriodo,
+                    sector,
+                    referenciaActual,
+                    licencias,
+                    periodo
+                  }).opciones;
 
                   return (
                     <td key={periodo.clave} className="px-3 py-2 min-w-[140px]">
@@ -778,32 +899,14 @@ function PlanillaMensual({
                             {nombreHistorico}
                           </option>
                         )}
-                        {personalFiltrado
-                          .filter((persona) => {
-                            const disponible = !Object.entries(valoresPeriodo).some(
-                              ([otroSector, referencia]) =>
-                                otroSector !== sector &&
-                                referenciaCorrespondeAPersona(
-                                  referencia,
-                                  persona,
-                                  personal
-                                )
-                            );
-                            const noLicencia = !estaDeLicencia(
-                              licencias,
-                              persona,
-                              obtenerFechaInicioPeriodo(periodo),
-                              personal
-                            );
-
-                            return disponible && noLicencia;
-                          })
-                          .map((persona, indice) => (
+                        {opcionesSelector
+                          .map(({ persona, etiquetaEstado }, indice) => (
                             <option
                               key={obtenerClaveRenderPersona(persona, indice, idsDuplicados)}
                               value={persona.id}
                             >
                               {obtenerEtiquetaPersona(persona, personal)}
+                              {etiquetaEstado ? ` — ${etiquetaEstado}` : ""}
                             </option>
                           ))}
                       </select>
@@ -867,6 +970,22 @@ function PlanillaMensual({
           </tbody>
         </table>
       </div>
+
+      <PanelReintegrosPlanilla
+        periodos={periodosReintegros}
+        periodoClave={periodoReintegroActivo?.clave || ""}
+        reintegros={reintegrosActivos}
+        filas={filas}
+        soloLectura={soloLectura || versionHistoricaActiva}
+        error={errorAsignacionParcial}
+        advertencias={advertenciasAsignacionesParciales}
+        onCambiarPeriodo={(clave) => {
+          setPeriodoReintegros(clave);
+          setErrorAsignacionParcial("");
+        }}
+        onGuardar={guardarParcial}
+        onEliminar={eliminarParcial}
+      />
 
       <button
         disabled={soloLectura || evaluacionGeneracion.debeBloquearGeneracion}

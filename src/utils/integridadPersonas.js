@@ -27,6 +27,28 @@ export const limpiarPersonaDePlanilla = (planilla, persona, personal = []) => {
   const planillaLimpia = {};
 
   Object.entries(planilla).forEach(([clave, semana]) => {
+    if (clave === "asignacionesParciales" && esObjetoPlano(semana)) {
+      const parcialesLimpias = Object.fromEntries(
+        Object.entries(semana).map(([periodo, asignaciones]) => [
+          periodo,
+          Array.isArray(asignaciones)
+            ? asignaciones.filter(
+                (asignacion) =>
+                  String(asignacion?.personaId || "").trim() !==
+                  String(persona?.id || "").trim()
+              )
+            : asignaciones
+        ])
+      );
+      if (Object.entries(semana).some(([periodo, asignaciones]) =>
+        Array.isArray(asignaciones) &&
+        parcialesLimpias[periodo].length !== asignaciones.length
+      )) {
+        huboCambios = true;
+      }
+      planillaLimpia[clave] = parcialesLimpias;
+      return;
+    }
     if (!clave.startsWith("semana") || !esObjetoPlano(semana)) {
       planillaLimpia[clave] = semana;
       return;

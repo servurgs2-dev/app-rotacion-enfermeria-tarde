@@ -9,6 +9,7 @@ import {
   estaDeLicencia,
   esDiaLibre,
   keyDiaFromDate,
+  obtenerSemanasDelMes,
   semanaKeyFromDate
 } from "../../utils/fechas";
 import { obtenerBloqueParaFecha } from "../../utils/periodosRotacionPlanilla.js";
@@ -98,6 +99,12 @@ import {
   obtenerIdentidadesTurnantes,
   obtenerNombreConMarcaTurnante
 } from "../../utils/etiquetaTurnante.js";
+import {
+  detectarDisponiblesPorReintegro,
+  evaluarAsignacionesParcialesDia,
+  filtrarReintegradosSinSectorDia,
+  obtenerAsignacionesParcialesPeriodo
+} from "../../utils/asignacionesParcialesPlanilla.js";
 
 const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
   const clave = obtenerClaveIdentidadPersona({
@@ -206,6 +213,7 @@ const periodoPlanilla = useMemo(() => {
     return {
       tipoPeriodo: "cada_3_dias",
       clavePeriodo,
+      periodo: bloque,
       planillaPeriodo: clavePeriodo
         ? planilla?.rotacion3Dias?.bloques?.[clavePeriodo] || {}
         : {},
@@ -214,25 +222,26 @@ const periodoPlanilla = useMemo(() => {
   }
 
   const clavePeriodo = semanaKeyFromDate(fecha, mesActivo);
+  const periodo = obtenerSemanasDelMes(mesActivo).find(
+    (semana) => semana.clave === clavePeriodo
+  );
   return {
     tipoPeriodo: "semanal",
     clavePeriodo,
+    periodo,
     planillaPeriodo: clavePeriodo ? planilla?.[clavePeriodo] || {} : {},
     coberturasSaludMental: planilla?.coberturaLibreSM || {}
   };
 }, [fecha, keyDia, mesActivo, planilla, tipo, turnoActivo]);
 const {
   clavePeriodo,
+  periodo,
   planillaPeriodo,
   coberturasSaludMental
 } = periodoPlanilla;
-const identidadesTurnantes = useMemo(
-  () => obtenerIdentidadesTurnantes({
-    distribucion: planillaPeriodo,
-    posicionesTurnantes: turnantesLabels,
-    personal
-  }),
-  [personal, planillaPeriodo, turnantesLabels]
+const asignacionesParcialesPeriodo = obtenerAsignacionesParcialesPeriodo(
+  planilla,
+  clavePeriodo
 );
 const bloqueadoPorCierre = estaFechaCategoriaCerrada(cierresDia, keyDia);
 const soloLecturaEfectiva = soloLectura || bloqueadoPorCierre;
@@ -351,6 +360,49 @@ const estaAusente = (e) =>
       estaCertificadoHoy(e) ||
       obtenerEstadoAsistencia(asistenciaFecha, e) === ESTADOS_ASISTENCIA.AUSENTE
     );
+
+const evaluacionParcialesDia = evaluarAsignacionesParcialesDia({
+  distribucionBase: planillaPeriodo,
+  asignacionesParciales: asignacionesParcialesPeriodo,
+  fecha: keyDia,
+  personal,
+  esPersonaDisponible: (persona) =>
+    personalFiltrado.some((actual) => personasCompartenIdentidad(actual, persona)) &&
+    !estaAusente(persona),
+  estaPersonaBaseDeLicencia: (personaBase) => estaDeLicenciaHoy(personaBase)
+});
+const planillaPeriodoEfectiva = evaluacionParcialesDia.distribucion;
+const identidadesParcialesAplicadas = new Set(
+  evaluacionParcialesDia.aplicadas.map(
+    (asignacion) => String(asignacion.personaId)
+  )
+);
+const identidadesTurnantes = obtenerIdentidadesTurnantes({
+  distribucion: planillaPeriodoEfectiva,
+  posicionesTurnantes: turnantesLabels,
+  personal
+});
+const reintegrosPeriodo = detectarDisponiblesPorReintegro({
+  personal,
+  licencias,
+  distribucionBase: planillaPeriodo,
+  asignacionesParciales: [],
+  periodo,
+  mesActivo,
+  categoria: tipo
+});
+const reintegradosSinSectorHoy = filtrarReintegradosSinSectorDia({
+  reintegros: reintegrosPeriodo,
+  fecha: keyDia,
+  idsParcialesAplicadas: identidadesParcialesAplicadas,
+  categoria: tipo,
+  esPersonaDisponible: (persona) =>
+    !estaAusente(persona) &&
+    personalFiltrado.some((actual) => personasCompartenIdentidad(actual, persona))
+});
+const identidadesReintegradosSinSector = new Set(
+  reintegradosSinSectorHoy.map(obtenerClaveIdentidadPersona).filter(Boolean)
+);
 
 const borrarExtra = (extra) => {
   if (soloLecturaEfectiva) return;
@@ -487,7 +539,7 @@ let asignacionCompleta = filasCalendario.map((fila) => {
     );
   } else if (!override) {
     enfermero = resolverPersonaDesdeReferencia(
-      planillaPeriodo[fila],
+      planillaPeriodoEfectiva[fila],
       personal
     );
   }
@@ -675,7 +727,11 @@ const sobrantes = [...personalFiltrado, ...extrasDia].filter((e) => {
 
   const claveIdentidad = obtenerClaveIdentidadPersona(e);
 
-  if (!claveIdentidad || identidadesSobrantes.has(claveIdentidad)) return false;
+  if (
+    !claveIdentidad ||
+    identidadesSobrantes.has(claveIdentidad) ||
+    identidadesReintegradosSinSector.has(claveIdentidad)
+  ) return false;
 
   identidadesSobrantes.add(claveIdentidad);
   return true;
@@ -937,6 +993,17 @@ personasParaSinAsignar.forEach((persona) => {
     enfermero: persona,
     tipo: "sector",
     regresoAusencia: true
+  });
+});
+reintegradosSinSectorHoy.forEach((persona) => {
+  const identidad = obtenerClaveIdentidadPersona(persona);
+  if (!identidad || identidadesAsignadas.has(identidad) || estaAusente(persona)) return;
+  identidadesAsignadas.add(identidad);
+  asignacionParaMostrar.push({
+    nombre: "SIN ASIGNAR",
+    enfermero: persona,
+    tipo: "sector",
+    reintegroLicencia: true
   });
 });
 

@@ -14,7 +14,21 @@ const renombrarPlanilla = (planilla, personaId, nombre) => {
   return Object.fromEntries(
     Object.entries(planilla).map(([semana, celdas]) => [
       semana,
-      esObjeto(celdas)
+      semana === "asignacionesParciales" && esObjeto(celdas)
+        ? Object.fromEntries(
+            Object.entries(celdas).map(([periodo, asignaciones]) => [
+              periodo,
+              Array.isArray(asignaciones)
+                ? asignaciones.map((asignacion) =>
+                    esObjeto(asignacion) &&
+                    obtenerId(asignacion.personaId) === personaId
+                      ? { ...asignacion, nombre }
+                      : asignacion
+                  )
+                : asignaciones
+            ])
+          )
+        : esObjeto(celdas)
         ? Object.fromEntries(
             Object.entries(celdas).map(([sector, referencia]) => [
               sector,

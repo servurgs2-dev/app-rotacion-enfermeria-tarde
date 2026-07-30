@@ -34,7 +34,8 @@ export const estaPlanillaVacia = ({
       !tieneContenidoSignificativo(rotacion?.asignacionBase) &&
       !tieneContenidoSignificativo(rotacion?.bloques) &&
       !tieneContenidoSignificativo(rotacion?.coberturaLibreSM) &&
-      !tieneContenidoSignificativo(planilla.generacionFlexible)
+      !tieneContenidoSignificativo(planilla.generacionFlexible) &&
+      !tieneContenidoSignificativo(planilla.asignacionesParciales)
     );
   }
 
@@ -43,6 +44,7 @@ export const estaPlanillaVacia = ({
       (semana) => !tieneContenidoSignificativo(planilla[semana])
     ) &&
     !tieneContenidoSignificativo(planilla.coberturaLibreSM) &&
+    !tieneContenidoSignificativo(planilla.asignacionesParciales) &&
     (
       tipo !== "enfermero" ||
       !tieneContenidoSignificativo(planilla.generacionFlexible)
@@ -68,11 +70,13 @@ export const vaciarPlanillaMensual = ({
   usaRotacionTresDias = false
 } = {}) => {
   const actual = esObjeto(planilla) ? planilla : {};
-  const base = tipo === "enfermero"
-    ? Object.fromEntries(
-        Object.entries(actual).filter(([clave]) => clave !== "generacionFlexible")
-      )
-    : actual;
+  const base = Object.fromEntries(
+    Object.entries(actual).filter(
+      ([clave]) =>
+        clave !== "asignacionesParciales" &&
+        (tipo !== "enfermero" || clave !== "generacionFlexible")
+    )
+  );
 
   if (usaRotacionTresDias && tipo === "enfermero") {
     return {
@@ -102,13 +106,15 @@ export const describirContenidoAEliminar = ({
       "la asignación base",
       "los bloques de tres días",
       "la cobertura de Salud Mental",
-      "la configuración flexible de esta generación"
+      "la configuración flexible de esta generación",
+      "las asignaciones parciales por reintegro"
     ];
   }
 
   return [
     "las asignaciones de las semanas 1 a 6",
     "la cobertura de Salud Mental",
+    "las asignaciones parciales por reintegro",
     ...(tipo === "enfermero"
       ? ["la configuración flexible de esta generación"]
       : [])

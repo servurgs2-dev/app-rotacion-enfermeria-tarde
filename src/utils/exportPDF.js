@@ -439,11 +439,11 @@ export const crearPlanillaSemanalPDF = ({
 };
 
 // Conserva la firma posicional para cualquier consumidor histórico.
-export const exportarPlanillaPDF = (...argumentos) => {
+const normalizarOpcionesPlanillaPDF = (argumentos) => {
   const usaOpciones = argumentos[0] &&
     typeof argumentos[0] === "object" &&
     Object.hasOwn(argumentos[0], "planillaEnfermeros");
-  const opciones = usaOpciones
+  return usaOpciones
     ? argumentos[0]
     : {
         planillaEnfermeros: argumentos[0],
@@ -451,6 +451,10 @@ export const exportarPlanillaPDF = (...argumentos) => {
         semanas: argumentos[2],
         personal: argumentos[3]
       };
+};
+
+export const obtenerDocumentoPlanillaPDF = (...argumentos) => {
+  const opciones = normalizarOpcionesPlanillaPDF(argumentos);
   const {
     planillaEnfermeros: planillaEnf,
     planillaLicenciados: planillaLic,
@@ -472,8 +476,11 @@ export const exportarPlanillaPDF = (...argumentos) => {
       mesActivo,
       personal
     });
-    pdf.save("planilla_mensual.pdf");
-    return;
+    return {
+      pdf,
+      nombreArchivo: "planilla_mensual.pdf",
+      tipoDocumento: "rotacion_nocturna"
+    };
   }
 
   const pdf = crearPlanillaSemanalPDF({
@@ -484,7 +491,25 @@ export const exportarPlanillaPDF = (...argumentos) => {
     turnoId,
     mesActivo
   });
-  pdf.save("planilla_mensual.pdf");
+  return {
+    pdf,
+    nombreArchivo: "planilla_mensual.pdf",
+    tipoDocumento: "planilla_mensual"
+  };
+};
+
+export const obtenerAdjuntoPlanillaPDF = (...argumentos) => {
+  const documento = obtenerDocumentoPlanillaPDF(...argumentos);
+  return {
+    blob: documento.pdf.output("blob"),
+    nombreArchivo: documento.nombreArchivo,
+    tipoDocumento: documento.tipoDocumento
+  };
+};
+
+export const exportarPlanillaPDF = (...argumentos) => {
+  const documento = obtenerDocumentoPlanillaPDF(...argumentos);
+  documento.pdf.save(documento.nombreArchivo);
 };
 
 
@@ -719,9 +744,27 @@ export const crearCalendarioDiarioPDF = ({
   return pdf;
 };
 
-export const exportarCalendarioPDF = (opciones) => {
+export const obtenerDocumentoCalendarioPDF = (opciones) => {
   const pdf = crearCalendarioDiarioPDF(opciones);
   const fechaClave = obtenerClaveFechaPDF(opciones.fecha) || "fecha";
   const turno = String(opciones.turnoId || "turno").replace(/[^a-z0-9_-]/gi, "-");
-  pdf.save(`calendario-diario-${fechaClave}-${turno}.pdf`);
+  return {
+    pdf,
+    nombreArchivo: `calendario-diario-${fechaClave}-${turno}.pdf`,
+    tipoDocumento: "calendario_diario"
+  };
+};
+
+export const obtenerAdjuntoCalendarioPDF = (opciones) => {
+  const documento = obtenerDocumentoCalendarioPDF(opciones);
+  return {
+    blob: documento.pdf.output("blob"),
+    nombreArchivo: documento.nombreArchivo,
+    tipoDocumento: documento.tipoDocumento
+  };
+};
+
+export const exportarCalendarioPDF = (opciones) => {
+  const documento = obtenerDocumentoCalendarioPDF(opciones);
+  documento.pdf.save(documento.nombreArchivo);
 };

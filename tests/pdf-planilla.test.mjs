@@ -23,7 +23,7 @@ const fuente = fs.readFileSync(
   "utf8"
 );
 const inicioSemanal = fuente.indexOf("const estrategiaSemanal");
-const finSemanal = fuente.indexOf('pdf.save("planilla_mensual.pdf")', inicioSemanal);
+const finSemanal = fuente.indexOf("const normalizarOpcionesPlanillaPDF", inicioSemanal);
 const flujoSemanal = fuente.slice(inicioSemanal, finSemanal);
 const llamadaEnfermeros = flujoSemanal.indexOf('categoria: "enfermero"');
 const separacion = flujoSemanal.indexOf("pdf.addPage()", llamadaEnfermeros);
@@ -114,7 +114,8 @@ probar("11 Mañana, Tarde y Vespertino siguen semanales", () => {
 });
 probar("12 Calendario Diario conserva exportación independiente", () => {
   const bloqueCalendario = fuente.slice(fuente.indexOf("export const exportarCalendarioPDF"));
-  assert.match(bloqueCalendario, /pdf\.save\(`calendario-diario-/);
+  assert.match(bloqueCalendario, /obtenerDocumentoCalendarioPDF/);
+  assert.match(fuente, /nombreArchivo: `calendario-diario-/);
   assert.doesNotMatch(bloqueCalendario, /renderizarCategoriaPlanillaSemanalPDF/);
 });
 probar("13 preparar tablas no modifica las planillas", () => {
@@ -124,7 +125,8 @@ probar("14 no hay integración con Supabase", () => {
   assert.doesNotMatch(fuente, /supabase|\.rpc\(|estado_por_turno_mes/i);
 });
 probar("15 conserva un nombre de archivo válido", () => {
-  assert.match(fuente, /pdf\.save\("planilla_mensual\.pdf"\)/);
+  assert.match(fuente, /nombreArchivo: "planilla_mensual\.pdf"/);
+  assert.match(fuente, /documento\.pdf\.save\(documento\.nombreArchivo\)/);
 });
 probar("16 no agrega páginas vacías al inicio o al final", () => {
   assert.ok(llamadaEnfermeros < separacion);

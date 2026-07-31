@@ -11,12 +11,20 @@ import PanelConflictoEdicion from "./components/concurrencia/PanelConflictoEdici
 import PanelPrepararMes from "./components/mes/PanelPrepararMes";
 import PanelReiniciarMes from "./components/mes/PanelReiniciarMes";
 import SelectorTurno from "./components/turnos/SelectorTurno";
-import { exportarPlanillaPDF, exportarCalendarioPDF } from "./utils/exportPDF";
+import {
+  exportarPlanillaPDF,
+  exportarCalendarioPDF,
+  obtenerAdjuntoCalendarioPDF,
+  obtenerAdjuntoPlanillaPDF
+} from "./utils/exportPDF";
+import BotonEnviarPDF from "./components/correo/BotonEnviarPDF";
+import { crearAsuntoCorreoPDF } from "./utils/correoPDF";
 import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
 import { generarAlertasHorarios } from "./utils/alertasHorarios";
 import {
   TURNOS,
-  obtenerConfiguracionTurno
+  obtenerConfiguracionTurno,
+  obtenerEstrategiaRotacionPlanilla
 } from "./config/turnos";
 import {
   crearEstadoMensualVacio
@@ -1831,6 +1839,7 @@ return (
 
 <Seccion titulo="📊 Planilla mensual" className="order-2">
 
+<div className="mb-4 flex flex-wrap gap-2">
 <button
   onClick={() =>
     exportarPlanillaPDF({
@@ -1842,10 +1851,50 @@ return (
       mesActivo
     })
   }
-  className="mb-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
+  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
 >
   📄 Exportar planilla PDF
 </button>
+<BotonEnviarPDF
+  asuntoInicial={crearAsuntoCorreoPDF({
+    tipoDocumento: "planilla_mensual",
+    turnoId: turnoActivo,
+    mesActivo
+  })}
+  informacion={{
+    nombreArchivo: "planilla_mensual.pdf",
+    tipo: obtenerEstrategiaRotacionPlanilla({
+      turnoId: turnoActivo,
+      tipo: "enfermero",
+      mesActivo
+    }).tipo === "cada_3_dias" ? "Rotación nocturna" : "Planilla mensual",
+    mes: mesActivo,
+    turno: configTurno.nombre,
+    categoria: "Enfermeros y Licenciados"
+  }}
+  generarPDF={async () => {
+    const adjunto = obtenerAdjuntoPlanillaPDF({
+      planillaEnfermeros,
+      planillaLicenciados,
+      semanas,
+      personal,
+      turnoId: turnoActivo,
+      mesActivo
+    });
+    return {
+      ...adjunto,
+      contexto: {
+        tipoDocumento: adjunto.tipoDocumento,
+        mes: mesActivo,
+        turno: turnoActivo,
+        categoria: "ambas",
+        fecha: null,
+        origen: "planilla"
+      }
+    };
+  }}
+/>
+</div>
   {/* TABS */}
   <div className="flex gap-2 mb-4">
     
@@ -2078,6 +2127,7 @@ return (
         >
           
 
+  <div className="mb-4 flex flex-wrap gap-2">
   <button
   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
   onClick={() =>
@@ -2093,7 +2143,45 @@ return (
   }
 >
   📄 Exportar calendario PDF
-</button>
+  </button>
+  <BotonEnviarPDF
+    asuntoInicial={crearAsuntoCorreoPDF({
+      tipoDocumento: "calendario_diario",
+      turnoId: turnoActivo,
+      fecha,
+      mesActivo
+    })}
+    informacion={{
+      nombreArchivo: `calendario-diario-${keyDiaFromDate(fecha)}-${turnoActivo}.pdf`,
+      tipo: "Calendario Diario",
+      mes: mesActivo,
+      turno: configTurno.nombre,
+      categoria: "Enfermeros y Licenciados"
+    }}
+    generarPDF={async () => {
+      const adjunto = obtenerAdjuntoCalendarioPDF({
+        fecha,
+        enfermeros: dataPDFEnf,
+        licenciados: dataPDFLic,
+        certificaciones: certificacionesMes,
+        personal,
+        turnoId: turnoActivo,
+        mesActivo
+      });
+      return {
+        ...adjunto,
+        contexto: {
+          tipoDocumento: adjunto.tipoDocumento,
+          mes: mesActivo,
+          turno: turnoActivo,
+          categoria: "ambas",
+          fecha: keyDiaFromDate(fecha),
+          origen: "calendario"
+        }
+      };
+    }}
+  />
+  </div>
           {/* 🔹 TABS */}
   <div className="flex gap-2 mb-4">
     <button

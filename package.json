@@ -28,6 +28,7 @@
     "test:alerta-sectores-criticos": "node tests/alerta-sectores-criticos.test.mjs",
     "test:reintegros-planilla": "node tests/reintegros-asignaciones-parciales.test.mjs",
     "test:turnante-mensual": "node tests/turnante-mensual.test.mjs",
+    "test:correo-pdf": "node tests/correo-pdf.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

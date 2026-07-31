@@ -129,12 +129,21 @@ const limpiarExtrasPorDia = (extrasPorDia, persona) => {
     }
 
     const personaId = String(persona?.id ?? "").trim();
-    const extrasDelDia = extras.filter((extra) => {
+    const extrasDelDia = extras.flatMap((extra) => {
       const extraId = String(extra?.id ?? "").trim();
       const extraPersonaId = String(extra?.personaId ?? "").trim();
+      if (String(extra?.personaCubiertaId ?? "").trim() === personaId) {
+        const refuerzo = { ...extra, tipoExtra: "refuerzo" };
+        delete refuerzo.personaCubiertaId;
+        delete refuerzo.personaCubiertaNombre;
+        delete refuerzo.sectorCubiertoNombre;
+        return [refuerzo];
+      }
       return extra?.temporal ||
         !personaId ||
-        (extraId !== personaId && extraPersonaId !== personaId);
+        (extraId !== personaId && extraPersonaId !== personaId)
+        ? [extra]
+        : [];
     });
     if (extrasDelDia.length !== extras.length) huboCambios = true;
 

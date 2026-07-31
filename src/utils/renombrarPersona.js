@@ -90,16 +90,23 @@ const renombrarExtrasPorDia = (extrasPorDia, personaId, nombre) => {
     Object.entries(extrasPorDia).map(([fecha, extras]) => [
       fecha,
       Array.isArray(extras)
-        ? extras.map((extra) =>
-            esObjeto(extra) &&
-            !extra.temporal &&
-            (
-              obtenerId(extra.personaId) === personaId ||
-              obtenerId(extra.id) === personaId
-            )
-              ? { ...extra, nombre }
-              : extra
-          )
+        ? extras.map((extra) => {
+            if (!esObjeto(extra)) return extra;
+            const esExtraPermanente =
+              !extra.temporal &&
+              (
+                obtenerId(extra.personaId) === personaId ||
+                obtenerId(extra.id) === personaId
+              );
+            const esPersonaCubierta =
+              obtenerId(extra.personaCubiertaId) === personaId;
+            if (!esExtraPermanente && !esPersonaCubierta) return extra;
+            return {
+              ...extra,
+              ...(esExtraPermanente ? { nombre } : {}),
+              ...(esPersonaCubierta ? { personaCubiertaNombre: nombre } : {})
+            };
+          })
         : extras
     ])
   );

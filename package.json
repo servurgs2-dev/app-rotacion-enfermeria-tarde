@@ -25,6 +25,8 @@
     "test:pdf-calendario-diario": "node tests/pdf-calendario-diario.test.mjs",
     "test:no-disponibles-motivos": "node tests/no-disponibles-motivos.test.mjs",
     "test:extras-calendario": "node tests/extras-calendario.test.mjs",
+    "test:extras-coberturas": "node tests/extras-coberturas.test.mjs",
+    "test:certificaciones-calendario": "node tests/certificaciones-calendario.test.mjs",
     "test:alerta-sectores-criticos": "node tests/alerta-sectores-criticos.test.mjs",
     "test:reintegros-planilla": "node tests/reintegros-asignaciones-parciales.test.mjs",
     "test:turnante-mensual": "node tests/turnante-mensual.test.mjs",

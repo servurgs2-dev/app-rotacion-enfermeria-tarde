@@ -31,11 +31,16 @@ import {
 } from "../../utils/referenciasPersonas.js";
 import { aplicarMovimientosCalendario } from "../../utils/cambiosCalendario.js";
 import {
+  aplicarCoberturasDirectasExtras,
   agregarExtraALista,
+  configurarTipoExtra,
   crearExtraDesdePersonal,
   crearExtraTemporal,
   eliminarExtraDelDia,
+  esExtraCobertura,
   obtenerDescripcionExtra,
+  obtenerIdentidadesPersonasCubiertas,
+  obtenerOpcionesCoberturaExtra,
   prepararCandidatosExtraOtroTurno
 } from "../../utils/extrasPersonas.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
@@ -100,7 +105,6 @@ import {
 } from "../../utils/noDisponiblesMotivos.js";
 import {
   crearPersonaPresentacionTurnante,
-  esPersonaTurnante,
   obtenerIdentidadesTurnantes,
   obtenerNombreConMarcaTurnante
 } from "../../utils/etiquetaTurnante.js";
@@ -110,6 +114,10 @@ import {
   filtrarReintegradosSinSectorDia,
   obtenerAsignacionesParcialesPeriodo
 } from "../../utils/asignacionesParcialesPlanilla.js";
+import {
+  excluirCertificadosDeAsignaciones,
+  filtrarPersonasNoCertificadas
+} from "../../utils/disponibilidadCertificacionesCalendario.js";
 
 const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
   const clave = obtenerClaveIdentidadPersona({
@@ -442,6 +450,8 @@ const abrirFormularioExtra = async () => {
   setCandidatosExtra([]);
   setFormularioExtra({
     modalidad: "personal_otro_turno",
+    tipoExtra: "cobertura",
+    personaCubiertaId: "",
     personaId: "",
     nombre: "",
     funcionario: "",
@@ -521,6 +531,21 @@ const confirmarExtra = () => {
     setFormularioExtra((actual) => ({ ...actual, error: resultado.error }));
     return;
   }
+  const opcionCubierta = personasCubribles.find(
+    (opcion) => String(opcion.persona.id) === String(formularioExtra.personaCubiertaId)
+  );
+  resultado = configurarTipoExtra({
+    extra: resultado.extra,
+    tipoExtra: formularioExtra.tipoExtra,
+    personaCubierta: opcionCubierta?.persona,
+    sectorCubierto: opcionCubierta?.sector,
+    extrasDia: listaActual,
+    personal
+  });
+  if (!resultado.extra) {
+    setFormularioExtra((actual) => ({ ...actual, error: resultado.error }));
+    return;
+  }
 
   altaExtraEnCursoRef.current = true;
   setCalendario((prev) => {
@@ -560,6 +585,11 @@ let asignacionCompleta = filasCalendario.map((fila) => {
     vacioManual: override === "__EMPTY__",
     tipo: turnantesEfectivos.includes(fila) ? "turnante" : "sector"
   };
+});
+
+asignacionCompleta = excluirCertificadosDeAsignaciones({
+  asignaciones: asignacionCompleta,
+  estaCertificada: estaCertificadoHoy
 });
 
 const sectorSaludMental = obtenerSectorSaludMental(tipo);
@@ -604,10 +634,22 @@ asignacionCompleta = aplicarCoberturaLibreSaludMental({
   existeCambioManual: existeCambioManualSaludMental
 });
 
+const identidadesCubiertas = obtenerIdentidadesPersonasCubiertas(extrasDia, personal);
+asignacionCompleta = aplicarCoberturasDirectasExtras({
+  asignaciones: asignacionCompleta,
+  extras: extrasDia,
+  personal,
+  esPersonaDisponible: (persona) => !estaAusente(persona)
+}).asignaciones;
+
   let turnantesDisponibles = asignacionCompleta
     .filter((f) => f.tipo === "turnante")
     .map((f) => f.enfermero)
-    .filter((e) => e && !estaAusente(e));
+    .filter((e) =>
+      e &&
+      !estaAusente(e) &&
+      !identidadesCubiertas.has(obtenerClaveIdentidadPersona(e))
+    );
 
   let turnoIndex = 0;
 const usadosSet = new Set();
@@ -659,7 +701,9 @@ asignacionBase.forEach((item) => {
 
   let extraIndex = 0;
 const tomarExtraDisponible = () => {
-  const extrasDisponibles = extrasDia.filter((e) => e && !estaAusente(e));
+  const extrasDisponibles = extrasDia.filter(
+    (e) => e && !esExtraCobertura(e) && !estaAusente(e)
+  );
 
   while (extraIndex < extrasDisponibles.length) {
     const extra = usarEnfermero(extrasDisponibles[extraIndex++]);
@@ -739,6 +783,8 @@ const sobrantes = [...personalFiltrado, ...extrasDia].filter((e) => {
 
   if (
     !claveIdentidad ||
+    identidadesCubiertas.has(claveIdentidad) ||
+    esExtraCobertura(e) ||
     identidadesSobrantes.has(claveIdentidad) ||
     identidadesReintegradosSinSector.has(claveIdentidad)
   ) return false;
@@ -982,7 +1028,10 @@ if (esDiaParo) {
     }
   });
 
-  return asignacionParo;
+  return excluirCertificadosDeAsignaciones({
+    asignaciones: asignacionParo,
+    estaCertificada: estaCertificadoHoy
+  });
 }
 
 const personasParaSinAsignar = obtenerPersonasParaSinAsignar({
@@ -996,7 +1045,12 @@ const identidadesAsignadas = new Set(
 );
 personasParaSinAsignar.forEach((persona) => {
   const identidad = obtenerClaveIdentidadPersona(persona);
-  if (!identidad || identidadesAsignadas.has(identidad)) return;
+  if (
+    !identidad ||
+    identidadesAsignadas.has(identidad) ||
+    identidadesCubiertas.has(identidad) ||
+    estaAusente(persona)
+  ) return;
   identidadesAsignadas.add(identidad);
   asignacionParaMostrar.push({
     nombre: "SIN ASIGNAR",
@@ -1039,18 +1093,38 @@ ordenVisualActivo.forEach((item) => {
   }
 });
 
-return resultadoOrdenado.map((item) =>
+const resultadoProtegido = excluirCertificadosDeAsignaciones({
+  asignaciones: resultadoOrdenado,
+  estaCertificada: estaCertificadoHoy
+});
+
+return resultadoProtegido.map((item) =>
   item?.enfermero
     ? {
         ...item,
-        enfermero: crearPersonaPresentacionTurnante(
-          item.enfermero,
-          identidadesTurnantes
-        )
+        enfermero: {
+          ...crearPersonaPresentacionTurnante(
+            item.enfermero,
+            identidadesTurnantes
+          ),
+          ...(extrasDia.some((extra) =>
+            personasCompartenIdentidad(extra, item.enfermero)
+          ) ? { esExtra: true } : {})
+        }
       }
     : item
 );
 })();
+
+const personasCubribles = obtenerOpcionesCoberturaExtra({
+  asignaciones: excluirCertificadosDeAsignaciones({
+    asignaciones: asignacionOrdenada,
+    estaCertificada: estaCertificadoHoy
+  }),
+  extras: extrasDia,
+  categoria: tipo,
+  esPersonaDisponible: (persona) => !estaAusente(persona)
+});
 
 const obtenerSectorOrigenPersona = (persona) => {
   if (!persona) return "";
@@ -1226,10 +1300,12 @@ useEffect(() => {
       ? { ...item, etiquetaVacio: `Sin cobertura — ${noDisponible.motivoBreve}` }
       : item;
   });
-  const libresParaPDF = libres.filter(
+  const libresParaPDF = filtrarPersonasNoCertificadas({
+    personas: libres,
+    estaCertificada: estaCertificadoHoy
+  }).filter(
     (persona) =>
       !estaDeLicenciaHoy(persona) &&
-      !estaCertificadoHoy(persona) &&
       !(noDisponibles[keyDia] || []).some((referencia) =>
         referenciaCorrespondeAPersona(
           referencia,
@@ -1807,6 +1883,7 @@ useEffect(() => {
         <PanelAgregarExtra
           formulario={formularioExtra}
           candidatos={candidatosExtra}
+          personasCubribles={personasCubribles}
           onCambiar={(campo, valor) => setFormularioExtra((actual) => ({
             ...actual,
             [campo]: valor,
@@ -1873,19 +1950,7 @@ useEffect(() => {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="text-sm text-slate-600">
             {item.enfermero
-              ? (
-                  <>
-                    {item.enfermero.nombre}
-                    {esPersonaTurnante(item.enfermero) && (
-                      <span
-                        className="ml-1 text-xs font-semibold text-blue-700"
-                        aria-label="Turnante"
-                      >
-                        (T)
-                      </span>
-                    )}
-                  </>
-                )
+              ? obtenerNombreConMarcaTurnante(item.enfermero)
               : sectorLiberadoPorAusencia
                 ? "Sin asignar — ausencia"
                 : noDisponibleDelSector

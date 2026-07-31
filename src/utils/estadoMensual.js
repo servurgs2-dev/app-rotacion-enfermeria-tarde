@@ -10,6 +10,7 @@ import { normalizarLicenciasPersonas } from "./licenciasPersonas.js";
 import { normalizarCertificacionesPersonas } from "./certificacionesPersonas.js";
 import {
   asegurarIdExtraHistorico,
+  normalizarExtraCompatible,
   resolverPersonaPermanenteParaExtra
 } from "./extrasPersonas.js";
 import { parsearFechaIsoUTC } from "./periodosRotacionPlanilla.js";
@@ -69,14 +70,19 @@ const normalizarExtrasPorDia = (extrasPorDia, categoria, personal) => Object.fro
     fecha,
     Array.isArray(extras)
       ? extras.map((extra, indice) => {
-          if (!esObjetoValido(extra)) return extra;
+          const extraCompatible = normalizarExtraCompatible(extra, {
+            fecha,
+            categoria,
+            indice
+          });
+          if (!esObjetoValido(extraCompatible)) return extraCompatible;
           const extraNormalizado = {
-            ...extra,
-            maternal: normalizarMaternal(extra.maternal)
+            ...extraCompatible,
+            maternal: normalizarMaternal(extraCompatible.maternal)
           };
-          if (String(extra.id ?? "").trim()) {
+          if (String(extraCompatible.id ?? "").trim()) {
             const extraConId = asegurarIdPersona(extraNormalizado);
-            if (extra.temporal === true) return extraConId;
+            if (extraCompatible.temporal === true) return extraConId;
 
             const personaPermanente = resolverPersonaPermanenteParaExtra(
               extraConId,
@@ -90,7 +96,7 @@ const normalizarExtrasPorDia = (extrasPorDia, categoria, personal) => Object.fro
                 }
               : extraConId;
           }
-          if (extra.temporal === true) {
+          if (extraCompatible.temporal === true) {
             return asegurarIdExtraHistorico(
               extraNormalizado,
               { fecha, categoria, indice }
@@ -98,7 +104,7 @@ const normalizarExtrasPorDia = (extrasPorDia, categoria, personal) => Object.fro
           }
 
           const personaPermanente = resolverPersonaPermanenteParaExtra(
-            extra,
+            extraCompatible,
             personal
           );
           return personaPermanente

@@ -1,6 +1,7 @@
 export default function PanelAgregarExtra({
   formulario,
   candidatos,
+  personasCubribles = [],
   onCambiar,
   onCancelar,
   onConfirmar
@@ -40,6 +41,38 @@ export default function PanelAgregarExtra({
             Extra manual
           </button>
         </div>
+
+        <label className="mt-4 block text-sm font-medium text-slate-700">
+          Tipo de extra
+          <select
+            value={formulario.tipoExtra}
+            disabled={formulario.cargando}
+            onChange={(evento) => onCambiar("tipoExtra", evento.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+          >
+            <option value="cobertura">Cubre a un funcionario</option>
+            <option value="refuerzo">Refuerzo sin reemplazo</option>
+          </select>
+        </label>
+
+        {formulario.tipoExtra === "cobertura" && (
+          <label className="mt-4 block text-sm font-medium text-slate-700">
+            ¿A quién cubre?
+            <select
+              value={formulario.personaCubiertaId}
+              disabled={formulario.cargando}
+              onChange={(evento) => onCambiar("personaCubiertaId", evento.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+            >
+              <option value="">Seleccionar funcionario</option>
+              {personasCubribles.map((opcion) => (
+                <option key={opcion.persona.id} value={opcion.persona.id}>
+                  {opcion.etiqueta}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {esPersonal ? (
           <label className="mt-4 block text-sm font-medium text-slate-700">

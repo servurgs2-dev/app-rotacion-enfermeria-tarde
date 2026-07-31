@@ -235,9 +235,9 @@ probar("17 quitar Extra no elimina Personal", () => {
 probar("18 los Extras históricos siguen funcionando", () => {
   const historico = { id: "historico", nombre: "Extra Histórico", temporal: true };
   assert.deepEqual(agregarExtraALista([], historico), [historico]);
-  assert.equal(obtenerDescripcionExtra(historico), "Extra manual");
+  assert.equal(obtenerDescripcionExtra(historico), "Refuerzo · Extra manual");
 });
-probar("19 ambos tipos participan en cobertura sin ramas nuevas", () => {
+probar("19 ambos orígenes conservan el refuerzo sin ramas por origen", () => {
   assert.match(calendarioFuente, /const extrasDisponibles = extrasDia\.filter/);
   assert.doesNotMatch(calendarioFuente, /origenExtra.*tomarExtraDisponible/);
 });

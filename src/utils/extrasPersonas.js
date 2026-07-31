@@ -5,6 +5,8 @@ import {
 import {
   crearIdPersonaNueva,
   crearHashDeterministaIdentidad,
+  obtenerClaveIdentidadPersona,
+  personasCompartenIdentidad,
   normalizarFuncionarioIdentidad
 } from "./identidadPersonas.js";
 import { normalizar } from "./texto.js";
@@ -15,6 +17,19 @@ import {
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
+
+export const TIPOS_EXTRA = Object.freeze({
+  COBERTURA: "cobertura",
+  REFUERZO: "refuerzo"
+});
+
+export const obtenerTipoExtra = (extra) =>
+  extra?.tipoExtra === TIPOS_EXTRA.COBERTURA
+    ? TIPOS_EXTRA.COBERTURA
+    : TIPOS_EXTRA.REFUERZO;
+
+export const esExtraCobertura = (extra) =>
+  obtenerTipoExtra(extra) === TIPOS_EXTRA.COBERTURA;
 
 export const obtenerIdPersona = (persona) => String(persona?.id ?? "").trim();
 
@@ -34,6 +49,29 @@ export const asegurarIdExtraHistorico = (
   return {
     ...extra,
     id: `persona-extra-h-${crearHashDeterministaIdentidad(fuente)}`
+  };
+};
+
+export const normalizarExtraCompatible = (
+  extra,
+  { fecha = "", categoria = "", indice = 0 } = {}
+) => {
+  if (typeof extra === "string") {
+    const nombre = limpiarNombrePersona(extra);
+    if (!nombre) return extra;
+    return asegurarIdExtraHistorico({
+      nombre,
+      personaId: null,
+      categoria,
+      temporal: true,
+      origenExtra: "historico",
+      tipoExtra: TIPOS_EXTRA.REFUERZO
+    }, { fecha, categoria, indice });
+  }
+  if (!esObjeto(extra)) return extra;
+  return {
+    ...extra,
+    tipoExtra: obtenerTipoExtra(extra)
   };
 };
 
@@ -155,12 +193,155 @@ export const obtenerDescripcionExtra = (
   extra,
   obtenerNombreTurno = (turno) => turno
 ) => {
+  if (esExtraCobertura(extra)) {
+    const cubierta = String(extra?.personaCubiertaNombre || "").trim() ||
+      "persona no identificada";
+    const sector = String(extra?.sectorCubiertoNombre || "").trim();
+    return `Cubre a ${cubierta}${sector ? ` — ${sector}` : ""}`;
+  }
   const partes = extra?.origenExtra === "personal_otro_turno"
-    ? ["Personal de otro turno", obtenerNombreTurno(extra.turnoOrigen)]
-    : ["Extra manual"];
+    ? ["Refuerzo", "Personal de otro turno", obtenerNombreTurno(extra.turnoOrigen)]
+    : ["Refuerzo", "Extra manual"];
   const funcionario = String(extra?.funcionario ?? "").trim();
   if (funcionario) partes.push(`Func. ${funcionario}`);
   return partes.filter(Boolean).join(" · ");
+};
+
+export const resolverPersonaCubiertaExtra = (extra, personal = []) => {
+  if (!esExtraCobertura(extra)) return null;
+  return resolverPersonaDesdeReferencia({
+    personaId: String(extra?.personaCubiertaId || "").trim(),
+    nombre: String(extra?.personaCubiertaNombre || "").trim()
+  }, personal);
+};
+
+export const obtenerIdentidadesPersonasCubiertas = (extras, personal = []) =>
+  new Set(
+    (Array.isArray(extras) ? extras : [])
+      .map((extra) => resolverPersonaCubiertaExtra(extra, personal))
+      .map(obtenerClaveIdentidadPersona)
+      .filter(Boolean)
+  );
+
+export const configurarTipoExtra = ({
+  extra,
+  tipoExtra = TIPOS_EXTRA.COBERTURA,
+  personaCubierta,
+  sectorCubierto = "",
+  extrasDia = [],
+  personal = []
+} = {}) => {
+  if (!extra) return { extra: null, error: "Ingresá un Extra válido." };
+  if (tipoExtra === TIPOS_EXTRA.REFUERZO) {
+    return { extra: { ...extra, tipoExtra: TIPOS_EXTRA.REFUERZO }, error: "" };
+  }
+  if (!personaCubierta || !String(sectorCubierto).trim()) {
+    return { extra: null, error: "Seleccioná a quién cubre este extra." };
+  }
+  if (extra.categoria !== personaCubierta.categoria) {
+    return { extra: null, error: "La persona seleccionada no corresponde a esta categoría." };
+  }
+  if (personasCompartenIdentidad(extra, personaCubierta)) {
+    return { extra: null, error: "El extra no puede cubrirse a sí mismo." };
+  }
+  const identidadCubierta = obtenerClaveIdentidadPersona(personaCubierta);
+  const yaCubierta = obtenerIdentidadesPersonasCubiertas(extrasDia, personal)
+    .has(identidadCubierta);
+  if (!identidadCubierta || yaCubierta) {
+    return {
+      extra: null,
+      error: yaCubierta
+        ? `${personaCubierta.nombre} ya está cubierto por otro extra.`
+        : "La persona seleccionada ya no está disponible para ser cubierta."
+    };
+  }
+  return {
+    extra: {
+      ...extra,
+      tipoExtra: TIPOS_EXTRA.COBERTURA,
+      personaCubiertaId: String(personaCubierta.id || "").trim(),
+      personaCubiertaNombre: String(personaCubierta.nombre || "").trim(),
+      sectorCubiertoNombre: String(sectorCubierto).trim()
+    },
+    error: ""
+  };
+};
+
+export const aplicarCoberturasDirectasExtras = ({
+  asignaciones,
+  extras,
+  personal,
+  esPersonaDisponible = () => true
+} = {}) => {
+  let resultado = (Array.isArray(asignaciones) ? asignaciones : []).map(
+    (asignacion) => ({ ...asignacion })
+  );
+  const coberturasAplicadas = [];
+
+  (Array.isArray(extras) ? extras : []).filter(esExtraCobertura).forEach((extra) => {
+    const cubierta = resolverPersonaCubiertaExtra(extra, personal);
+    if (!cubierta || !esPersonaDisponible(cubierta)) return;
+    const indiceExtraAsignado = resultado.findIndex((item) =>
+      personasCompartenIdentidad(item?.enfermero, extra)
+    );
+    const indiceCubierta = resultado.findIndex((item) =>
+      item?.tipo === "sector" && personasCompartenIdentidad(item?.enfermero, cubierta)
+    );
+    if (indiceCubierta < 0 && indiceExtraAsignado < 0) return;
+
+    const indiceDestino = indiceExtraAsignado >= 0
+      ? indiceExtraAsignado
+      : indiceCubierta;
+
+    resultado = resultado.map((item, indice) => {
+      if (indiceExtraAsignado < 0 && indice === indiceCubierta) {
+        return { ...item, enfermero: extra, coberturaExtra: true };
+      }
+      if (!personasCompartenIdentidad(item?.enfermero, cubierta)) return item;
+      return { ...item, enfermero: null };
+    });
+    coberturasAplicadas.push({
+      extra,
+      personaCubierta: cubierta,
+      sector: resultado[indiceDestino]?.nombre || extra.sectorCubiertoNombre || ""
+    });
+  });
+
+  return { asignaciones: resultado, coberturasAplicadas };
+};
+
+export const obtenerOpcionesCoberturaExtra = ({
+  asignaciones,
+  extras,
+  categoria,
+  esPersonaDisponible = () => true
+} = {}) => {
+  const identidadesExtras = new Set(
+    (Array.isArray(extras) ? extras : [])
+      .map(obtenerClaveIdentidadPersona)
+      .filter(Boolean)
+  );
+  const vistas = new Set();
+  return (Array.isArray(asignaciones) ? asignaciones : []).flatMap((item) => {
+    const persona = item?.enfermero;
+    const identidad = obtenerClaveIdentidadPersona(persona);
+    if (
+      item?.tipo === "divider" ||
+      normalizar(item?.nombre) === "SIN ASIGNAR" ||
+      !persona ||
+      persona.categoria !== categoria ||
+      !identidad ||
+      vistas.has(identidad) ||
+      identidadesExtras.has(identidad) ||
+      !esPersonaDisponible(persona)
+    ) return [];
+    vistas.add(identidad);
+    return [{
+      persona,
+      sector: item.nombre,
+      etiqueta: `${persona.nombre} — ${item.nombre}`
+    }];
+  });
 };
 
 export const prepararCandidatosExtraOtroTurno = ({

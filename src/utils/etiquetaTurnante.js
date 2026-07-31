@@ -38,6 +38,9 @@ export const obtenerNombreConMarcaTurnante = (
   identidadesTurnantes
 ) => {
   const nombre = String(persona?.nombre || nombreAlternativo || "").trim();
-  if (!nombre || !esPersonaTurnante(persona, identidadesTurnantes)) return nombre;
-  return `${nombre} (T)`;
+  if (!nombre) return nombre;
+  const marcas = [];
+  if (esPersonaTurnante(persona, identidadesTurnantes)) marcas.push("T");
+  if (persona?.esExtra === true) marcas.push("E");
+  return marcas.length > 0 ? `${nombre} ${marcas.map((marca) => `(${marca})`).join(" ")}` : nombre;
 };

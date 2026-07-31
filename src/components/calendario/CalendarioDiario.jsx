@@ -118,6 +118,10 @@ import {
   excluirCertificadosDeAsignaciones,
   filtrarPersonasNoCertificadas
 } from "../../utils/disponibilidadCertificacionesCalendario.js";
+import {
+  agregarCertificacionPorElDia,
+  eliminarCertificacionPorElDia
+} from "../../utils/certificacionesPersonas.js";
 
 const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
   const clave = obtenerClaveIdentidadPersona({
@@ -134,6 +138,8 @@ function CalendarioDiario({
   mesActivo,
   licencias,
   certificaciones,
+  setCertificaciones,
+  obtenerCertificacionesActuales,
   calendario,
   obtenerCalendarioActual,
   cargarPersonalOtrosTurnos,
@@ -1190,6 +1196,7 @@ const abrirFormularioNoDisponible = (persona, registro = null) => {
       fecha: keyDia,
       categoria: tipo,
       calendario,
+      certificaciones,
       soloLectura: soloLecturaEfectiva
     }
   });
@@ -1204,6 +1211,10 @@ const contextoNoDisponibleValido = () =>
   formularioNoDisponible.contexto.calendario === calendario &&
   formularioNoDisponible.contexto.calendario ===
     (obtenerCalendarioActual ? obtenerCalendarioActual() : calendario) &&
+  formularioNoDisponible.contexto.certificaciones ===
+    (obtenerCertificacionesActuales
+      ? obtenerCertificacionesActuales()
+      : certificaciones) &&
   formularioNoDisponible.contexto.soloLectura === soloLecturaEfectiva &&
   !soloLecturaEfectiva;
 const formularioNoDisponibleVisible = Boolean(
@@ -1220,6 +1231,36 @@ const confirmarNoDisponible = () => {
       ...actual,
       error: "El calendario cambió mientras confirmabas. Revisá nuevamente."
     }));
+    return;
+  }
+  if (formularioNoDisponible.motivo === MOTIVOS_NO_DISPONIBLE.CERTIFICACION_DIA) {
+    const personaActual = personalFiltrado.find((persona) =>
+      personasCompartenIdentidad(persona, formularioNoDisponible.persona)
+    );
+    const resultadoCertificacion = agregarCertificacionPorElDia({
+      certificaciones,
+      persona: personaActual,
+      fecha: keyDia,
+      categoria: tipo,
+      personal
+    });
+    if (!resultadoCertificacion.certificacion) {
+      setFormularioNoDisponible((actual) => ({
+        ...actual,
+        error: resultadoCertificacion.error
+      }));
+      return;
+    }
+    setCertificaciones((actuales) =>
+      agregarCertificacionPorElDia({
+        certificaciones: actuales,
+        persona: personaActual,
+        fecha: keyDia,
+        categoria: tipo,
+        personal
+      }).certificaciones
+    );
+    setFormularioNoDisponible(null);
     return;
   }
   const personaCobertura = extrasDia.find(
@@ -1282,6 +1323,14 @@ const quitarNoDisponible = () => {
     };
   });
   setFormularioNoDisponible(null);
+};
+
+const quitarCertificacionRapida = (certificacion) => {
+  if (soloLecturaEfectiva || !certificacion?.id) return;
+  setCertificaciones((actuales) => eliminarCertificacionPorElDia({
+    certificaciones: actuales,
+    certificacionId: certificacion.id
+  }));
 };
 
 useEffect(() => {
@@ -2040,6 +2089,15 @@ useEffect(() => {
               className="mt-2 rounded-lg border border-orange-300 bg-white px-2 py-1 text-xs font-medium text-orange-900"
             >
               Editar motivo
+            </button>
+          )}
+          {registro.tipo === "certificacion_rapida" && !soloLecturaEfectiva && (
+            <button
+              type="button"
+              onClick={() => quitarCertificacionRapida(registro.registro)}
+              className="mt-2 rounded-lg border border-blue-300 bg-white px-2 py-1 text-xs font-medium text-blue-900"
+            >
+              Eliminar certificación del día
             </button>
           )}
         </article>

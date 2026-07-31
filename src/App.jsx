@@ -239,6 +239,22 @@ const planillaLicenciados = mesData.planillas.licenciados;
 const licenciasMes = mesData.licencias;
 const certificacionesMes = mesData.certificaciones || [];
 
+const actualizarCertificacionesMes = (actualizacion) => {
+  setEstadoPorTurnoMes((prev) => {
+    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    const actual = prev[claveActiva] || crearEstadoMensualVacio();
+    const certificacionesActuales = actual.certificaciones || [];
+    const nuevas = typeof actualizacion === "function"
+      ? actualizacion(certificacionesActuales)
+      : actualizacion;
+    if (nuevas === certificacionesActuales) return prev;
+    return { ...prev, [claveActiva]: { ...actual, certificaciones: nuevas } };
+  });
+};
+
+const obtenerCertificacionesActuales = () =>
+  estadoPorTurnoMesRef.current[claveActiva]?.certificaciones ?? certificacionesMes;
+
 const semanas = obtenerSemanasDelMes(mesActivo);
 
 const actualizarMetadatosClave = useCallback((clave, actualizador) => {
@@ -1973,13 +1989,7 @@ return (
           soloLectura={modoSoloLecturaEfectiva}
           personal={personal}
           certificaciones={certificacionesMes}
-          setCertificaciones={(nuevas) => {
-            setEstadoPorTurnoMes(prev => {
-              if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
-              const actual = prev[claveActiva] || crearEstadoMensualVacio();
-              return { ...prev, [claveActiva]: { ...actual, certificaciones: nuevas } };
-            });
-          }}
+          setCertificaciones={actualizarCertificacionesMes}
         />
       </Seccion>
 
@@ -2232,6 +2242,8 @@ return (
     mesActivo={mesActivo}
     licencias={licenciasMes}
     certificaciones={certificacionesMes}
+    setCertificaciones={actualizarCertificacionesMes}
+    obtenerCertificacionesActuales={obtenerCertificacionesActuales}
     calendario={mesData.calendario.enfermeros}
     obtenerCalendarioActual={() =>
       estadoPorTurnoMesRef.current[claveActiva]?.calendario?.enfermeros
@@ -2283,6 +2295,8 @@ return (
     mesActivo={mesActivo}
     licencias={licenciasMes}
     certificaciones={certificacionesMes}
+    setCertificaciones={actualizarCertificacionesMes}
+    obtenerCertificacionesActuales={obtenerCertificacionesActuales}
     calendario={mesData.calendario.licenciados}
     obtenerCalendarioActual={() =>
       estadoPorTurnoMesRef.current[claveActiva]?.calendario?.licenciados

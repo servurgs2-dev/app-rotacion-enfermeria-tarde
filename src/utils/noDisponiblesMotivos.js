@@ -1,4 +1,7 @@
-import { resolverPersonaDeCertificacion } from "./certificacionesPersonas.js";
+import {
+  esCertificacionPorElDia,
+  resolverPersonaDeCertificacion
+} from "./certificacionesPersonas.js";
 import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
 import {
   crearReferenciaPersona,
@@ -9,6 +12,7 @@ export const MOTIVOS_NO_DISPONIBLE = Object.freeze({
   FALTA_CON_AVISO: "falta_con_aviso",
   CAMBIO_OTRO_TURNO: "cambio_otro_turno",
   SUPERVISION_OTRO_TURNO: "supervision_otro_turno",
+  CERTIFICACION_DIA: "certificacion_dia",
   OTRO: "otro"
 });
 
@@ -21,6 +25,10 @@ export const OPCIONES_MOTIVO_NO_DISPONIBLE = Object.freeze([
   {
     valor: MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO,
     etiqueta: "Supervisión solicitó otro turno"
+  },
+  {
+    valor: MOTIVOS_NO_DISPONIBLE.CERTIFICACION_DIA,
+    etiqueta: "Certificación por el día"
   },
   { valor: MOTIVOS_NO_DISPONIBLE.OTRO, etiqueta: "Otro motivo" }
 ]);
@@ -89,6 +97,12 @@ export const crearRegistroNoDisponible = ({
   creadoEn = new Date().toISOString()
 } = {}) => {
   const error = validarDatosNoDisponible({ motivo, detalle, turnoDestino });
+  if (motivo === MOTIVOS_NO_DISPONIBLE.CERTIFICACION_DIA) {
+    return {
+      registro: null,
+      error: "La certificación por el día debe guardarse en Certificaciones."
+    };
+  }
   const referencia = crearReferenciaPersona(persona);
   if (!referencia) return { registro: null, error: "La persona seleccionada no es válida." };
   if (error) return { registro: null, error };
@@ -185,14 +199,17 @@ export const obtenerNoDisponiblesDelDia = ({
       const identidad = obtenerClaveIdentidadPersona(persona);
       if (!identidad) return;
       const registro = { ...certificacion, tipo: "certificacion" };
+      const certificacionRapida = esCertificacionPorElDia(certificacion);
       porIdentidad.set(identidad, {
-        tipo: "certificacion",
+        tipo: certificacionRapida ? "certificacion_rapida" : "certificacion",
         registro,
         persona,
         nombre: persona.nombre,
         categoria: persona.categoria,
         sectorOrigen: obtenerSectorOrigen(persona),
-        motivoEtiqueta: "Certificación médica",
+        motivoEtiqueta: certificacionRapida
+          ? "Certificación por el día"
+          : "Certificación médica",
         motivoBreve: "Certificación",
         detalle: `${formatearFechaCorta(certificacion.desde)} al ${formatearFechaCorta(certificacion.hasta)}`,
         personaCoberturaNombre: "",

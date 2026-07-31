@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   crearCertificacionPersona,
+  esCertificacionPorElDia,
   obtenerNombreDeCertificacion
 } from "../../utils/certificacionesPersonas.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
@@ -148,6 +149,11 @@ function Certificaciones({ personal, certificaciones, setCertificaciones, soloLe
                 >
                   <td className="px-3 py-2 font-medium text-slate-700">
                     {nombreVisible}
+                    {esCertificacionPorElDia(certificacion) && (
+                      <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-normal text-blue-700">
+                        Creada desde No disponibles
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-slate-500">{certificacion.desde}</td>
                   <td className="px-3 py-2 text-slate-500">{certificacion.hasta}</td>

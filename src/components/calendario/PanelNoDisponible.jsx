@@ -22,6 +22,7 @@ export default function PanelNoDisponible({
   const cambio = formulario.motivo === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO;
   const supervision = formulario.motivo === MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO;
   const requiereDetalle = formulario.motivo === MOTIVOS_NO_DISPONIBLE.OTRO;
+  const certificacionDia = formulario.motivo === MOTIVOS_NO_DISPONIBLE.CERTIFICACION_DIA;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
@@ -120,6 +121,12 @@ export default function PanelNoDisponible({
           </label>
         )}
 
+        {certificacionDia && (
+          <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">
+            Se registrará una certificación únicamente para esta fecha.
+          </p>
+        )}
+
         {formulario.error && (
           <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
             {formulario.error}
@@ -147,7 +154,7 @@ export default function PanelNoDisponible({
               onClick={onConfirmar}
               className="rounded-lg bg-blue-600 px-3 py-2 text-white"
             >
-              Guardar motivo
+              {certificacionDia ? "Registrar certificación del día" : "Guardar motivo"}
             </button>
           </div>
         </div>

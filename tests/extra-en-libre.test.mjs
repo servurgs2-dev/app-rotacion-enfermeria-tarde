@@ -8,6 +8,7 @@ import {
   crearExtraDesdeLibre,
   eliminarExtraDelDia,
   normalizarExtraCompatible,
+  obtenerCoberturasExtrasPresentacion,
   obtenerDescripcionExtra
 } from "../src/utils/extrasPersonas.js";
 
@@ -188,6 +189,119 @@ probar("19 Extras históricos continúan como refuerzo", () => {
 probar("20 la cobertura directa existente no fue reemplazada", () => {
   const fuente = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
   assert.match(fuente, /aplicarCoberturasDirectasExtras\(\{/);
+});
+
+probar("21 una cobertura deriva la tarjeta del titular", () => {
+  const extra = configurarTipoExtra({
+    extra: crearLibre("cobertura_companero").extra,
+    tipoExtra: TIPOS_EXTRA.COBERTURA,
+    personaCubierta: milton,
+    sectorCubierto: "EXPLORA 1"
+  }).extra;
+  const [tarjeta] = obtenerCoberturasExtrasPresentacion([extra], [rosa, milton]);
+  assert.equal(tarjeta.nombre, "Milton");
+  assert.equal(tarjeta.extraNombre, "Rosa");
+  assert.equal(tarjeta.sector, "EXPLORA 1");
+  assert.equal(tarjeta.categoria, "enfermero");
+});
+
+probar("22 la tarjeta no escribe en noDisponibles", () => {
+  const fuente = fs.readFileSync("src/utils/extrasPersonas.js", "utf8");
+  const bloque = fuente.slice(
+    fuente.indexOf("export const obtenerCoberturasExtrasPresentacion"),
+    fuente.indexOf("export const obtenerIdentidadesPersonasCubiertas")
+  );
+  assert.doesNotMatch(bloque, /noDisponibles|setCalendario/);
+});
+
+probar("23 una persona cubierta aparece una sola vez", () => {
+  const extra = configurarTipoExtra({
+    extra: crearLibre("cobertura_companero").extra,
+    tipoExtra: TIPOS_EXTRA.COBERTURA,
+    personaCubierta: milton,
+    sectorCubierto: "EXPLORA 1"
+  }).extra;
+  assert.equal(
+    obtenerCoberturasExtrasPresentacion([extra, { ...extra, id: "duplicado" }], [milton]).length,
+    1
+  );
+});
+
+probar("24 eliminar la cobertura elimina también su tarjeta derivada", () => {
+  const extra = configurarTipoExtra({
+    extra: crearLibre("cobertura_companero").extra,
+    tipoExtra: TIPOS_EXTRA.COBERTURA,
+    personaCubierta: milton,
+    sectorCubierto: "EXPLORA 1"
+  }).extra;
+  const calendario = { extras: { "2026-08-01": [extra] }, cambiosDia: {} };
+  const limpio = eliminarExtraDelDia({
+    calendarioCategoria: calendario,
+    fecha: "2026-08-01",
+    extra,
+    personal: [rosa, milton]
+  });
+  assert.deepEqual(
+    obtenerCoberturasExtrasPresentacion(limpio.extras["2026-08-01"], [rosa, milton]),
+    []
+  );
+  const restaurada = aplicarCoberturasDirectasExtras({
+    asignaciones: base,
+    extras: limpio.extras["2026-08-01"],
+    personal: [rosa, milton]
+  }).asignaciones;
+  assert.equal(restaurada[0].enfermero.id, milton.id);
+});
+
+probar("25 la tarjeta queda limitada a la fecha que contiene el Extra", () => {
+  const extra = configurarTipoExtra({
+    extra: crearLibre("cobertura_companero").extra,
+    tipoExtra: TIPOS_EXTRA.COBERTURA,
+    personaCubierta: milton,
+    sectorCubierto: "EXPLORA 1"
+  }).extra;
+  const extrasPorDia = { "2026-08-01": [extra], "2026-08-02": [] };
+  assert.equal(obtenerCoberturasExtrasPresentacion(extrasPorDia["2026-08-01"], [milton]).length, 1);
+  assert.equal(obtenerCoberturasExtrasPresentacion(extrasPorDia["2026-08-02"], [milton]).length, 0);
+});
+
+probar("26 funciona con Licenciados y con Extras de cualquier origen", () => {
+  const titular = { id: "lic-titular", nombre: "Titular", categoria: "licenciado" };
+  const extra = configurarTipoExtra({
+    extra: {
+      id: "lic-extra",
+      personaId: "lic-extra",
+      nombre: "Extra de otro turno",
+      categoria: "licenciado",
+      origenExtra: "personal_otro_turno"
+    },
+    tipoExtra: TIPOS_EXTRA.COBERTURA,
+    personaCubierta: titular,
+    sectorCubierto: "SM"
+  }).extra;
+  const [tarjeta] = obtenerCoberturasExtrasPresentacion([extra], [titular]);
+  assert.equal(tarjeta.categoria, "licenciado");
+  assert.equal(tarjeta.sector, "SM");
+});
+
+probar("27 refuerzos e históricos no generan tarjeta", () => {
+  const refuerzo = configurarTipoExtra({
+    extra: crearLibre("pedido_supervision").extra,
+    tipoExtra: TIPOS_EXTRA.REFUERZO
+  }).extra;
+  const historico = normalizarExtraCompatible("Histórico", {
+    fecha: "2026-08-01",
+    categoria: "enfermero"
+  });
+  assert.deepEqual(obtenerCoberturasExtrasPresentacion([refuerzo, historico], [rosa]), []);
+});
+
+probar("28 la tarjeta no ofrece edición ni eliminación propias", () => {
+  const fuente = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
+  const inicio = fuente.indexOf("coberturasExtrasPresentacion.map");
+  const bloque = fuente.slice(inicio, fuente.indexOf("</article>", inicio));
+  assert.match(bloque, /Cobertura registrada/);
+  assert.doesNotMatch(bloque, /Editar motivo|Eliminar|onClick/);
 });
 
 console.log(`\n${ejecutadas} pruebas de Extra en libre completadas.`);

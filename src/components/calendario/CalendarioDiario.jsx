@@ -40,6 +40,7 @@ import {
   eliminarExtraDelDia,
   esExtraCobertura,
   obtenerDescripcionExtra,
+  obtenerCoberturasExtrasPresentacion,
   obtenerIdentidadesPersonasCubiertas,
   obtenerOpcionesCoberturaExtra,
   prepararCandidatosExtraOtroTurno
@@ -1261,6 +1262,10 @@ const noDisponiblesPresentacion = obtenerNoDisponiblesDelDia({
   return (ordenA < 0 ? Number.MAX_SAFE_INTEGER : ordenA) -
     (ordenB < 0 ? Number.MAX_SAFE_INTEGER : ordenB);
 });
+const coberturasExtrasPresentacion = obtenerCoberturasExtrasPresentacion(
+  extrasDia,
+  personal
+);
 
 const abrirFormularioNoDisponible = (persona, registro = null) => {
   if (soloLecturaEfectiva || estaCertificadoHoy(persona)) return;
@@ -2144,7 +2149,7 @@ useEffect(() => {
   })}
 </div>
 
-{noDisponiblesPresentacion.length > 0 && (
+{(noDisponiblesPresentacion.length > 0 || coberturasExtrasPresentacion.length > 0) && (
   <section className="mt-5" aria-labelledby={`no-disponibles-${tipo}-${keyDia}`}>
     <h4
       id={`no-disponibles-${tipo}-${keyDia}`}
@@ -2203,6 +2208,24 @@ useEffect(() => {
               Eliminar certificación del día
             </button>
           )}
+        </article>
+      ))}
+      {coberturasExtrasPresentacion.map((cobertura) => (
+        <article
+          key={cobertura.id}
+          className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-slate-700"
+        >
+          <p className="font-semibold text-slate-900">{cobertura.nombre}</p>
+          <p className="mt-1">
+            {cobertura.sector || "Sector no registrado"} · Cubierto por: {cobertura.extraNombre} (E)
+          </p>
+          <p>Motivo: Cobertura de compañero</p>
+          <p>
+            Categoría: {cobertura.categoria === "licenciado" ? "Licenciados" : "Enfermeros"}
+          </p>
+          <span className="mt-2 inline-block rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
+            Cobertura registrada
+          </span>
         </article>
       ))}
     </div>

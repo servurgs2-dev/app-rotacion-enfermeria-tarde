@@ -256,6 +256,39 @@ export const resolverPersonaCubiertaExtra = (extra, personal = []) => {
   }, personal);
 };
 
+export const obtenerCoberturasExtrasPresentacion = (
+  extras,
+  personal = []
+) => {
+  const identidadesVistas = new Set();
+  return (Array.isArray(extras) ? extras : []).flatMap((extra) => {
+    if (!esExtraCobertura(extra)) return [];
+    const personaCubierta = resolverPersonaCubiertaExtra(extra, personal);
+    const personaCubiertaId = String(
+      personaCubierta?.id || extra?.personaCubiertaId || ""
+    ).trim();
+    const nombre = String(
+      personaCubierta?.nombre || extra?.personaCubiertaNombre || ""
+    ).trim();
+    const identidad = personaCubiertaId || [
+      extra?.categoria || personaCubierta?.categoria || "",
+      normalizarNombrePersona(nombre)
+    ].join(":");
+    if (!nombre || identidadesVistas.has(identidad)) return [];
+    identidadesVistas.add(identidad);
+    return [{
+      id: `cobertura:${identidad}`,
+      persona: personaCubierta,
+      personaCubiertaId,
+      nombre,
+      sector: String(extra?.sectorCubiertoNombre || "").trim(),
+      extraId: obtenerIdPersona(extra),
+      extraNombre: String(extra?.nombre || "").trim(),
+      categoria: extra?.categoria || personaCubierta?.categoria || ""
+    }];
+  });
+};
+
 export const obtenerIdentidadesPersonasCubiertas = (extras, personal = []) =>
   new Set(
     (Array.isArray(extras) ? extras : [])

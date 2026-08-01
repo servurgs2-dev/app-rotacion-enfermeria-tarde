@@ -189,6 +189,42 @@ export const crearExtraDesdePersonal = ({
     : { extra, error: "" };
 };
 
+export const crearExtraDesdeLibre = ({
+  persona,
+  categoria,
+  motivoLibre,
+  extrasDia = [],
+  creadoEn = new Date().toISOString()
+}) => {
+  const personaId = String(persona?.id ?? "").trim();
+  const motivosValidos = new Set([
+    "cobertura_companero",
+    "pedido_supervision"
+  ]);
+  if (
+    !personaId ||
+    persona?.categoria !== categoria ||
+    !motivosValidos.has(motivoLibre)
+  ) {
+    return { extra: null, error: "Seleccioná por qué viene a trabajar en su libre." };
+  }
+  const extra = {
+    ...persona,
+    id: personaId,
+    personaId,
+    nombre: String(persona.nombre || "").trim(),
+    funcionario: String(persona.funcionario ?? "").trim(),
+    categoria,
+    esExtra: true,
+    origenExtra: "libre",
+    motivoLibre,
+    creadoEn
+  };
+  return buscarExtraDuplicado(extrasDia, extra)
+    ? { extra: null, error: "Esta persona ya está agregada como Extra para esta fecha." }
+    : { extra, error: "" };
+};
+
 export const obtenerDescripcionExtra = (
   extra,
   obtenerNombreTurno = (turno) => turno
@@ -198,6 +234,11 @@ export const obtenerDescripcionExtra = (
       "persona no identificada";
     const sector = String(extra?.sectorCubiertoNombre || "").trim();
     return `Cubre a ${cubierta}${sector ? ` — ${sector}` : ""}`;
+  }
+  if (extra?.origenExtra === "libre") {
+    return extra?.motivoLibre === "pedido_supervision"
+      ? "Refuerzo · Pedido de Supervisión · Viene en su libre"
+      : "Refuerzo · Viene en su libre";
   }
   const partes = extra?.origenExtra === "personal_otro_turno"
     ? ["Refuerzo", "Personal de otro turno", obtenerNombreTurno(extra.turnoOrigen)]

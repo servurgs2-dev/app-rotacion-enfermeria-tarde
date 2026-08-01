@@ -34,6 +34,7 @@ import {
   aplicarCoberturasDirectasExtras,
   agregarExtraALista,
   configurarTipoExtra,
+  crearExtraDesdeLibre,
   crearExtraDesdePersonal,
   crearExtraTemporal,
   eliminarExtraDelDia,
@@ -43,6 +44,7 @@ import {
   obtenerOpcionesCoberturaExtra,
   prepararCandidatosExtraOtroTurno
 } from "../../utils/extrasPersonas.js";
+import PanelExtraLibre from "./PanelExtraLibre.jsx";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 import {
   obtenerClaveRenderPersona,
@@ -172,6 +174,7 @@ const {
 } = calendario || {};
 
   const [formularioExtra, setFormularioExtra] = useState(null);
+  const [formularioExtraLibre, setFormularioExtraLibre] = useState(null);
   const [candidatosExtra, setCandidatosExtra] = useState([]);
   const [seleccionado, setSeleccionado] = useState(null);
   const [alertasAbiertas, setAlertasAbiertas] = useState(true);
@@ -565,6 +568,25 @@ const confirmarExtra = () => {
     };
   });
   setFormularioExtra(null);
+};
+
+const abrirFormularioExtraLibre = (persona) => {
+  if (soloLecturaEfectiva) return;
+  if (extrasDia.some((extra) => personasCompartenIdentidad(extra, persona))) return;
+  setFormularioExtraLibre({
+    persona,
+    fecha: keyDia,
+    motivoLibre: "",
+    personaCubiertaId: "",
+    error: "",
+    contexto: {
+      turno: turnoActivo,
+      mes: mesActivo,
+      fecha: keyDia,
+      categoria: tipo,
+      calendario
+    }
+  });
 };
 
 const asignacionOrdenada = (() => {
@@ -1131,6 +1153,72 @@ const personasCubribles = obtenerOpcionesCoberturaExtra({
   categoria: tipo,
   esPersonaDisponible: (persona) => !estaAusente(persona)
 });
+
+const personasCubriblesParaLibre = formularioExtraLibre
+  ? personasCubribles.filter(
+      (opcion) => !personasCompartenIdentidad(
+        opcion.persona,
+        formularioExtraLibre.persona
+      )
+    )
+  : [];
+
+const confirmarExtraLibre = () => {
+  const contexto = formularioExtraLibre?.contexto;
+  if (
+    !contexto ||
+    contexto.turno !== turnoActivo ||
+    contexto.mes !== mesActivo ||
+    contexto.fecha !== keyDia ||
+    contexto.categoria !== tipo ||
+    contexto.calendario !== calendario ||
+    contexto.calendario !== (obtenerCalendarioActual ? obtenerCalendarioActual() : calendario) ||
+    soloLecturaEfectiva
+  ) {
+    setFormularioExtraLibre((actual) => actual && ({
+      ...actual,
+      error: "El calendario cambió mientras agregabas el Extra. Revisá nuevamente."
+    }));
+    return;
+  }
+  const motivoLibre = formularioExtraLibre.motivoLibre;
+  let resultado = crearExtraDesdeLibre({
+    persona: formularioExtraLibre.persona,
+    categoria: tipo,
+    motivoLibre,
+    extrasDia
+  });
+  if (!resultado.extra) {
+    setFormularioExtraLibre((actual) => ({ ...actual, error: resultado.error }));
+    return;
+  }
+  const opcionCubierta = personasCubriblesParaLibre.find(
+    (opcion) => String(opcion.persona.id) === String(formularioExtraLibre.personaCubiertaId)
+  );
+  resultado = configurarTipoExtra({
+    extra: resultado.extra,
+    tipoExtra: motivoLibre === "cobertura_companero" ? "cobertura" : "refuerzo",
+    personaCubierta: opcionCubierta?.persona,
+    sectorCubierto: opcionCubierta?.sector,
+    extrasDia,
+    personal
+  });
+  if (!resultado.extra) {
+    setFormularioExtraLibre((actual) => ({ ...actual, error: resultado.error }));
+    return;
+  }
+  setCalendario((prev) => {
+    if (prev !== contexto.calendario) return prev;
+    return {
+      ...prev,
+      extras: {
+        ...(prev.extras || {}),
+        [keyDia]: agregarExtraALista(prev.extras?.[keyDia], resultado.extra)
+      }
+    };
+  });
+  setFormularioExtraLibre(null);
+};
 
 const obtenerSectorOrigenPersona = (persona) => {
   if (!persona) return "";
@@ -1946,6 +2034,21 @@ useEffect(() => {
         />
       )}
 
+      {formularioExtraLibre && (
+        <PanelExtraLibre
+          formulario={formularioExtraLibre}
+          personasCubribles={personasCubriblesParaLibre}
+          onCambiar={(campo, valor) => setFormularioExtraLibre((actual) => ({
+            ...actual,
+            [campo]: valor,
+            ...(campo === "motivoLibre" ? { personaCubiertaId: "" } : {}),
+            error: ""
+          }))}
+          onCancelar={() => setFormularioExtraLibre(null)}
+          onConfirmar={confirmarExtraLibre}
+        />
+      )}
+
       {alertaSectoresCriticos && (
         <p
           role="alert"
@@ -2169,27 +2272,14 @@ useEffect(() => {
 
     return (
       <button
-        disabled={soloLecturaEfectiva}
+        disabled={soloLecturaEfectiva || yaEsta}
         key={obtenerClaveRenderPersona(e, indice, idsPersonalDuplicados)}
         className={`px-3 py-1.5 rounded-lg text-sm text-white transition
           ${yaEsta ? "bg-green-600" : "bg-green-400 hover:bg-green-500"}`}
-        onClick={() => {
-          if (soloLecturaEfectiva) return;
-          if (yaEsta) {
-            borrarExtra(e);
-            return;
-          }
-
-          setCalendario((prev) => ({
-            ...prev,
-            extras: {
-              ...prev.extras,
-              [keyDia]: agregarExtraALista(prev.extras?.[keyDia], e)
-            }
-          }));
-        }}
+        onClick={() => abrirFormularioExtraLibre(e)}
       >
         {obtenerNombreConMarcaTurnante(e, "", identidadesTurnantes)}
+        {yaEsta ? " · Agregado como Extra" : " · Agregar como Extra"}
       </button>
     );
   })}

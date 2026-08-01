@@ -28,6 +28,7 @@
     "test:extras-coberturas": "node tests/extras-coberturas.test.mjs",
     "test:certificaciones-calendario": "node tests/certificaciones-calendario.test.mjs",
     "test:certificacion-dia-no-disponibles": "node tests/certificacion-dia-no-disponibles.test.mjs",
+    "test:hidratacion-calendario": "node tests/hidratacion-calendario.test.mjs",
     "test:alerta-sectores-criticos": "node tests/alerta-sectores-criticos.test.mjs",
     "test:reintegros-planilla": "node tests/reintegros-asignaciones-parciales.test.mjs",
     "test:turnante-mensual": "node tests/turnante-mensual.test.mjs",

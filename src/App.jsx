@@ -19,7 +19,11 @@ import {
 } from "./utils/exportPDF";
 import BotonEnviarPDF from "./components/correo/BotonEnviarPDF";
 import { crearAsuntoCorreoPDF } from "./utils/correoPDF";
-import { keyDiaFromDate, obtenerSemanasDelMes } from "./utils/fechas";
+import {
+  keyDiaFromDate,
+  obtenerSemanasDelMes,
+  parsearFechaLocal
+} from "./utils/fechas";
 import { generarAlertasHorarios } from "./utils/alertasHorarios";
 import {
   TURNOS,
@@ -132,7 +136,7 @@ function App({ perfil, onSignOut }) {
 const [tabPlanilla, setTabPlanilla] = useState("enfermeros");
 const [tabCalendario, setTabCalendario] = useState("enfermeros");
 
-const [fecha, setFecha] = useState(new Date());
+const [fecha, setFecha] = useState(() => parsearFechaLocal(keyDiaFromDate(new Date())));
 const claveActiva = turnoActivo
   ? crearClaveTurnoMes(turnoActivo, mesActivo)
   : null;
@@ -864,10 +868,14 @@ useEffect(() => {
       );
       mesesCargadosRef.current.add(claveCarga);
       referenciasEstadoRef.current.set(claveCarga, clasificacion.estado);
-      setEstadoPorTurnoMes(prev => ({
-        ...prev,
-        [claveCarga]: clasificacion.estado
-      }));
+      setEstadoPorTurnoMes(prev => {
+        const siguiente = {
+          ...prev,
+          [claveCarga]: clasificacion.estado
+        };
+        estadoPorTurnoMesRef.current = siguiente;
+        return siguiente;
+      });
     } else {
       erroresCargaRef.current.delete(claveCarga);
       actualizarMetadatosClave(

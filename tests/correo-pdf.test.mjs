@@ -238,12 +238,38 @@ await probar("74 Calendario usa turno y fecha del documento", () =>
     fecha: new Date(2026, 6, 31, 12),
     mesActivo: "2026-07"
   }), "Turno Vespertino - Calendario diario - 31/07/2026"));
+await probar("74b Calendario distingue Tarde de Vespertino", () => {
+  const fecha = new Date(2026, 7, 1, 12);
+  assert.equal(crearAsuntoCorreoPDF({
+    tipoDocumento: "calendario_diario",
+    turnoId: "tarde",
+    fecha
+  }), "Turno Tarde - Calendario diario - 01/08/2026");
+  assert.equal(crearAsuntoCorreoPDF({
+    tipoDocumento: "calendario_diario",
+    turnoId: "vespertino",
+    fecha
+  }), "Turno Vespertino - Calendario diario - 01/08/2026");
+});
+await probar("74c Calendario conserva Mañana y Noche", () => {
+  const fecha = new Date(2026, 7, 1, 12);
+  assert.equal(crearAsuntoCorreoPDF({
+    tipoDocumento: "calendario_diario",
+    turnoId: "manana",
+    fecha
+  }), "Turno Mañana - Calendario diario - 01/08/2026");
+  assert.equal(crearAsuntoCorreoPDF({
+    tipoDocumento: "calendario_diario",
+    turnoId: "noche",
+    fecha
+  }), "Turno Noche - Calendario diario - 01/08/2026");
+});
 await probar("75 Planilla usa turno y mes activo", () =>
   assert.equal(crearAsuntoCorreoPDF({
     tipoDocumento: "planilla_mensual",
     turnoId: "tarde",
     mesActivo: "2026-08"
-  }), "Turno Vespertino - Planilla mensual - Agosto 2026"));
+  }), "Turno Tarde - Planilla mensual - Agosto 2026"));
 await probar("76 el éxito identifica el correo institucional", () =>
   assert.match(modal, /Correo enviado correctamente a \$\{CORREO_INSTITUCIONAL\}/));
 await probar("77 no conserva tamaño ni texto temporal al reabrir", () => {

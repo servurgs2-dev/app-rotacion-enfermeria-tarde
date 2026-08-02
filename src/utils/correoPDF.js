@@ -1,15 +1,10 @@
+import { TURNOS } from "../config/turnos.js";
+
 export const LIMITE_PDF_CORREO_BYTES = 8 * 1024 * 1024;
 const PATRON_CORREO = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
-const NOMBRES_TURNO_CORREO = {
-  manana: "Mañana",
-  tarde: "Vespertino",
-  vespertino: "Vespertino",
-  noche: "Noche"
-};
-
 export const obtenerNombreTurnoCorreo = (turnoId) =>
-  NOMBRES_TURNO_CORREO[turnoId] || String(turnoId || "");
+  TURNOS[turnoId]?.nombre || String(turnoId || "");
 
 export const formatearMesCorreo = (mesActivo) => {
   const coincidencia = /^(\d{4})-(\d{2})$/.exec(String(mesActivo || ""));

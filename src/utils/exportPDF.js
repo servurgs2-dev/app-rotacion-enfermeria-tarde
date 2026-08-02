@@ -569,10 +569,10 @@ export const prepararFilasCalendarioPDF = (asignaciones) =>
   (Array.isArray(asignaciones) ? asignaciones : [])
     .filter((item) => item?.nombre && item.tipo !== "divider")
     .map((item) => [
-      item.nombre,
-      obtenerNombreConMarcaTurnante(item.enfermero) ||
+      String(item.nombre).toUpperCase(),
+      String(obtenerNombreConMarcaTurnante(item.enfermero) ||
         item.etiquetaVacio ||
-        "Sin cobertura"
+        "Sin cobertura").toUpperCase()
     ]);
 
 const dibujarListaCompactaPDF = ({
@@ -583,13 +583,16 @@ const dibujarListaCompactaPDF = ({
   y,
   ancho,
   columnas = 2,
-  mensajeVacio
+  mensajeVacio,
+  fuenteTitulo = 9,
+  fuenteContenido = 7.5,
+  separacionFila = 6,
+  altoLinea = 2.9
 }) => {
-  pdf.setFontSize(8);
+  pdf.setFontSize(fuenteTitulo);
   pdf.setFont("helvetica", "bold");
-  pdf.text(titulo, x, y);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(6);
+  pdf.text(String(titulo).toUpperCase(), x, y);
+  pdf.setFontSize(fuenteContenido);
 
   const textos = elementos.length ? elementos : [mensajeVacio];
   const anchoColumna = ancho / columnas;
@@ -599,14 +602,61 @@ const dibujarListaCompactaPDF = ({
   textos.forEach((texto, indice) => {
     const columna = Math.floor(indice / filas);
     const fila = indice % filas;
-    const lineas = pdf.splitTextToSize(String(texto), anchoColumna - 3).slice(0, 2);
-    const altoFila = Math.max(3.2, lineas.length * 2.6);
-    const posicionY = y + 4 + fila * 5.4;
+    const lineas = pdf.splitTextToSize(String(texto).toUpperCase(), anchoColumna - 3).slice(0, 2);
+    const altoFila = Math.max(3.5, lineas.length * altoLinea);
+    const posicionY = y + 4.5 + fila * separacionFila;
     pdf.text(lineas, x + columna * anchoColumna, posicionY);
     altoMaximo = Math.max(altoMaximo, posicionY - y + altoFila);
   });
 
   return Math.max(8, altoMaximo);
+};
+
+export const obtenerPerfilVisualCalendarioPDF = ({
+  maximoFilas,
+  cantidadInferior = 0
+} = {}) => {
+  if (maximoFilas <= 20) {
+    const inferiorCargado = cantidadInferior > 12;
+    return {
+      nombre: "normal",
+      fuenteTabla: inferiorCargado ? 8 : 9,
+      fuenteEncabezadoTabla: 9,
+      paddingTabla: inferiorCargado ? 1.15 : 1.3,
+      altoMinimoFila: inferiorCargado ? 4 : 4.2,
+      fuenteTituloTabla: 10,
+      fuenteTituloInferior: 9,
+      fuenteContenidoInferior: 8,
+      separacionFilaInferior: 6.2,
+      altoLineaInferior: 3
+    };
+  }
+  if (maximoFilas <= 24) {
+    return {
+      nombre: "intermedio",
+      fuenteTabla: 7.25,
+      fuenteEncabezadoTabla: 7.25,
+      paddingTabla: 0.85,
+      altoMinimoFila: 3.7,
+      fuenteTituloTabla: 9.25,
+      fuenteTituloInferior: 8.5,
+      fuenteContenidoInferior: 7,
+      separacionFilaInferior: 5.7,
+      altoLineaInferior: 2.8
+    };
+  }
+  return {
+    nombre: "extremo",
+    fuenteTabla: 6.25,
+    fuenteEncabezadoTabla: 6.25,
+    paddingTabla: 0.6,
+    altoMinimoFila: 3.4,
+    fuenteTituloTabla: 8.75,
+    fuenteTituloInferior: 8,
+    fuenteContenidoInferior: 6.5,
+    separacionFilaInferior: 5.3,
+    altoLineaInferior: 2.7
+  };
 };
 
 export const crearCalendarioDiarioPDF = ({
@@ -631,19 +681,23 @@ export const crearCalendarioDiarioPDF = ({
     personal
   });
   const maximoFilas = Math.max(filasEnfermeros.length, filasLicenciados.length);
-  const fuenteTabla = maximoFilas > 24 ? 5.5 : maximoFilas > 18 ? 6 : 6.5;
-  const paddingTabla = maximoFilas > 24 ? 0.55 : maximoFilas > 18 ? 0.75 : 1;
+  const cantidadInferior = libresEnfermeros.length +
+    libresLicenciados.length + certificacionesDia.length;
+  const perfilVisual = obtenerPerfilVisualCalendarioPDF({
+    maximoFilas,
+    cantidadInferior
+  });
   const anchoColumna = 137;
   const columnaIzquierda = 8;
   const columnaDerecha = 152;
   const turno = obtenerConfiguracionTurno(turnoId).nombre;
   const tituloMes = obtenerNombreMes(mesActivo);
 
-  pdf.setFontSize(11);
+  pdf.setFontSize(12);
   pdf.setFont("helvetica", "bold");
-  pdf.text("Calendario Diario", 8, 10);
+  pdf.text("CALENDARIO DIARIO", 8, 10);
   pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(7);
+  pdf.setFontSize(perfilVisual.nombre === "normal" ? 8.5 : 8);
   pdf.setTextColor(90);
   pdf.text(
     `${fecha.toLocaleDateString("es-UY", {
@@ -660,28 +714,35 @@ export const crearCalendarioDiarioPDF = ({
   pdf.line(8, 19, 289, 19);
 
   const renderColumna = (titulo, filas, x, color) => {
-    pdf.setFontSize(8.5);
+    pdf.setFontSize(perfilVisual.fuenteTituloTabla);
     pdf.setFont("helvetica", "bold");
-    pdf.text(titulo, x, 24);
+    pdf.text(String(titulo).toUpperCase(), x, 24);
     pdf.setFont("helvetica", "normal");
 
     autoTable(pdf, {
       startY: 27,
       margin: { left: x },
       tableWidth: anchoColumna,
-      head: [["Sector", "Asignado"]],
+      head: [["SECTOR", "FUNCIONARIO"]],
       body: filas,
       styles: {
-        fontSize: fuenteTabla,
-        cellPadding: paddingTabla,
+        fontSize: perfilVisual.fuenteTabla,
+        cellPadding: perfilVisual.paddingTabla,
         overflow: "linebreak",
         valign: "middle",
-        minCellHeight: 3.2
+        minCellHeight: perfilVisual.altoMinimoFila,
+        textColor: [15, 23, 42]
       },
-      headStyles: { fillColor: color, halign: "center" },
+      headStyles: {
+        fillColor: color,
+        halign: "center",
+        fontStyle: "bold",
+        fontSize: perfilVisual.fuenteEncabezadoTabla,
+        textColor: [255, 255, 255]
+      },
       columnStyles: {
-        0: { cellWidth: 56 },
-        1: { cellWidth: 81 }
+        0: { cellWidth: 56, fontStyle: "bold" },
+        1: { cellWidth: 81, fontStyle: "bold" }
       },
       pageBreak: "avoid",
       rowPageBreak: "avoid"
@@ -714,7 +775,11 @@ export const crearCalendarioDiarioPDF = ({
     y: inicioLibres,
     ancho: anchoColumna,
     columnas: 2,
-    mensajeVacio: "Sin libres"
+    mensajeVacio: "Sin libres",
+    fuenteTitulo: perfilVisual.fuenteTituloInferior,
+    fuenteContenido: perfilVisual.fuenteContenidoInferior,
+    separacionFila: perfilVisual.separacionFilaInferior,
+    altoLinea: perfilVisual.altoLineaInferior
   });
   const altoLibresLicenciados = dibujarListaCompactaPDF({
     pdf,
@@ -724,7 +789,11 @@ export const crearCalendarioDiarioPDF = ({
     y: inicioLibres,
     ancho: anchoColumna,
     columnas: 2,
-    mensajeVacio: "Sin libres"
+    mensajeVacio: "Sin libres",
+    fuenteTitulo: perfilVisual.fuenteTituloInferior,
+    fuenteContenido: perfilVisual.fuenteContenidoInferior,
+    separacionFila: perfilVisual.separacionFilaInferior,
+    altoLinea: perfilVisual.altoLineaInferior
   });
   const inicioCertificaciones =
     inicioLibres + Math.max(altoLibresEnfermeros, altoLibresLicenciados) + 3;
@@ -738,7 +807,11 @@ export const crearCalendarioDiarioPDF = ({
     y: inicioCertificaciones,
     ancho: 281,
     columnas: certificacionesDia.length > 8 ? 4 : 3,
-    mensajeVacio: "Sin certificaciones médicas para esta fecha"
+    mensajeVacio: "Sin certificaciones médicas para esta fecha",
+    fuenteTitulo: perfilVisual.fuenteTituloInferior,
+    fuenteContenido: perfilVisual.fuenteContenidoInferior,
+    separacionFila: perfilVisual.separacionFilaInferior,
+    altoLinea: perfilVisual.altoLineaInferior
   });
 
   return pdf;

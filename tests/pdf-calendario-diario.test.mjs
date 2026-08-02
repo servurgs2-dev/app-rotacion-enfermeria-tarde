@@ -3,6 +3,7 @@ import fs from "node:fs";
 import {
   crearCalendarioDiarioPDF,
   crearPlanillaSemanalPDF,
+  obtenerPerfilVisualCalendarioPDF,
   prepararCertificacionesDiaPDF,
   prepararFilasCalendarioPDF
 } from "../src/utils/exportPDF.js";
@@ -115,32 +116,32 @@ probar("5 ambas categorías permanecen en la misma página", () => {
 probar("6 conserva todos los sectores visibles de Enfermeros", () => {
   assert.deepEqual(
     prepararFilasCalendarioPDF(asignacionesEnfermeros).map(([sector]) => sector),
-    asignacionesEnfermeros.map((fila) => fila.nombre)
+    asignacionesEnfermeros.map((fila) => fila.nombre.toUpperCase())
   );
 });
 probar("7 conserva todos los sectores visibles de Licenciados", () => {
   assert.deepEqual(
     prepararFilasCalendarioPDF(asignacionesLicenciados).map(([sector]) => sector),
-    asignacionesLicenciados.map((fila) => fila.nombre)
+    asignacionesLicenciados.map((fila) => fila.nombre.toUpperCase())
   );
 });
 probar("8 mantiene sectores vacíos", () => {
   assert.ok(
     prepararFilasCalendarioPDF([{ nombre: "Vacío", enfermero: null }])
-      .some(([, asignado]) => asignado === "Sin cobertura")
+      .some(([, asignado]) => asignado === "SIN COBERTURA")
   );
 });
 probar("9 mantiene la señal Sin asignar por ausencia", () => {
   assert.ok(
     prepararFilasCalendarioPDF(asignacionesEnfermeros)
-      .some(([, asignado]) => asignado === "Sin asignar - ausencia")
+      .some(([, asignado]) => asignado === "SIN ASIGNAR - AUSENCIA")
   );
 });
 probar("10 mantiene personas en SIN ASIGNAR", () => {
   assert.ok(
     prepararFilasCalendarioPDF(asignacionesEnfermeros)
       .some(([sector, asignado]) =>
-        sector === "SIN ASIGNAR" && asignado === personas[19].nombre
+        sector === "SIN ASIGNAR" && asignado === personas[19].nombre.toUpperCase()
       )
   );
 });
@@ -149,8 +150,34 @@ probar("11 mantiene cambios manuales finales", () => {
     prepararFilasCalendarioPDF([
       { nombre: "REA 1", enfermero: { nombre: "Asignación manual" } }
     ])[0][1],
-    "Asignación manual"
+    "ASIGNACIÓN MANUAL"
   );
+});
+probar("11b sectores, nombres y marcas se presentan en mayúsculas sin mutar datos", () => {
+  const persona = { nombre: "María Rodríguez", esExtra: true };
+  const asignaciones = [{ nombre: "Explora 1", enfermero: persona }];
+  const copia = structuredClone(asignaciones);
+  assert.deepEqual(prepararFilasCalendarioPDF(asignaciones), [
+    ["EXPLORA 1", "MARÍA RODRÍGUEZ (E)"]
+  ]);
+  assert.deepEqual(asignaciones, copia);
+});
+probar("11c la presentación no duplica marcas T ni E", () => {
+  assert.deepEqual(prepararFilasCalendarioPDF([
+    { nombre: "REA 1", enfermero: { nombre: "Juan Pérez", esTurnante: true } },
+    { nombre: "REA 2", enfermero: { nombre: "Rosa Silva", esExtra: true } }
+  ]), [
+    ["REA 1", "JUAN PÉREZ (T)"],
+    ["REA 2", "ROSA SILVA (E)"]
+  ]);
+});
+probar("11d tablas y encabezados usan negrita y alto contraste", () => {
+  const fuente = fs.readFileSync("src/utils/exportPDF.js", "utf8");
+  assert.match(fuente, /head: \[\["SECTOR", "FUNCIONARIO"\]\]/);
+  assert.match(fuente, /headStyles: \{[\s\S]*fontStyle: "bold"/);
+  assert.match(fuente, /0: \{ cellWidth: 56, fontStyle: "bold" \}/);
+  assert.match(fuente, /1: \{ cellWidth: 81, fontStyle: "bold" \}/);
+  assert.match(fuente, /textColor: \[15, 23, 42\]/);
 });
 probar("12 mantiene Redistribución opción 1", () => {
   assert.ok(asignacionesEnfermeros.some((fila) => fila.nombre === "1-3 + 19-22"));
@@ -303,7 +330,7 @@ probar("29 una persona de T1 cubriendo DX conserva la marca", () => {
     prepararFilasCalendarioPDF([
       { nombre: "DX 25-30", enfermero: enfermeroTurnantePresentacion, tipo: "sector" }
     ])[0][1],
-    `${titularTurnanteEnfermero.nombre} (T)`
+    `${titularTurnanteEnfermero.nombre} (T)`.toUpperCase()
   );
 });
 probar("30 una persona de T2 movida manualmente conserva la marca", () => {
@@ -311,7 +338,7 @@ probar("30 una persona de T2 movida manualmente conserva la marca", () => {
     prepararFilasCalendarioPDF([
       { nombre: "REA 1", enfermero: segundoTurnantePresentacion, tipo: "sector" }
     ])[0][1],
-    `${segundoTurnanteEnfermero.nombre} (T)`
+    `${segundoTurnanteEnfermero.nombre} (T)`.toUpperCase()
   );
 });
 probar("31 un titular de una fila fija no recibe la marca", () => {
@@ -344,7 +371,7 @@ probar("36 cambios manuales y SIN ASIGNAR conservan la marca", () => {
     prepararFilasCalendarioPDF([
       { nombre: "SIN ASIGNAR", enfermero: segundoTurnantePresentacion, tipo: "sector" }
     ])[0][1],
-    `${segundoTurnanteEnfermero.nombre} (T)`
+    `${segundoTurnanteEnfermero.nombre} (T)`.toUpperCase()
   );
 });
 probar("37 extras solo muestran marca si su identidad proviene de T", () => {
@@ -423,6 +450,178 @@ probar("41 el PDF diario con marcas continúa en una página", () => {
 });
 probar("42 la Planilla semanal continúa en tres páginas", () => {
   assert.equal(pdfSemanal.getNumberOfPages(), 3);
+});
+
+const crearCasoAdaptativo = ({
+  filasEnfermeros,
+  filasLicenciados,
+  libresEnfermeros,
+  libresLicenciados,
+  cantidadCertificaciones,
+  nombresLargos = false
+}) => {
+  const totalPersonas = filasEnfermeros + filasLicenciados +
+    libresEnfermeros + libresLicenciados + cantidadCertificaciones;
+  const personalCaso = Array.from({ length: totalPersonas }, (_, indice) => ({
+    id: `adaptativo-${indice}`,
+    nombre: nombresLargos
+      ? `Nombre muy extenso compuesto para verificar ajuste de funcionario ${indice + 1}`
+      : `Funcionario ${indice + 1}`,
+    categoria: indice < filasEnfermeros + libresEnfermeros
+      ? "enfermero"
+      : "licenciado"
+  }));
+  const asignar = (cantidad, inicio, prefijo) => Array.from(
+    { length: cantidad },
+    (_, indice) => ({
+      nombre: nombresLargos
+        ? `${prefijo} con denominación extensa ${indice + 1}`
+        : `${prefijo} ${indice + 1}`,
+      enfermero: {
+        ...personalCaso[inicio + indice],
+        ...(indice === 1 ? { esTurnante: true } : {}),
+        ...(indice === 2 ? { esExtra: true } : {})
+      },
+      tipo: "sector"
+    })
+  );
+  const inicioLibresEnfermeros = filasEnfermeros;
+  const inicioLicenciados = filasEnfermeros + libresEnfermeros;
+  const inicioLibresLicenciados = inicioLicenciados + filasLicenciados;
+  const inicioCertificados = inicioLibresLicenciados + libresLicenciados;
+  const opcionesCaso = {
+    fecha: new Date(2026, 7, 2, 12),
+    turnoId: "tarde",
+    mesActivo: "2026-08",
+    personal: personalCaso,
+    certificaciones: Array.from({ length: cantidadCertificaciones }, (_, indice) => ({
+      personaId: personalCaso[inicioCertificados + indice].id,
+      nombre: personalCaso[inicioCertificados + indice].nombre,
+      desde: "2026-08-02",
+      hasta: "2026-08-02"
+    })),
+    enfermeros: {
+      asignaciones: asignar(filasEnfermeros, 0, "Sector enfermeros"),
+      libres: personalCaso.slice(
+        inicioLibresEnfermeros,
+        inicioLibresEnfermeros + libresEnfermeros
+      )
+    },
+    licenciados: {
+      asignaciones: asignar(filasLicenciados, inicioLicenciados, "Sector licenciados"),
+      libres: personalCaso.slice(
+        inicioLibresLicenciados,
+        inicioLibresLicenciados + libresLicenciados
+      )
+    }
+  };
+  return opcionesCaso;
+};
+
+[
+  {
+    nombre: "caso real 17/11",
+    datos: {
+      filasEnfermeros: 17,
+      filasLicenciados: 11,
+      libresEnfermeros: 4,
+      libresLicenciados: 2,
+      cantidadCertificaciones: 2
+    },
+    perfil: "normal"
+  },
+  {
+    nombre: "caso habitual 20/12",
+    datos: {
+      filasEnfermeros: 20,
+      filasLicenciados: 12,
+      libresEnfermeros: 6,
+      libresLicenciados: 4,
+      cantidadCertificaciones: 4
+    },
+    perfil: "normal"
+  },
+  {
+    nombre: "caso intermedio 24/24",
+    datos: {
+      filasEnfermeros: 24,
+      filasLicenciados: 24,
+      libresEnfermeros: 5,
+      libresLicenciados: 4,
+      cantidadCertificaciones: 4
+    },
+    perfil: "intermedio"
+  },
+  {
+    nombre: "caso extremo 26/26",
+    datos: {
+      filasEnfermeros: 26,
+      filasLicenciados: 26,
+      libresEnfermeros: 6,
+      libresLicenciados: 5,
+      cantidadCertificaciones: 5,
+      nombresLargos: true
+    },
+    perfil: "extremo"
+  }
+].forEach(({ nombre, datos, perfil }) => {
+  probar(`43 ${nombre} conserva una página y los datos`, () => {
+    const opcionesCaso = crearCasoAdaptativo(datos);
+    const copia = structuredClone(opcionesCaso);
+    const pdfCaso = crearCalendarioDiarioPDF(opcionesCaso);
+    const maximoFilas = Math.max(datos.filasEnfermeros, datos.filasLicenciados);
+    const cantidadInferior = datos.libresEnfermeros +
+      datos.libresLicenciados + datos.cantidadCertificaciones;
+    assert.equal(pdfCaso.getNumberOfPages(), 1);
+    assert.equal(
+      obtenerPerfilVisualCalendarioPDF({ maximoFilas, cantidadInferior }).nombre,
+      perfil
+    );
+    assert.deepEqual(opcionesCaso, copia);
+    assert.equal(
+      prepararFilasCalendarioPDF(opcionesCaso.enfermeros.asignaciones).length,
+      datos.filasEnfermeros
+    );
+    assert.equal(
+      prepararFilasCalendarioPDF(opcionesCaso.licenciados.asignaciones).length,
+      datos.filasLicenciados
+    );
+  });
+});
+
+probar("44 los perfiles usan tamaños y alturas adaptativos", () => {
+  assert.deepEqual(
+    obtenerPerfilVisualCalendarioPDF({ maximoFilas: 20, cantidadInferior: 8 }),
+    {
+      nombre: "normal",
+      fuenteTabla: 9,
+      fuenteEncabezadoTabla: 9,
+      paddingTabla: 1.3,
+      altoMinimoFila: 4.2,
+      fuenteTituloTabla: 10,
+      fuenteTituloInferior: 9,
+      fuenteContenidoInferior: 8,
+      separacionFilaInferior: 6.2,
+      altoLineaInferior: 3
+    }
+  );
+  assert.deepEqual(
+    obtenerPerfilVisualCalendarioPDF({ maximoFilas: 20, cantidadInferior: 13 }),
+    {
+      nombre: "normal",
+      fuenteTabla: 8,
+      fuenteEncabezadoTabla: 9,
+      paddingTabla: 1.15,
+      altoMinimoFila: 4,
+      fuenteTituloTabla: 10,
+      fuenteTituloInferior: 9,
+      fuenteContenidoInferior: 8,
+      separacionFilaInferior: 6.2,
+      altoLineaInferior: 3
+    }
+  );
+  assert.equal(obtenerPerfilVisualCalendarioPDF({ maximoFilas: 24 }).fuenteTabla, 7.25);
+  assert.equal(obtenerPerfilVisualCalendarioPDF({ maximoFilas: 25 }).fuenteTabla, 6.25);
 });
 
 console.log(`\n${total} pruebas de PDF de Calendario Diario pasaron.`);

@@ -26,6 +26,7 @@
     "test:no-disponibles-motivos": "node tests/no-disponibles-motivos.test.mjs",
     "test:extras-calendario": "node tests/extras-calendario.test.mjs",
     "test:extras-coberturas": "node tests/extras-coberturas.test.mjs",
+    "test:cambio-otro-turno": "node tests/cambio-otro-turno.test.mjs",
     "test:extra-en-libre": "node tests/extra-en-libre.test.mjs",
     "test:certificaciones-calendario": "node tests/certificaciones-calendario.test.mjs",
     "test:certificacion-dia-no-disponibles": "node tests/certificacion-dia-no-disponibles.test.mjs",

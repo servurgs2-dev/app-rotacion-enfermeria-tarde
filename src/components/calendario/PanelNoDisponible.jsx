@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import {
   MOTIVOS_NO_DISPONIBLE,
   OPCIONES_MOTIVO_NO_DISPONIBLE
 } from "../../utils/noDisponiblesMotivos.js";
+import SelectorFuncionarioOtroTurno from "./SelectorFuncionarioOtroTurno.jsx";
 
 const TURNOS = [
   ["manana", "Mañana"],
@@ -13,11 +15,21 @@ const TURNOS = [
 export default function PanelNoDisponible({
   formulario,
   extras,
+  candidatos,
   onCambiar,
   onCancelar,
   onConfirmar,
   onQuitar
 }) {
+  useEffect(() => {
+    if (!formulario) return undefined;
+    const alPresionarTecla = (evento) => {
+      if (evento.key === "Escape") onCancelar();
+    };
+    window.addEventListener("keydown", alPresionarTecla);
+    return () => window.removeEventListener("keydown", alPresionarTecla);
+  }, [formulario, onCancelar]);
+
   if (!formulario) return null;
   const cambio = formulario.motivo === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO;
   const supervision = formulario.motivo === MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO;
@@ -68,10 +80,40 @@ export default function PanelNoDisponible({
               >
                 <option value="">Cobertura aún no indicada</option>
                 {extras.map((extra) => (
-                  <option key={extra.id} value={extra.id}>{extra.nombre}</option>
+                  <option key={extra.id} value={extra.id}>
+                    {extra.nombre} (E) — {extra.sectorCubiertoNombre || extra.turnoOrigen || "Extra del día"}
+                  </option>
                 ))}
+                <option value="__AGREGAR_OTRO_TURNO__">+ Agregar funcionario de otro turno</option>
               </select>
             </label>
+            {formulario.personaCoberturaId === "__AGREGAR_OTRO_TURNO__" && (
+              <>
+                <SelectorFuncionarioOtroTurno
+                  modalidad={formulario.modalidadCobertura}
+                  candidatos={candidatos}
+                  cargando={formulario.cargandoCandidatos}
+                  personaId={formulario.coberturaExternaPersonaId}
+                  nombre={formulario.coberturaExternaNombre}
+                  funcionario={formulario.coberturaExternaFuncionario}
+                  onCambiar={(campo, valor) => onCambiar({
+                    modalidad: "modalidadCobertura",
+                    personaId: "coberturaExternaPersonaId",
+                    nombre: "coberturaExternaNombre",
+                    funcionario: "coberturaExternaFuncionario"
+                  }[campo], valor)}
+                />
+                {formulario.modalidadCobertura === "manual" && (
+                <label className="mt-3 block text-sm font-medium text-slate-700">
+                  Turno de origen (opcional)
+                  <select value={formulario.coberturaExternaTurno || ""} onChange={(evento) => onCambiar("coberturaExternaTurno", evento.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                    <option value="">No indicado</option>
+                    {TURNOS.map(([valor, etiqueta]) => <option key={valor} value={valor}>{etiqueta}</option>)}
+                  </select>
+                </label>
+                )}
+              </>
+            )}
             <label className="mt-3 block text-sm font-medium text-slate-700">
               Aclaración opcional
               <textarea
@@ -133,12 +175,23 @@ export default function PanelNoDisponible({
           </p>
         )}
 
-        <div className="mt-5 flex flex-wrap justify-between gap-2">
+        {formulario.confirmarEliminacion && (
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+            <p className="font-medium">¿Qué querés hacer con el Extra vinculado?</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={() => onQuitar("eliminar")} className="rounded-lg border border-red-300 bg-white px-3 py-2 text-red-700">Eliminar también el Extra</button>
+              <button type="button" onClick={() => onQuitar("mantener_refuerzo")} className="rounded-lg border border-amber-400 bg-white px-3 py-2">Mantener al Extra como refuerzo</button>
+              <button type="button" onClick={() => onCambiar("confirmarEliminacion", false)} className="rounded-lg border bg-white px-3 py-2">Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        <div className="sticky bottom-0 mt-5 flex flex-wrap justify-between gap-2 bg-white pt-3">
           <div>
             {formulario.editando && (
               <button
                 type="button"
-                onClick={onQuitar}
+                onClick={() => onQuitar()}
                 className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700"
               >
                 Quitar No disponible

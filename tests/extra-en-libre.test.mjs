@@ -188,7 +188,9 @@ probar("19 Extras históricos continúan como refuerzo", () => {
 
 probar("20 la cobertura directa existente no fue reemplazada", () => {
   const fuente = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
-  assert.match(fuente, /aplicarCoberturasDirectasExtras\(\{/);
+  const helper = fs.readFileSync("src/utils/distribucionTurnantesCoberturas.js", "utf8");
+  assert.match(fuente, /resolverTurnantesYCoberturasOperativas\(\{/);
+  assert.match(helper, /aplicarCoberturasDirectasExtras\(\{/);
 });
 
 probar("21 una cobertura deriva la tarjeta del titular", () => {

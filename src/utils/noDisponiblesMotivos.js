@@ -113,7 +113,9 @@ export const crearRegistroNoDisponible = ({
       ...referencia,
       motivo,
       detalle: texto(detalle),
-      personaCoberturaId: cobertura?.personaId || null,
+      // El id del Extra identifica la relación incluso para cargas manuales,
+      // cuyo personaId es intencionalmente nulo.
+      personaCoberturaId: personaCobertura?.id || cobertura?.personaId || null,
       personaCoberturaNombre: cobertura?.nombre || "",
       turnoDestino: motivo === MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO
         ? turnoDestino

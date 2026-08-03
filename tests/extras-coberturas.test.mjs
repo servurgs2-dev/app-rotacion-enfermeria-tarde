@@ -26,6 +26,7 @@ const calendarioFuente = leer("src/components/calendario/CalendarioDiario.jsx");
 const panelFuente = leer("src/components/calendario/PanelAgregarExtra.jsx");
 const pdfFuente = leer("src/utils/exportPDF.js");
 const estadoFuente = leer("src/utils/estadoMensual.js");
+const distribucionFuente = leer("src/utils/distribucionTurnantesCoberturas.js");
 
 const milton = {
   id: "milton",
@@ -84,11 +85,11 @@ probar("6 Rosa aparece una sola vez", () =>
   assert.equal(aplicar().filter((fila) => fila.enfermero?.id === "rosa-extra").length, 1));
 probar("7 EXPLORA no queda disponible para un turnante", () =>
   assert.ok(aplicar()[0].enfermero));
-probar("8 la cobertura está conectada antes de turnantes y extras", () => {
-  const coberturaIndice = calendarioFuente.indexOf("aplicarCoberturasDirectasExtras");
-  const turnantesIndice = calendarioFuente.indexOf("let turnantesDisponibles", coberturaIndice);
-  const extrasIndice = calendarioFuente.indexOf("const tomarExtraDisponible", coberturaIndice);
-  assert.ok(coberturaIndice >= 0 && coberturaIndice < turnantesIndice && turnantesIndice < extrasIndice);
+probar("8 la cobertura se aplica después de resolver los Turnantes", () => {
+  const turnantesIndice = distribucionFuente.indexOf("const turnantes");
+  const coberturaIndice = distribucionFuente.indexOf("const conCoberturas = aplicarCoberturasDirectasExtras");
+  assert.ok(turnantesIndice >= 0 && coberturaIndice > turnantesIndice);
+  assert.match(calendarioFuente, /resolverTurnantesYCoberturasOperativas/);
 });
 probar("9 la lista describe Rosa cubriendo a Milton", () =>
   assert.equal(obtenerDescripcionExtra(cobertura), "Cubre a Milton — EXPLORA"));

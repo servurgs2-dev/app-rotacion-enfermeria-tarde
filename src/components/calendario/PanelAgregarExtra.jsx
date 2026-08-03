@@ -1,3 +1,5 @@
+import SelectorFuncionarioOtroTurno from "./SelectorFuncionarioOtroTurno.jsx";
+
 export default function PanelAgregarExtra({
   formulario,
   candidatos,
@@ -7,8 +9,6 @@ export default function PanelAgregarExtra({
   onConfirmar
 }) {
   if (!formulario) return null;
-  const esPersonal = formulario.modalidad === "personal_otro_turno";
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
       <section
@@ -21,26 +21,15 @@ export default function PanelAgregarExtra({
           Agregar Extra
         </h3>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => onCambiar("modalidad", "personal_otro_turno")}
-            className={`rounded-lg border px-3 py-2 text-sm ${
-              esPersonal ? "border-blue-500 bg-blue-50 text-blue-800" : "border-slate-300"
-            }`}
-          >
-            Personal de otro turno
-          </button>
-          <button
-            type="button"
-            onClick={() => onCambiar("modalidad", "manual")}
-            className={`rounded-lg border px-3 py-2 text-sm ${
-              !esPersonal ? "border-blue-500 bg-blue-50 text-blue-800" : "border-slate-300"
-            }`}
-          >
-            Extra manual
-          </button>
-        </div>
+        <SelectorFuncionarioOtroTurno
+          modalidad={formulario.modalidad}
+          candidatos={candidatos}
+          cargando={formulario.cargando}
+          personaId={formulario.personaId}
+          nombre={formulario.nombre}
+          funcionario={formulario.funcionario}
+          onCambiar={onCambiar}
+        />
 
         <label className="mt-4 block text-sm font-medium text-slate-700">
           Tipo de extra
@@ -72,49 +61,6 @@ export default function PanelAgregarExtra({
               ))}
             </select>
           </label>
-        )}
-
-        {esPersonal ? (
-          <label className="mt-4 block text-sm font-medium text-slate-700">
-            Persona
-            <select
-              value={formulario.personaId}
-              disabled={formulario.cargando}
-              onChange={(evento) => onCambiar("personaId", evento.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-            >
-              <option value="">
-                {formulario.cargando ? "Cargando Personal…" : "Seleccionar persona"}
-              </option>
-              {candidatos.map((candidato) => (
-                <option
-                  key={`${candidato.turnoOrigen}|${candidato.persona.id}`}
-                  value={`${candidato.turnoOrigen}|${candidato.persona.id}`}
-                >
-                  {candidato.etiqueta}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <>
-            <label className="mt-4 block text-sm font-medium text-slate-700">
-              Nombre
-              <input
-                value={formulario.nombre}
-                onChange={(evento) => onCambiar("nombre", evento.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-            </label>
-            <label className="mt-3 block text-sm font-medium text-slate-700">
-              Número de funcionario (opcional)
-              <input
-                value={formulario.funcionario}
-                onChange={(evento) => onCambiar("funcionario", evento.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-            </label>
-          </>
         )}
 
         {formulario.error && (

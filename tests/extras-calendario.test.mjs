@@ -58,6 +58,14 @@ const panelFuente = fs.readFileSync(
   new URL("../src/components/calendario/PanelAgregarExtra.jsx", import.meta.url),
   "utf8"
 );
+const selectorFuente = fs.readFileSync(
+  new URL("../src/components/calendario/SelectorFuncionarioOtroTurno.jsx", import.meta.url),
+  "utf8"
+);
+const distribucionFuente = fs.readFileSync(
+  new URL("../src/utils/distribucionTurnantesCoberturas.js", import.meta.url),
+  "utf8"
+);
 
 probar("1 permite elegir Personal de otro turno", () => {
   const resultado = prepararCandidatosExtraOtroTurno({
@@ -66,7 +74,8 @@ probar("1 permite elegir Personal de otro turno", () => {
     turnoActivo: "tarde"
   });
   assert.deepEqual(resultado.map((item) => item.persona.id), ["p-manana", "p-noche"]);
-  assert.match(panelFuente, /Personal de otro turno/);
+  assert.match(panelFuente, /SelectorFuncionarioOtroTurno/);
+  assert.match(selectorFuente, /Personal de otro turno/);
 });
 probar("2 filtra por la misma categoría", () => {
   const resultado = prepararCandidatosExtraOtroTurno({
@@ -90,7 +99,7 @@ probar("4 muestra nombre, funcionario y turno habitual", () => {
     categoria: "enfermero",
     turnoActivo: "tarde"
   });
-  assert.equal(resultado.etiqueta, "Persona Mañana · Func. 12345 · Mañana");
+  assert.equal(resultado.etiqueta, "Persona Mañana — Turno Mañana — Func. 12345");
 });
 
 const crearPersonal = (extrasDia = []) => crearExtraDesdePersonal({
@@ -238,8 +247,8 @@ probar("18 los Extras históricos siguen funcionando", () => {
   assert.equal(obtenerDescripcionExtra(historico), "Refuerzo · Extra manual");
 });
 probar("19 ambos orígenes conservan el refuerzo sin ramas por origen", () => {
-  assert.match(calendarioFuente, /const extrasDisponibles = extrasDia\.filter/);
-  assert.doesNotMatch(calendarioFuente, /origenExtra.*tomarExtraDisponible/);
+  assert.match(distribucionFuente, /const refuerzos = lista\(extras\)\.filter/);
+  assert.doesNotMatch(distribucionFuente, /origenExtra.*tomarExtra/);
 });
 probar("20 ambos tipos aparecen en cambios manuales", () => {
   assert.match(calendarioFuente, /\[\.\.\.personalFiltrado, \.\.\.extrasDia\]/);
@@ -248,7 +257,7 @@ probar("21 ambos tipos pueden quedar en SIN ASIGNAR", () => {
   assert.match(calendarioFuente, /personal: \[\.\.\.personalFiltrado, \.\.\.extrasDia\]/);
 });
 probar("22 aparecen en cobertura informativa de No disponibles", () => {
-  assert.match(calendarioFuente, /<PanelNoDisponible[\s\S]*extras=\{extrasDia\}/);
+  assert.match(calendarioFuente, /<PanelNoDisponible[\s\S]*obtenerExtrasCompatiblesCambioOtroTurno/);
 });
 probar("23 la marca Turnante no depende de ser Extra", () => {
   assert.doesNotMatch(calendarioFuente, /origenExtra.*esTurnante/);

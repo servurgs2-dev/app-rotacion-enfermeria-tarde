@@ -287,7 +287,7 @@ probar("28 el PDF usa la etiqueta abreviada sin agregar tablas", () => {
     prepararFilasCalendarioPDF([
       { nombre: "REA 1", enfermero: null, etiquetaVacio: "Sin cobertura — Falta con aviso" }
     ]),
-    [["REA 1", "Sin cobertura — Falta con aviso"]]
+    [["REA 1", "SIN COBERTURA — FALTA CON AVISO"]]
   );
 });
 probar("29 el panel diario presenta motivos sin tocar Planilla semanal", () => {

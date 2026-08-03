@@ -23,6 +23,15 @@ export const TIPOS_EXTRA = Object.freeze({
   REFUERZO: "refuerzo"
 });
 
+export const ORIGENES_EXTRA = Object.freeze({
+  PERSONAL_OTRO_TURNO: "personal_otro_turno",
+  OTRO_TURNO_HISTORICO: "otro_turno"
+});
+
+export const esOrigenExtraOtroTurno = (extra) =>
+  [ORIGENES_EXTRA.PERSONAL_OTRO_TURNO, ORIGENES_EXTRA.OTRO_TURNO_HISTORICO]
+    .includes(extra?.origenExtra);
+
 export const obtenerTipoExtra = (extra) =>
   extra?.tipoExtra === TIPOS_EXTRA.COBERTURA
     ? TIPOS_EXTRA.COBERTURA
@@ -180,7 +189,7 @@ export const crearExtraDesdePersonal = ({
     nombre: persona.nombre,
     funcionario: String(persona.funcionario ?? "").trim(),
     categoria,
-    origenExtra: "personal_otro_turno",
+    origenExtra: ORIGENES_EXTRA.PERSONAL_OTRO_TURNO,
     turnoOrigen,
     creadoEn
   };
@@ -240,7 +249,7 @@ export const obtenerDescripcionExtra = (
       ? "Refuerzo · Pedido de Supervisión · Viene en su libre"
       : "Refuerzo · Viene en su libre";
   }
-  const partes = extra?.origenExtra === "personal_otro_turno"
+  const partes = esOrigenExtraOtroTurno(extra)
     ? ["Refuerzo", "Personal de otro turno", obtenerNombreTurno(extra.turnoOrigen)]
     : ["Refuerzo", "Extra manual"];
   const funcionario = String(extra?.funcionario ?? "").trim();
@@ -421,14 +430,22 @@ export const obtenerOpcionesCoberturaExtra = ({
 export const prepararCandidatosExtraOtroTurno = ({
   candidatos,
   categoria,
-  turnoActivo
+  turnoActivo,
+  personaExcluida = null,
+  extrasDia = []
 }) =>
   (Array.isArray(candidatos) ? candidatos : [])
     .filter(
       (candidato) =>
         candidato?.persona?.categoria === categoria &&
         candidato.turnoOrigen &&
-        candidato.turnoOrigen !== turnoActivo
+        candidato.turnoOrigen !== turnoActivo &&
+        !personasCompartenIdentidad(candidato.persona, personaExcluida) &&
+        !buscarExtraDuplicado(extrasDia, {
+          ...candidato.persona,
+          personaId: candidato.persona.id,
+          origenExtra: ORIGENES_EXTRA.PERSONAL_OTRO_TURNO
+        })
     )
     .map((candidato) => {
       const funcionario = String(candidato.persona.funcionario ?? "").trim();
@@ -436,9 +453,9 @@ export const prepararCandidatosExtraOtroTurno = ({
         ...candidato,
         etiqueta: [
           candidato.persona.nombre,
-          funcionario ? `Func. ${funcionario}` : "",
-          candidato.turnoNombre
-        ].filter(Boolean).join(" · ")
+          `Turno ${candidato.turnoNombre || candidato.turnoOrigen}`,
+          funcionario ? `Func. ${funcionario}` : ""
+        ].filter(Boolean).join(" — ")
       };
     })
     .sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, "es"));

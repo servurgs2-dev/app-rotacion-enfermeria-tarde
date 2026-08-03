@@ -31,13 +31,11 @@ import {
 } from "../../utils/referenciasPersonas.js";
 import { aplicarMovimientosCalendario } from "../../utils/cambiosCalendario.js";
 import {
-  aplicarCoberturasDirectasExtras,
   agregarExtraALista,
   configurarTipoExtra,
   crearExtraDesdeLibre,
   crearExtraDesdePersonal,
   crearExtraTemporal,
-  eliminarExtraDelDia,
   esExtraCobertura,
   obtenerDescripcionExtra,
   obtenerCoberturasExtrasPresentacion,
@@ -45,6 +43,7 @@ import {
   obtenerOpcionesCoberturaExtra,
   prepararCandidatosExtraOtroTurno
 } from "../../utils/extrasPersonas.js";
+import { resolverTurnantesYCoberturasOperativas } from "../../utils/distribucionTurnantesCoberturas.js";
 import PanelExtraLibre from "./PanelExtraLibre.jsx";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 import {
@@ -99,6 +98,14 @@ import {
 import PanelConfirmacionRedistribucion from "./PanelConfirmacionRedistribucion.jsx";
 import PanelAgregarExtra from "./PanelAgregarExtra.jsx";
 import PanelNoDisponible from "./PanelNoDisponible.jsx";
+import {
+  eliminarExtraVinculadoCambioOtroTurno,
+  eliminarNoDisponibleVinculado,
+  esCambioOtroTurnoVinculado,
+  obtenerExtrasCompatiblesCambioOtroTurno,
+  obtenerSectorOperativoPersona,
+  vincularCambioOtroTurno
+} from "../../utils/cambioOtroTurno.js";
 import {
   crearRegistroNoDisponible,
   MOTIVOS_NO_DISPONIBLE,
@@ -389,6 +396,22 @@ const estaAusente = (e) =>
       obtenerEstadoAsistencia(asistenciaFecha, e) === ESTADOS_ASISTENCIA.AUSENTE
     );
 
+const puedeAplicarseCoberturaDirecta = (persona) => {
+  if (!persona) return false;
+  if (!estaAusente(persona)) return true;
+  const cambioVinculado = esCambioOtroTurnoVinculado({
+    persona,
+    registros: noDisponibles[keyDia],
+    extras: extrasDia,
+    personal: personalFiltrado
+  });
+  return cambioVinculado &&
+    !esLibreReal(persona) &&
+    !estaDeLicenciaHoy(persona) &&
+    !estaCertificadoHoy(persona) &&
+    obtenerEstadoAsistencia(asistenciaFecha, persona) !== ESTADOS_ASISTENCIA.AUSENTE;
+};
+
 const evaluacionParcialesDia = evaluarAsignacionesParcialesDia({
   distribucionBase: planillaPeriodo,
   asignacionesParciales: asignacionesParcialesPeriodo,
@@ -434,7 +457,7 @@ const identidadesReintegradosSinSector = new Set(
 
 const borrarExtra = (extra) => {
   if (soloLecturaEfectiva) return;
-  setCalendario((prev) => eliminarExtraDelDia({
+  setCalendario((prev) => eliminarExtraVinculadoCambioOtroTurno({
     calendarioCategoria: prev,
     fecha: keyDia,
     extra,
@@ -465,6 +488,7 @@ const abrirFormularioExtra = async () => {
     personaId: "",
     nombre: "",
     funcionario: "",
+    turnoOrigen: "",
     cargando: true,
     error: "",
     contexto
@@ -478,7 +502,8 @@ const abrirFormularioExtra = async () => {
     const filtrados = prepararCandidatosExtraOtroTurno({
       candidatos,
       categoria: tipo,
-      turnoActivo
+      turnoActivo,
+      extrasDia
     });
     setCandidatosExtra(filtrados);
     setFormularioExtra((actual) => actual?.contexto === contexto
@@ -541,7 +566,7 @@ const confirmarExtra = () => {
     setFormularioExtra((actual) => ({ ...actual, error: resultado.error }));
     return;
   }
-  const opcionCubierta = personasCubribles.find(
+  const opcionCubierta = personasCubriblesExtra.find(
     (opcion) => String(opcion.persona.id) === String(formularioExtra.personaCubiertaId)
   );
   resultado = configurarTipoExtra({
@@ -554,6 +579,35 @@ const confirmarExtra = () => {
   });
   if (!resultado.extra) {
     setFormularioExtra((actual) => ({ ...actual, error: resultado.error }));
+    return;
+  }
+
+  if (
+    formularioExtra.tipoExtra === "cobertura" &&
+    formularioExtra.modalidad === "personal_otro_turno"
+  ) {
+    const vinculado = vincularCambioOtroTurno({
+      calendarioCategoria: calendario,
+      fecha: keyDia,
+      titular: opcionCubierta?.persona,
+      sector: opcionCubierta?.sector,
+      extra: resultado.extra,
+      personal: personalFiltrado
+    });
+    if (vinculado.error) {
+      setFormularioExtra((actual) => ({ ...actual, error: vinculado.error }));
+      return;
+    }
+    altaExtraEnCursoRef.current = true;
+    setCalendario((prev) => vincularCambioOtroTurno({
+      calendarioCategoria: prev,
+      fecha: keyDia,
+      titular: opcionCubierta?.persona,
+      sector: opcionCubierta?.sector,
+      extra: resultado.extra,
+      personal: personalFiltrado
+    }).calendario);
+    setFormularioExtra(null);
     return;
   }
 
@@ -664,97 +718,22 @@ asignacionCompleta = aplicarCoberturaLibreSaludMental({
 });
 
 const identidadesCubiertas = obtenerIdentidadesPersonasCubiertas(extrasDia, personal);
-asignacionCompleta = aplicarCoberturasDirectasExtras({
+const resolucionOperativa = resolverTurnantesYCoberturasOperativas({
   asignaciones: asignacionCompleta,
   extras: extrasDia,
   personal,
-  esPersonaDisponible: (persona) => !estaAusente(persona)
-}).asignaciones;
-
-  let turnantesDisponibles = asignacionCompleta
-    .filter((f) => f.tipo === "turnante")
-    .map((f) => f.enfermero)
-    .filter((e) =>
-      e &&
-      !estaAusente(e) &&
-      !identidadesCubiertas.has(obtenerClaveIdentidadPersona(e))
-    );
-
-  let turnoIndex = 0;
-const usadosSet = new Set();
-const usarEnfermero = (e) => {
-  if (!e) return null;
-
-  const claveIdentidad = obtenerClaveIdentidadPersona(e);
-
-  if (!claveIdentidad || usadosSet.has(claveIdentidad)) return null;
-
-  usadosSet.add(claveIdentidad);
-  return e;
-};
-const tomarTurnanteDisponible = () => {
-  while (turnoIndex < turnantesDisponibles.length) {
-    const turnante = usarEnfermero(turnantesDisponibles[turnoIndex++]);
-
-    if (turnante) return turnante;
-  }
-
-  return null;
-};
-  let asignacionBase = asignacionCompleta
-    .filter((f) => f.tipo === "sector")
-    .map((item) => {
-      if (!item.enfermero) return { ...item, enfermero: null };
-
-      if (estaAusente(item.enfermero)) {
-        return { ...item, enfermero: null, reemplazo: true };
-      }
-
-    const eFinal = usarEnfermero(item.enfermero);
-return { ...item, enfermero: eFinal, reemplazo: false };
-    });
-
-  if (tipo === "enfermero" && !esDiaParo) {
-    asignacionBase = aplicarPrioridadCoberturaParejas({
-      asignaciones: asignacionBase,
-      cambiosDia: cambiosDia[keyDia],
-      esPersonaDisponible: (persona) => !estaAusente(persona)
-    });
-  }
-
-asignacionBase.forEach((item) => {
-  if (!item.enfermero && item.reemplazo && !item.vacioManual) {
-    item.enfermero = tomarTurnanteDisponible();
-  }
+  esPersonaDisponible: (persona) => !estaAusente(persona),
+  esPersonaDisponibleParaCobertura: puedeAplicarseCoberturaDirecta,
+  ajustarSectores: (sectores) =>
+    tipo === "enfermero" && !esDiaParo
+      ? aplicarPrioridadCoberturaParejas({
+          asignaciones: sectores,
+          cambiosDia: cambiosDia[keyDia],
+          esPersonaDisponible: puedeAplicarseCoberturaDirecta
+        })
+      : sectores
 });
-
-  let extraIndex = 0;
-const tomarExtraDisponible = () => {
-  const extrasDisponibles = extrasDia.filter(
-    (e) => e && !esExtraCobertura(e) && !estaAusente(e)
-  );
-
-  while (extraIndex < extrasDisponibles.length) {
-    const extra = usarEnfermero(extrasDisponibles[extraIndex++]);
-
-    if (extra) return extra;
-  }
-
-  return null;
-};
-
-asignacionBase.forEach((item) => {
-  if (!item.enfermero && !item.vacioManual) {
-    item.enfermero = tomarExtraDisponible();
-  }
-});
-
-asignacionBase.forEach((item) => {
-  if (!item.enfermero && !item.vacioManual) {
-    const eFinal = tomarTurnanteDisponible();
-    if (eFinal) item.enfermero = eFinal;
-  }
-});
+let asignacionBase = resolucionOperativa.asignaciones;
 
   if (esDiaParo) {
     sectoresCriticos.forEach((critico) => {
@@ -1266,33 +1245,94 @@ const coberturasExtrasPresentacion = obtenerCoberturasExtrasPresentacion(
   extrasDia,
   personal
 );
+const opcionesCambioPendiente = noDisponiblesPresentacion.flatMap((item) =>
+  item.tipo === "manual" &&
+  item.motivo === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO &&
+  !item.registro?.personaCoberturaId &&
+  item.persona
+    ? [{
+        persona: item.persona,
+        sector: item.sectorOrigen,
+        etiqueta: `${item.nombre} — ${item.sectorOrigen}`
+      }]
+    : []
+);
+const identidadesCubribles = new Set(
+  personasCubribles.map((opcion) => obtenerClaveIdentidadPersona(opcion.persona))
+);
+const personasCubriblesExtra = [
+  ...personasCubribles,
+  ...opcionesCambioPendiente.filter((opcion) => {
+    const identidad = obtenerClaveIdentidadPersona(opcion.persona);
+    return identidad && !identidadesCubribles.has(identidad);
+  })
+];
 
-const abrirFormularioNoDisponible = (persona, registro = null) => {
+const abrirFormularioNoDisponible = async (persona, registro = null) => {
   if (soloLecturaEfectiva || estaCertificadoHoy(persona)) return;
+  const cargaId = cargaExtrasRef.current + 1;
+  cargaExtrasRef.current = cargaId;
   const coberturaRegistrada = extrasDia.find(
     (extra) => String(extra.id) === String(registro?.personaCoberturaId || "")
   );
+  const sectorOperativo = obtenerSectorOperativoPersona({
+    asignaciones: asignacionOrdenada,
+    persona: coberturaRegistrada || persona
+  });
+  const sectorHistoricoValido = /^T\d+$/i.test(String(registro?.sectorOrigen || ""))
+    ? ""
+    : registro?.sectorOrigen || "";
+  const contexto = {
+    turno: turnoActivo,
+    mes: mesActivo,
+    fecha: keyDia,
+    categoria: tipo,
+    calendario,
+    certificaciones,
+    soloLectura: soloLecturaEfectiva
+  };
+  setCandidatosExtra([]);
   setFormularioNoDisponible({
     persona,
     registro,
     editando: Boolean(registro),
     fecha: keyDia,
-    sectorOrigen: registro?.sectorOrigen || obtenerSectorOrigenPersona(persona),
+    sectorOrigen: sectorOperativo || sectorHistoricoValido,
     motivo: registro?.motivo || "",
     detalle: registro?.detalle || "",
     personaCoberturaId: coberturaRegistrada?.id || "",
     turnoDestino: registro?.turnoDestino || "",
+    coberturaExternaNombre: "",
+    coberturaExternaFuncionario: "",
+    coberturaExternaTurno: "",
+    coberturaExternaPersonaId: "",
+    modalidadCobertura: "personal_otro_turno",
+    cargandoCandidatos: true,
+    confirmarEliminacion: false,
     error: "",
-    contexto: {
-      turno: turnoActivo,
-      mes: mesActivo,
-      fecha: keyDia,
-      categoria: tipo,
-      calendario,
-      certificaciones,
-      soloLectura: soloLecturaEfectiva
-    }
+    contexto
   });
+  try {
+    const candidatos = cargarPersonalOtrosTurnos
+      ? await cargarPersonalOtrosTurnos({ categoria: tipo })
+      : [];
+    if (cargaExtrasRef.current !== cargaId) return;
+    setCandidatosExtra(prepararCandidatosExtraOtroTurno({
+      candidatos,
+      categoria: tipo,
+      turnoActivo,
+      personaExcluida: persona,
+      extrasDia
+    }));
+    setFormularioNoDisponible((actual) => actual?.contexto === contexto
+      ? { ...actual, cargandoCandidatos: false }
+      : actual);
+  } catch {
+    if (cargaExtrasRef.current !== cargaId) return;
+    setFormularioNoDisponible((actual) => actual?.contexto === contexto
+      ? { ...actual, cargandoCandidatos: false, error: "No se pudo cargar el Personal de otros turnos." }
+      : actual);
+  }
 };
 
 const contextoNoDisponibleValido = () =>
@@ -1356,9 +1396,71 @@ const confirmarNoDisponible = () => {
     setFormularioNoDisponible(null);
     return;
   }
-  const personaCobertura = extrasDia.find(
+  let personaCobertura = extrasDia.find(
     (extra) => String(extra.id) === String(formularioNoDisponible.personaCoberturaId)
   );
+  if (
+    formularioNoDisponible.motivo === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO &&
+    formularioNoDisponible.personaCoberturaId === "__AGREGAR_OTRO_TURNO__"
+  ) {
+    const candidato = candidatosExtra.find((actual) =>
+      `${actual.turnoOrigen}|${actual.persona.id}` ===
+        formularioNoDisponible.coberturaExternaPersonaId
+    );
+    const creado = formularioNoDisponible.modalidadCobertura === "personal_otro_turno"
+      ? crearExtraDesdePersonal({
+          persona: candidato?.persona,
+          turnoOrigen: candidato?.turnoOrigen,
+          categoria: tipo,
+          extrasDia
+        })
+      : crearExtraTemporal({
+          nombre: formularioNoDisponible.coberturaExternaNombre,
+          funcionario: formularioNoDisponible.coberturaExternaFuncionario,
+          categoria: tipo,
+          personal,
+          extrasDia
+        });
+    if (!creado.extra) {
+      setFormularioNoDisponible((actual) => ({ ...actual, error: creado.error }));
+      return;
+    }
+    personaCobertura = {
+      ...creado.extra,
+      origenExtra: "personal_otro_turno",
+      turnoOrigen: creado.extra.turnoOrigen || formularioNoDisponible.coberturaExternaTurno || ""
+    };
+  }
+
+  if (
+    formularioNoDisponible.motivo === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO &&
+    personaCobertura
+  ) {
+    const vinculado = vincularCambioOtroTurno({
+      calendarioCategoria: calendario,
+      fecha: keyDia,
+      titular: formularioNoDisponible.persona,
+      sector: formularioNoDisponible.sectorOrigen,
+      extra: personaCobertura,
+      detalle: formularioNoDisponible.detalle,
+      personal: personalFiltrado
+    });
+    if (vinculado.error) {
+      setFormularioNoDisponible((actual) => ({ ...actual, error: vinculado.error }));
+      return;
+    }
+    setCalendario((prev) => vincularCambioOtroTurno({
+      calendarioCategoria: prev,
+      fecha: keyDia,
+      titular: formularioNoDisponible.persona,
+      sector: formularioNoDisponible.sectorOrigen,
+      extra: personaCobertura,
+      detalle: formularioNoDisponible.detalle,
+      personal: personalFiltrado
+    }).calendario);
+    setFormularioNoDisponible(null);
+    return;
+  }
   const resultado = crearRegistroNoDisponible({
     persona: formularioNoDisponible.persona,
     motivo: formularioNoDisponible.motivo,
@@ -1392,7 +1494,7 @@ const confirmarNoDisponible = () => {
   setFormularioNoDisponible(null);
 };
 
-const quitarNoDisponible = () => {
+const quitarNoDisponible = (accionExtra = "") => {
   if (!contextoNoDisponibleValido()) {
     setFormularioNoDisponible((actual) => ({
       ...actual,
@@ -1400,8 +1502,26 @@ const quitarNoDisponible = () => {
     }));
     return;
   }
+  const tieneExtraVinculado = Boolean(formularioNoDisponible.registro?.personaCoberturaId);
+  if (tieneExtraVinculado && !accionExtra) {
+    setFormularioNoDisponible((actual) => ({
+      ...actual,
+      confirmarEliminacion: true,
+      error: ""
+    }));
+    return;
+  }
   setCalendario((prev) => {
     if (prev !== formularioNoDisponible.contexto.calendario) return prev;
+    if (tieneExtraVinculado) {
+      return eliminarNoDisponibleVinculado({
+        calendarioCategoria: prev,
+        fecha: keyDia,
+        titular: formularioNoDisponible.persona,
+        accionExtra,
+        personal: personalFiltrado
+      });
+    }
     const lista = prev.noDisponibles?.[keyDia] || [];
     return {
       ...prev,
@@ -2009,7 +2129,12 @@ useEffect(() => {
       {formularioNoDisponibleVisible && (
         <PanelNoDisponible
           formulario={formularioNoDisponible}
-          extras={extrasDia}
+          extras={obtenerExtrasCompatiblesCambioOtroTurno({
+            extras: extrasDia,
+            titular: formularioNoDisponible.persona,
+            personal: personalFiltrado
+          })}
+          candidatos={candidatosExtra}
           onCambiar={(campo, valor) => setFormularioNoDisponible((actual) => ({
             ...actual,
             [campo]: valor,
@@ -2025,7 +2150,7 @@ useEffect(() => {
         <PanelAgregarExtra
           formulario={formularioExtra}
           candidatos={candidatosExtra}
-          personasCubribles={personasCubribles}
+          personasCubribles={personasCubriblesExtra}
           onCambiar={(campo, valor) => setFormularioExtra((actual) => ({
             ...actual,
             [campo]: valor,
@@ -2177,7 +2302,10 @@ useEffect(() => {
           </p>
           {registro.detalle && <p>{registro.detalle}</p>}
           {registro.personaCoberturaNombre && (
-            <p>Cubierto por: {registro.personaCoberturaNombre}</p>
+            <>
+              <p>Cubierto por: {registro.personaCoberturaNombre} (E)</p>
+              <p>Sector: {registro.sectorOrigen || "No identificado"}</p>
+            </>
           )}
           {registro.tipo === "manual" &&
             registro.motivo === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO &&

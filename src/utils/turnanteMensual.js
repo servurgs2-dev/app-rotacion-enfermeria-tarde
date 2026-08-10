@@ -1,3 +1,8 @@
+import {
+  adaptarConfiguracionLegacyPlanilla,
+  obtenerEtiquetasFilasPlanilla
+} from "./configuracionPlanilla.js";
+
 const CONFIGURACION = Object.freeze({
   enfermero: Object.freeze({
     posicion: "T6",
@@ -30,21 +35,10 @@ export const estaHabilitadoTurnanteMensual = (planilla, tipo) => {
   );
 };
 
-export const obtenerFilasBasePlanilla = (configuracion = {}) => {
-  const filas = [];
-  let indiceTurnante = 0;
-  const posiciones = new Set(configuracion.posicionesTurnantes || []);
-
-  (configuracion.sectoresFijos || []).forEach((sector, indice) => {
-    filas.push(sector);
-    if (posiciones.has(indice)) {
-      const turnante = configuracion.turnantes?.[indiceTurnante];
-      if (turnante) filas.push(turnante);
-      indiceTurnante += 1;
-    }
-  });
-  return filas;
-};
+export const obtenerFilasBasePlanilla = (configuracion = {}, tipo = "") =>
+  obtenerEtiquetasFilasPlanilla(
+    adaptarConfiguracionLegacyPlanilla(configuracion, tipo)
+  );
 
 export const obtenerFilasEfectivasPlanilla = (
   filasBase,

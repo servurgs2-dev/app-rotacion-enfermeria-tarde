@@ -66,8 +66,9 @@ export const configuracionSectores = {
       "Triage 1", "Estabiliza", "Reanimación + Sillones", "Observación 1", "Explora",
       "Triage 2", "Diagnostico", "Observación 2", "Preinternación", "Salud Mental"
     ],
-    turnantes: ["T1", "T2", "T3"],
-    posicionesTurnantes: [1, 7, 10],
+    // T3 se habilita únicamente como Turnante adicional mensual.
+    turnantes: ["T1", "T2"],
+    posicionesTurnantes: [1, 7],
     sectoresCriticos: ["Triage 1", "Estabiliza", "Reanimación + Sillones"],
     sectoresBajaPrioridad: ["Observación 2", "Preinternación", "Salud Mental"],
     prioridadSectores: [

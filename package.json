@@ -35,6 +35,7 @@
     "test:reintegros-planilla": "node tests/reintegros-asignaciones-parciales.test.mjs",
     "test:turnante-mensual": "node tests/turnante-mensual.test.mjs",
     "test:correo-pdf": "node tests/correo-pdf.test.mjs",
+    "test:configuracion-planilla": "node tests/configuracion-planilla.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -332,20 +332,21 @@ PAREJAS_COBERTURA_ENFERMEROS.forEach(({ principal, secundario }, indice) => {
 });
 
 probar("58 la prioridad por parejas ocurre antes de extras y Turnantes", () => {
-  const llamadaParejas = calendario.indexOf("asignacionBase = aplicarPrioridadCoberturaParejas");
-  const buscarTurnante = calendario.indexOf("item.enfermero = tomarTurnanteDisponible()", llamadaParejas);
-  const buscarExtra = calendario.indexOf("asignacionBase.forEach((item)", llamadaParejas);
+  const helper = fs.readFileSync(new URL("../src/utils/distribucionTurnantesCoberturas.js", import.meta.url), "utf8");
+  const llamadaParejas = helper.indexOf("sectores = ajustarSectores(sectores)");
+  const buscarTurnante = helper.indexOf("fila.enfermero = tomarTurnante()", llamadaParejas);
+  const buscarExtra = helper.indexOf("fila.enfermero = tomarExtra()", llamadaParejas);
   assert.ok(llamadaParejas > 0);
   assert.ok(llamadaParejas < buscarTurnante);
   assert.ok(llamadaParejas < buscarExtra);
 });
 probar("59 la prioridad por parejas ocurre antes de sacrificar sectores", () => {
   assert.ok(
-    calendario.indexOf("asignacionBase = aplicarPrioridadCoberturaParejas") <
+    calendario.indexOf("const resolucionOperativa = resolverTurnantesYCoberturasOperativas") <
     calendario.indexOf("sectoresCriticos.forEach")
   );
   assert.ok(
-    calendario.indexOf("asignacionBase = aplicarPrioridadCoberturaParejas") <
+    calendario.indexOf("const resolucionOperativa = resolverTurnantesYCoberturasOperativas") <
     calendario.indexOf("prioridadSectores.forEach")
   );
 });
@@ -404,7 +405,7 @@ probar("68 la prioridad no se aplica a Observación", () => {
   assert.equal(resultado[1].enfermero, personas[0]);
 });
 probar("69 la prioridad se limita a Enfermeros", () => {
-  assert.match(calendario, /if \(tipo === "enfermero" && !esDiaParo\)/);
+  assert.match(calendario, /tipo === "enfermero" && !esDiaParo\s*\? aplicarPrioridadCoberturaParejas/);
 });
 probar("70 los cambios manuales de cualquiera de las dos filas se respetan", () => {
   for (const clave of ["rea 1", "REA 2"]) {

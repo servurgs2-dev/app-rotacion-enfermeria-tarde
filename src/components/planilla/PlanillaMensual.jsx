@@ -133,7 +133,7 @@ function PlanillaMensual({
     sectoresFijos,
     turnantes,
     posicionesTurnantes
-  });
+  }, tipo);
   const filas = obtenerFilasEfectivasPlanilla(filasBase, planilla, tipo);
   const posicionTurnanteMensual = obtenerPosicionTurnanteMensual(tipo);
   const turnanteMensualHabilitado = estaHabilitadoTurnanteMensual(planilla, tipo);

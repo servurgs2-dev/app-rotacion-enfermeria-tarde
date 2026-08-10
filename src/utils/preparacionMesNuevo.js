@@ -16,7 +16,10 @@ import {
 } from "./generacionFlexiblePlanilla.js";
 import { resolverPersonaDesdeReferencia } from "./referenciasPersonas.js";
 import { tieneContenidoSignificativo } from "./limpiezaSegura.js";
-import { quitarTurnanteMensualDeDistribucion } from "./turnanteMensual.js";
+import {
+  obtenerFilasBasePlanilla,
+  quitarTurnanteMensualDeDistribucion
+} from "./turnanteMensual.js";
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -29,18 +32,8 @@ const clonar = (valor) => {
   );
 };
 
-export const obtenerFilasPlanilla = (configuracion) => {
-  const filas = [];
-  let indiceTurnante = 0;
-  (configuracion?.sectoresFijos || []).forEach((sector, indice) => {
-    filas.push(sector);
-    if ((configuracion?.posicionesTurnantes || []).includes(indice)) {
-      filas.push(configuracion.turnantes[indiceTurnante]);
-      indiceTurnante += 1;
-    }
-  });
-  return filas;
-};
+export const obtenerFilasPlanilla = (configuracion, tipo = "") =>
+  obtenerFilasBasePlanilla(configuracion, tipo);
 
 const registrar = (contenido, clave, condicion) => {
   if (condicion) contenido.push(clave);
@@ -341,8 +334,8 @@ export const analizarPreparacionMesNuevo = ({
     return { ok: false, codigo: "ORIGEN_AUSENTE", mensaje: "No existe el mes origen." };
   }
   const personal = clonar(Array.isArray(estadoOrigen.personal) ? estadoOrigen.personal : []);
-  const filasEnfermeros = obtenerFilasPlanilla(configuracionSectores.enfermero);
-  const filasLicenciados = obtenerFilasPlanilla(configuracionSectores.licenciado);
+  const filasEnfermeros = obtenerFilasPlanilla(configuracionSectores.enfermero, "enfermero");
+  const filasLicenciados = obtenerFilasPlanilla(configuracionSectores.licenciado, "licenciado");
   const estrategiaEnfermeros = obtenerEstrategiaRotacionPlanilla({
     turnoId,
     tipo: "enfermero",

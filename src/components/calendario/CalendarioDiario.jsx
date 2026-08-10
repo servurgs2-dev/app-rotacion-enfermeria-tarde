@@ -213,8 +213,8 @@ const {
       sectoresFijos,
       turnantes: turnantesLabels,
       posicionesTurnantes
-    }),
-    [posicionesTurnantes, sectoresFijos, turnantesLabels]
+    }, tipo),
+    [posicionesTurnantes, sectoresFijos, tipo, turnantesLabels]
   );
   const filas = useMemo(
     () => obtenerFilasEfectivasPlanilla(filasBase, planilla, tipo),

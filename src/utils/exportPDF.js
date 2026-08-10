@@ -70,7 +70,7 @@ const obtenerFilasPlanilla = (tipo, ordenPresentacion, planilla) => {
   const configuracion = configuracionSectores[tipo];
   const filasBase = Array.isArray(ordenPresentacion)
     ? [...ordenPresentacion]
-    : obtenerFilasBasePlanilla(configuracion);
+    : obtenerFilasBasePlanilla(configuracion, tipo);
   return obtenerFilasEfectivasPlanilla(filasBase, planilla, tipo);
 };
 

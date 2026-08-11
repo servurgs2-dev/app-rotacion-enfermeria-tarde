@@ -68,6 +68,45 @@ const crearFilaTurnante = ({ tipo, etiqueta, orden }) => {
 
 const TURNANTE_ADICIONAL = Object.freeze({ enfermero: "T6", licenciado: "T3" });
 
+export const SCHEMA_VERSION_CONFIGURACION_PLANILLA = 1;
+
+const CAMPOS_FILA_SNAPSHOT = Object.freeze([
+  "filaId", "tipo", "etiqueta", "sectorId", "turnanteId",
+  "ordinalTurnante", "orden", "activo"
+]);
+
+const copiarFilaSnapshot = (fila) => Object.fromEntries(
+  CAMPOS_FILA_SNAPSHOT.map((campo) => [campo, fila[campo]])
+);
+
+const tieneTexto = (valor) => typeof valor === "string" && valor.trim().length > 0;
+
+export const esSnapshotConfiguracionPlanillaValido = (snapshot) =>
+  Boolean(snapshot) &&
+  typeof snapshot === "object" &&
+  !Array.isArray(snapshot) &&
+  Number.isInteger(snapshot.schemaVersion) &&
+  snapshot.schemaVersion > 0 &&
+  tieneTexto(snapshot.versionId) &&
+  tieneTexto(snapshot.turnoId) &&
+  tieneTexto(snapshot.categoria) &&
+  tieneTexto(snapshot.mes) &&
+  Array.isArray(snapshot.filas) &&
+  snapshot.filas.every((fila) =>
+    Boolean(fila) &&
+    typeof fila === "object" &&
+    CAMPOS_FILA_SNAPSHOT.every((campo) => Object.hasOwn(fila, campo))
+  );
+
+export const copiarSnapshotConfiguracionPlanilla = (snapshot) => ({
+  schemaVersion: snapshot.schemaVersion,
+  versionId: snapshot.versionId,
+  turnoId: snapshot.turnoId,
+  categoria: snapshot.categoria,
+  mes: snapshot.mes,
+  filas: snapshot.filas.map(copiarFilaSnapshot)
+});
+
 export const adaptarConfiguracionLegacyPlanilla = (configuracion = {}, tipoSolicitado = "") => {
   const tipo = tipoSolicitado || inferirTipo(configuracion);
   if (!tipo) throw new Error("La categoría de la configuración de Planilla es obligatoria.");
@@ -97,6 +136,72 @@ export const obtenerFilasConfiguracionEfectivas = (tipo, planilla = {}) => {
     filas.push(crearFilaTurnante({ tipo, etiqueta, orden: filas.length }));
   }
   return filas;
+};
+
+export const crearSnapshotConfiguracionPlanilla = ({
+  turno,
+  categoria,
+  mes,
+  posicionesMensualesAdicionales = []
+} = {}) => {
+  if (!tieneTexto(turno)) {
+    throw new Error("El turno es obligatorio para crear el snapshot de configuración de Planilla.");
+  }
+  if (!tieneTexto(categoria)) {
+    throw new Error("La categoría es obligatoria para crear el snapshot de configuración de Planilla.");
+  }
+  if (!tieneTexto(mes)) {
+    throw new Error("El mes es obligatorio para crear el snapshot de configuración de Planilla.");
+  }
+
+  const turnoId = turno.trim();
+  const categoriaNormalizada = categoria.trim();
+  const mesNormalizado = mes.trim();
+  const filas = obtenerFilasConfiguracionEfectivas(categoriaNormalizada, {
+    posicionesMensualesAdicionales: [...posicionesMensualesAdicionales]
+  }).map(copiarFilaSnapshot);
+
+  return {
+    schemaVersion: SCHEMA_VERSION_CONFIGURACION_PLANILLA,
+    versionId: `${turnoId}:${categoriaNormalizada}:${mesNormalizado}:v${SCHEMA_VERSION_CONFIGURACION_PLANILLA}`,
+    turnoId,
+    categoria: categoriaNormalizada,
+    mes: mesNormalizado,
+    filas
+  };
+};
+
+export const obtenerConfiguracionPlanillaEfectiva = ({
+  estadoMensual,
+  turno,
+  categoria,
+  mes
+} = {}) => {
+  if (!tieneTexto(turno) || !tieneTexto(categoria) || !tieneTexto(mes)) return null;
+
+  const snapshot = estadoMensual?.configuracionPlanilla?.[categoria.trim()];
+  if (
+    esSnapshotConfiguracionPlanillaValido(snapshot) &&
+    snapshot.turnoId === turno.trim() &&
+    snapshot.categoria === categoria.trim() &&
+    snapshot.mes === mes.trim()
+  ) {
+    return copiarSnapshotConfiguracionPlanilla(snapshot);
+  }
+
+  return {
+    schemaVersion: null,
+    versionId: null,
+    turnoId: turno.trim(),
+    categoria: categoria.trim(),
+    mes: mes.trim(),
+    filas: obtenerFilasConfiguracionEfectivas(
+      categoria.trim(),
+      estadoMensual?.planillas?.[
+        categoria.trim() === "enfermero" ? "enfermeros" : "licenciados"
+      ]
+    ).map(copiarFilaSnapshot)
+  };
 };
 
 export const obtenerFilasActivas = (filas = []) => filas.filter((fila) => fila?.activo !== false);

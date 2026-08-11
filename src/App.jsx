@@ -2247,6 +2247,7 @@ return (
     puedeReabrirCierre={esPerfilSupervision(perfil)}
   key={`enfermeros|${turnoActivo}|${mesActivo}|${keyDiaFromDate(fecha)}|${modoSoloLecturaEfectiva}`}
     personal={personal}
+    estadoMensual={mesData}
     planilla={planillaEnfermeros}
     tipo="enfermero"
     mesActivo={mesActivo}
@@ -2300,6 +2301,7 @@ return (
     puedeReabrirCierre={esPerfilSupervision(perfil)}
   key={`licenciados|${turnoActivo}|${mesActivo}|${keyDiaFromDate(fecha)}|${modoSoloLecturaEfectiva}`}
     personal={personal}
+    estadoMensual={mesData}
     planilla={planillaLicenciados}
     tipo="licenciado"
     mesActivo={mesActivo}

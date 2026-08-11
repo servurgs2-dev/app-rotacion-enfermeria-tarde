@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { configuracionSectores } from "../../data/sectores";
 import {
-  obtenerFilasBasePlanilla,
-  obtenerFilasEfectivasPlanilla,
-  obtenerPosicionesTurnantesEfectivas
-} from "../../utils/turnanteMensual.js";
+  obtenerConfiguracionPlanillaEfectiva
+} from "../../utils/configuracionPlanilla.js";
+import { resolverEstructuraCalendario } from "../../utils/estructuraCalendario.js";
 import {
   obtenerConfiguracionTurno,
   obtenerEstrategiaRotacionPlanilla
@@ -142,10 +141,11 @@ const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
 };
 
 function CalendarioDiario({
-  personal,
-  planilla,
+  personal = [],
+  estadoMensual,
+  planilla = {},
   tipo,
-  mesActivo,
+  mesActivo = "",
   licencias,
   certificaciones,
   setCertificaciones,
@@ -197,37 +197,33 @@ const {
   const cargaExtrasRef = useRef(0);
 
   const {
-    sectoresFijos,
-    sectoresCriticos,
-    sectoresBajaPrioridad,
-    prioridadSectores,
-    sectoresParo,
-    prioridadesParo,
-    turnantes: turnantesLabels,
-    posicionesTurnantes,
-    ordenVisual
-  } = configuracionSectores[tipo];
+    sectoresCriticos = [],
+    sectoresBajaPrioridad = [],
+    prioridadSectores = [],
+    sectoresParo = [],
+    prioridadesParo = {},
+    ordenVisual = []
+  } = configuracionSectores[tipo] || {};
 
-  const filasBase = useMemo(
-    () => obtenerFilasBasePlanilla({
-      sectoresFijos,
-      turnantes: turnantesLabels,
-      posicionesTurnantes
-    }, tipo),
-    [posicionesTurnantes, sectoresFijos, tipo, turnantesLabels]
+  const configuracionEfectiva = useMemo(
+    () => obtenerConfiguracionPlanillaEfectiva({
+      estadoMensual,
+      turno: turnoActivo,
+      categoria: tipo,
+      mes: mesActivo
+    }),
+    [estadoMensual, mesActivo, tipo, turnoActivo]
   );
-  const filas = useMemo(
-    () => obtenerFilasEfectivasPlanilla(filasBase, planilla, tipo),
-    [filasBase, planilla, tipo]
-  );
-  const turnantesEfectivos = useMemo(
-    () => obtenerPosicionesTurnantesEfectivas(
-      filasBase.filter((fila) => /^T\d+$/.test(fila)),
-      planilla,
-      tipo
-    ),
-    [filasBase, planilla, tipo]
-  );
+  const estructuraCalendario = resolverEstructuraCalendario({
+    configuracionEfectiva,
+    ordenVisualLegacy: ordenVisual
+  });
+  const {
+    filas,
+    turnantes: turnantesEfectivos,
+    sectores: sectoresEfectivos,
+    ordenVisual: ordenVisualEfectivo
+  } = estructuraCalendario;
 
 const keyDia = keyDiaFromDate(fecha);
 const periodoPlanilla = useMemo(() => {
@@ -812,7 +808,7 @@ const seDivideReanimacionSillones =
   sobrantes.length > 0;
 
 let asignacionParaMostrar = asignacionFinal;
-let ordenVisualActivo = obtenerFilasRedistribucion(ordenVisual);
+let ordenVisualActivo = obtenerFilasRedistribucion(ordenVisualEfectivo);
 
 if (seDivideReanimacionSillones) {
   const filasDivididas = [
@@ -913,7 +909,7 @@ if (seDivideReanimacionSillones) {
     }
   });
 
-  ordenVisualActivo = ordenVisual.flatMap((item) =>
+  ordenVisualActivo = ordenVisualEfectivo.flatMap((item) =>
     normalizar(item) === normalizar("Reanimación + Sillones")
       ? ["Reanimación", "Sillones"]
       : [item]
@@ -1614,10 +1610,10 @@ useEffect(() => {
         : [sector]
     );
     const sectoresReales = distribucionPorBoxesActiva || distribucionOpcion1Activa
-      ? obtenerFilasRedistribucion(ordenVisual).filter(
+      ? obtenerFilasRedistribucion(ordenVisualEfectivo).filter(
           (fila) => fila !== "DIVIDER" && normalizar(fila) !== "SIN ASIGNAR"
         )
-      : expandirReanimacion(esDiaParo ? sectoresParo : sectoresFijos);
+      : expandirReanimacion(esDiaParo ? sectoresParo : sectoresEfectivos);
     const criticosPanel = expandirReanimacion(sectoresCriticos);
     const personasConLicencia = personalFiltrado.filter(estaDeLicenciaHoy);
     const personasNoDisponibles = personalFiltrado.filter(estaNoDisponible);

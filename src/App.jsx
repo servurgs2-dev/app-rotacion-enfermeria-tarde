@@ -1872,7 +1872,8 @@ return (
       semanas,
       personal,
       turnoId: turnoActivo,
-      mesActivo
+      mesActivo,
+      estadoMensual: mesData
     })
   }
   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm shadow-sm transition"
@@ -1903,7 +1904,8 @@ return (
       semanas,
       personal,
       turnoId: turnoActivo,
-      mesActivo
+      mesActivo,
+      estadoMensual: mesData
     });
     return {
       ...adjunto,
@@ -2158,7 +2160,8 @@ return (
       certificaciones: certificacionesMes,
       personal,
       turnoId: turnoActivo,
-      mesActivo
+      mesActivo,
+      estadoMensual: mesData
     })
   }
 >
@@ -2186,7 +2189,8 @@ return (
         certificaciones: certificacionesMes,
         personal,
         turnoId: turnoActivo,
-        mesActivo
+        mesActivo,
+        estadoMensual: mesData
       });
       return {
         ...adjunto,

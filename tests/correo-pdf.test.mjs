@@ -130,7 +130,7 @@ await probar("41 PDF nocturno conserva A3 y paginación", () => {
   assert.ok(doc.pdf.getNumberOfPages() >= 3);
 });
 await probar("42 hoja de grupos de libres no cambia", () => assert.match(exportPDF, /renderizarGruposLibresPDF/));
-await probar("43 T6 y T3 siguen derivados por helper", () => assert.match(exportPDF, /obtenerFilasEfectivasPlanilla/));
+await probar("43 T6 y T3 siguen derivados por configuración efectiva", () => assert.match(exportPDF, /obtenerConfiguracionPlanillaEfectiva/));
 await probar("44 estados históricos pueden generar adjunto", () =>
   assert.ok(obtenerDocumentoPlanillaPDF(planillaOpciones).pdf));
 await probar("45 modal y botones están integrados", () => {

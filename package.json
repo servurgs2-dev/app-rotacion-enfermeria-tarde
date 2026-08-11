@@ -40,6 +40,7 @@
     "test:preparacion-snapshot-configuracion-planilla": "node tests/preparacion-snapshot-configuracion-planilla.test.mjs",
     "test:planilla-configuracion-efectiva": "node tests/planilla-configuracion-efectiva.test.mjs",
     "test:calendario-configuracion-efectiva": "node tests/calendario-configuracion-efectiva.test.mjs",
+    "test:pdf-configuracion-efectiva": "node tests/pdf-configuracion-efectiva.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

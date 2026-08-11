@@ -14,9 +14,11 @@ import {
 import { resolverPersonaDeCertificacion } from "./certificacionesPersonas.js";
 import { obtenerNombreConMarcaTurnante } from "./etiquetaTurnante.js";
 import {
-  obtenerFilasBasePlanilla,
-  obtenerFilasEfectivasPlanilla
-} from "./turnanteMensual.js";
+  obtenerConfiguracionPlanillaEfectiva,
+  obtenerFilasActivas
+} from "./configuracionPlanilla.js";
+import { resolverEstructuraCalendario } from "./estructuraCalendario.js";
+import { normalizar } from "./texto.js";
 
 
 // 🔹 PLANILLA
@@ -66,12 +68,33 @@ export const ORDEN_PDF_LICENCIADOS_NOCHE = [
   "T2"
 ];
 
-const obtenerFilasPlanilla = (tipo, ordenPresentacion, planilla) => {
-  const configuracion = configuracionSectores[tipo];
-  const filasBase = Array.isArray(ordenPresentacion)
-    ? [...ordenPresentacion]
-    : obtenerFilasBasePlanilla(configuracion, tipo);
-  return obtenerFilasEfectivasPlanilla(filasBase, planilla, tipo);
+export const obtenerFilasPlanillaPDF = ({
+  estadoMensual,
+  turnoId,
+  mesActivo,
+  tipo,
+  ordenLegacy = []
+} = {}) => {
+  const configuracionEfectiva = obtenerConfiguracionPlanillaEfectiva({
+    estadoMensual,
+    turno: turnoId,
+    categoria: tipo,
+    mes: mesActivo
+  });
+  if (!configuracionEfectiva) return [];
+
+  const filasActivas = obtenerFilasActivas(configuracionEfectiva.filas)
+    .sort((filaA, filaB) => filaA.orden - filaB.orden)
+    .map((fila) => fila.etiqueta);
+  if (configuracionEfectiva.schemaVersion !== null) return filasActivas;
+
+  const activas = new Set(filasActivas);
+  const ordenHistorico = (Array.isArray(ordenLegacy) ? ordenLegacy : [])
+    .filter((fila) => activas.has(fila));
+  return [
+    ...ordenHistorico,
+    ...filasActivas.filter((fila) => !ordenHistorico.includes(fila))
+  ];
 };
 
 export const obtenerPeriodosPlanillaPDF = ({ turnoId, tipo, mesActivo } = {}) => {
@@ -105,7 +128,10 @@ export const prepararTablaPlanillaPDF = ({
   tipo,
   personal = [],
   incluirCoberturaSM = false,
-  ordenFilas
+  ordenFilas,
+  estadoMensual,
+  turnoId,
+  mesActivo
 }) => {
   const periodosValidos = Array.isArray(periodos) ? periodos : [];
   const nombreParaPDF = crearNombreParaPDF(personal);
@@ -113,7 +139,13 @@ export const prepararTablaPlanillaPDF = ({
     "Sector",
     ...periodosValidos.map((periodo) => obtenerEtiquetaPeriodoPDF(periodo, estrategia))
   ];
-  const cuerpo = obtenerFilasPlanilla(tipo, ordenFilas, planilla).map((filaPlanilla) => [
+  const cuerpo = obtenerFilasPlanillaPDF({
+    estadoMensual,
+    turnoId,
+    mesActivo,
+    tipo,
+    ordenLegacy: ordenFilas
+  }).map((filaPlanilla) => [
     filaPlanilla,
     ...periodosValidos.map((periodo) => {
       const valores = obtenerValoresPeriodoPDF({ planilla, periodo, estrategia });
@@ -267,7 +299,8 @@ export const renderizarCategoriaPlanillaSemanalPDF = ({
   estrategia,
   personal,
   turnoId,
-  mesActivo
+  mesActivo,
+  estadoMensual
 }) => {
   const esEnfermeros = categoria === "enfermero";
   const etiquetaCategoria = esEnfermeros ? "Enfermeros" : "Licenciados";
@@ -277,7 +310,10 @@ export const renderizarCategoriaPlanillaSemanalPDF = ({
     estrategia,
     tipo: categoria,
     personal,
-    ordenFilas: configuracionSectores[categoria].ordenPDF
+    ordenFilas: configuracionSectores[categoria].ordenPDF,
+    estadoMensual,
+    turnoId,
+    mesActivo
   });
   const tituloMes = obtenerNombreMes(mesActivo);
   const turno = obtenerConfiguracionTurno(turnoId).nombre;
@@ -312,7 +348,8 @@ export const crearPlanillaTresDiasPDF = ({
   planillaLicenciados,
   turnoId,
   mesActivo,
-  personal
+  personal,
+  estadoMensual
 }) => {
   const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a3" });
   const { estrategia, periodos } = obtenerPeriodosPlanillaPDF({
@@ -332,7 +369,10 @@ export const crearPlanillaTresDiasPDF = ({
       tipo: "enfermero",
       personal,
       incluirCoberturaSM: true,
-      ordenFilas: ORDEN_PDF_ENFERMEROS_TRES_DIAS
+      ordenFilas: ORDEN_PDF_ENFERMEROS_TRES_DIAS,
+      estadoMensual,
+      turnoId,
+      mesActivo
     });
     const parte = grupos.length > 1 ? ` - Parte ${indice + 1} de ${grupos.length}` : "";
 
@@ -371,7 +411,10 @@ export const crearPlanillaTresDiasPDF = ({
     estrategia: datosLicenciados.estrategia,
     tipo: "licenciado",
     personal,
-    ordenFilas: ORDEN_PDF_LICENCIADOS_NOCHE
+    ordenFilas: ORDEN_PDF_LICENCIADOS_NOCHE,
+    estadoMensual,
+    turnoId,
+    mesActivo
   });
 
   pdf.addPage("a3", "landscape");
@@ -402,7 +445,8 @@ export const crearPlanillaSemanalPDF = ({
   semanas,
   personal = [],
   turnoId,
-  mesActivo
+  mesActivo,
+  estadoMensual
 }) => {
   const semanasActivas = Array.isArray(semanas)
     ? semanas
@@ -418,7 +462,8 @@ export const crearPlanillaSemanalPDF = ({
     estrategia: estrategiaSemanal,
     personal,
     turnoId,
-    mesActivo
+    mesActivo,
+    estadoMensual
   });
 
   pdf.addPage();
@@ -431,7 +476,8 @@ export const crearPlanillaSemanalPDF = ({
     estrategia: estrategiaSemanal,
     personal,
     turnoId,
-    mesActivo
+    mesActivo,
+    estadoMensual
   });
 
   renderizarGruposLibresPDF({ pdf, personal, turnoId, mesActivo });
@@ -460,7 +506,8 @@ export const obtenerDocumentoPlanillaPDF = (...argumentos) => {
     planillaLicenciados: planillaLic,
     turnoId,
     mesActivo,
-    personal = []
+    personal = [],
+    estadoMensual
   } = opciones;
   const estrategiaEnfermeros = obtenerEstrategiaRotacionPlanilla({
     turnoId,
@@ -474,7 +521,8 @@ export const obtenerDocumentoPlanillaPDF = (...argumentos) => {
       planillaLicenciados: planillaLic,
       turnoId,
       mesActivo,
-      personal
+      personal,
+      estadoMensual
     });
     return {
       pdf,
@@ -489,7 +537,8 @@ export const obtenerDocumentoPlanillaPDF = (...argumentos) => {
     semanas: opciones.semanas,
     personal,
     turnoId,
-    mesActivo
+    mesActivo,
+    estadoMensual
   });
   return {
     pdf,
@@ -574,6 +623,50 @@ export const prepararFilasCalendarioPDF = (asignaciones) =>
         item.etiquetaVacio ||
         "Sin cobertura").toUpperCase()
     ]);
+
+export const obtenerAsignacionesCalendarioPDF = ({
+  asignaciones,
+  estadoMensual,
+  turnoId,
+  mesActivo,
+  tipo
+} = {}) => {
+  const asignacionesActuales = Array.isArray(asignaciones) ? asignaciones : [];
+  const configuracionEfectiva = obtenerConfiguracionPlanillaEfectiva({
+    estadoMensual,
+    turno: turnoId,
+    categoria: tipo,
+    mes: mesActivo
+  });
+  if (!configuracionEfectiva || configuracionEfectiva.schemaVersion === null) {
+    return asignacionesActuales;
+  }
+
+  const estructura = resolverEstructuraCalendario({ configuracionEfectiva });
+  const nombresConfigurados = new Set(
+    configuracionEfectiva.filas.map((fila) => normalizar(fila.etiqueta))
+  );
+  const usados = new Set();
+  const ordenadas = estructura.sectores.flatMap((sector) => {
+    const indice = asignacionesActuales.findIndex((asignacion, indiceActual) =>
+      !usados.has(indiceActual) &&
+      normalizar(asignacion?.nombre) === normalizar(sector)
+    );
+    if (indice < 0) return [];
+    usados.add(indice);
+    return [asignacionesActuales[indice]];
+  });
+  asignacionesActuales.forEach((asignacion, indice) => {
+    if (
+      !usados.has(indice) &&
+      asignacion?.tipo !== "divider" &&
+      !nombresConfigurados.has(normalizar(asignacion?.nombre))
+    ) {
+      ordenadas.push(asignacion);
+    }
+  });
+  return ordenadas;
+};
 
 const dibujarListaCompactaPDF = ({
   pdf,
@@ -666,11 +759,24 @@ export const crearCalendarioDiarioPDF = ({
   certificaciones = [],
   personal = [],
   turnoId,
-  mesActivo
+  mesActivo,
+  estadoMensual
 }) => {
   const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  const asignacionesEnfermeros = enfermeros.asignaciones || [];
-  const asignacionesLicenciados = licenciados.asignaciones || [];
+  const asignacionesEnfermeros = obtenerAsignacionesCalendarioPDF({
+    asignaciones: enfermeros.asignaciones,
+    estadoMensual,
+    turnoId,
+    mesActivo,
+    tipo: "enfermero"
+  });
+  const asignacionesLicenciados = obtenerAsignacionesCalendarioPDF({
+    asignaciones: licenciados.asignaciones,
+    estadoMensual,
+    turnoId,
+    mesActivo,
+    tipo: "licenciado"
+  });
   const libresEnfermeros = enfermeros.libres || [];
   const libresLicenciados = licenciados.libres || [];
   const filasEnfermeros = prepararFilasCalendarioPDF(asignacionesEnfermeros);

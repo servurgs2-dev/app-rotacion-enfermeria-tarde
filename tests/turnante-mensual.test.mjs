@@ -145,12 +145,17 @@ probar("35 normalización histórica conserva configuración", () => {
   assert.deepEqual(normalizarEstadoMensual(estado).planillas.enfermeros.posicionesMensualesAdicionales, ["T6"]);
 });
 probar("36 PDF semanal incluye T6 cuando corresponde", () => {
+  const estadoMensual = crearEstadoMensualVacio();
+  estadoMensual.planillas.enfermeros = enfHabilitada;
   const tabla = prepararTablaPlanillaPDF({
     planilla: enfHabilitada,
     periodos: [{ clave: "semana1", desde: new Date(2026, 7, 1), hasta: new Date(2026, 7, 7) }],
     estrategia: { tipo: "semanal" },
     tipo: "enfermero",
-    ordenFilas: configuracionSectores.enfermero.ordenPDF
+    ordenFilas: configuracionSectores.enfermero.ordenPDF,
+    estadoMensual,
+    turnoId: "tarde",
+    mesActivo: "2026-08"
   });
   assert.equal(tabla.cuerpo.at(-1)[0], "T6");
 });

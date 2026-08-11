@@ -43,3 +43,34 @@ export const crearBorradoresConfiguracionPlanilla = ({
 
 export const obtenerBorradorConfiguracionPlanilla = (borradores, categoria) =>
   borradores?.[categoria] ?? null;
+
+export const normalizarOrdenFilasBorrador = (filas = []) =>
+  filas.map((fila, orden) => ({ ...fila, orden }));
+
+export const moverFilaBorrador = (borrador, filaId, direccion) => {
+  if (!borrador || !Array.isArray(borrador.filas)) return borrador;
+  const filasOrdenadas = [...borrador.filas].sort((a, b) => a.orden - b.orden);
+  const indice = filasOrdenadas.findIndex((fila) => fila.filaId === filaId);
+  const desplazamiento = direccion === "arriba" ? -1 : direccion === "abajo" ? 1 : 0;
+  const destino = indice + desplazamiento;
+  if (indice < 0 || desplazamiento === 0 || destino < 0 || destino >= filasOrdenadas.length) {
+    return borrador;
+  }
+  const filasMovidas = [...filasOrdenadas];
+  [filasMovidas[indice], filasMovidas[destino]] = [
+    filasMovidas[destino], filasMovidas[indice]
+  ];
+  return { ...borrador, filas: normalizarOrdenFilasBorrador(filasMovidas) };
+};
+
+export const cambiarActivoFilaBorrador = (borrador, filaId, activo) => {
+  if (!borrador || !Array.isArray(borrador.filas)) return borrador;
+  const indice = borrador.filas.findIndex((fila) => fila.filaId === filaId);
+  if (indice < 0 || borrador.filas[indice].activo === activo) return borrador;
+  return {
+    ...borrador,
+    filas: borrador.filas.map((fila) =>
+      fila.filaId === filaId ? { ...fila, activo } : fila
+    )
+  };
+};

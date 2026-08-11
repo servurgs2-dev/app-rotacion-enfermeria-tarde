@@ -1721,6 +1721,26 @@ const confirmarPreparacionMes = () => {
   setEstadoGuardado("pending");
 };
 
+const actualizarBorradorConfiguracionPlanilla = (categoria, actualizador) => {
+  setPreparacionMes((actual) => {
+    if (actual?.estado !== "lista" || !actual.borradoresConfiguracionPlanilla?.[categoria]) {
+      return actual;
+    }
+    const borradorActual = actual.borradoresConfiguracionPlanilla[categoria];
+    const borradorSiguiente = typeof actualizador === "function"
+      ? actualizador(borradorActual)
+      : actualizador;
+    if (!borradorSiguiente || borradorSiguiente === borradorActual) return actual;
+    return {
+      ...actual,
+      borradoresConfiguracionPlanilla: {
+        ...actual.borradoresConfiguracionPlanilla,
+        [categoria]: borradorSiguiente
+      }
+    };
+  });
+};
+
 return (
   <div className="min-h-screen bg-slate-100 p-4 md:p-6">
   <div className="max-w-6xl mx-auto flex flex-col gap-6">
@@ -2107,6 +2127,7 @@ return (
               <PanelPrepararMes
                 analisis={preparacionMes.analisis}
                 borradoresConfiguracionPlanilla={preparacionMes.borradoresConfiguracionPlanilla}
+                onActualizarBorradorConfiguracionPlanilla={actualizarBorradorConfiguracionPlanilla}
                 error={preparacionMes.error}
                 onCancelar={() => setPreparacionMes(null)}
                 onConfirmar={confirmarPreparacionMes}

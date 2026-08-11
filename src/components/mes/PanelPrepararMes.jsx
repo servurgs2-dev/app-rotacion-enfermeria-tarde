@@ -3,6 +3,7 @@ import ConfiguracionPlanilla from "../configuracion/ConfiguracionPlanilla.jsx";
 function PanelPrepararMes({
   analisis,
   borradoresConfiguracionPlanilla,
+  onActualizarBorradorConfiguracionPlanilla,
   error,
   onCancelar,
   onConfirmar
@@ -94,7 +95,10 @@ function PanelPrepararMes({
 
         <section className="mt-4 rounded-xl border border-slate-200 p-4">
           <h4 className="font-semibold text-slate-900">Estructura de Planilla del mes a preparar</h4>
-          <ConfiguracionPlanilla borradores={borradoresConfiguracionPlanilla} />
+          <ConfiguracionPlanilla
+            borradores={borradoresConfiguracionPlanilla}
+            onActualizarBorrador={onActualizarBorradorConfiguracionPlanilla}
+          />
         </section>
 
         <section className="mt-4 rounded-xl border border-slate-200 p-4 text-sm">

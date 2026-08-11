@@ -9,7 +9,11 @@ import {
   obtenerConfiguracionLegacyPlanilla
 } from "../src/utils/configuracionPlanilla.js";
 import { crearEstadoMensualVacio } from "../src/utils/estadoMensual.js";
-import { crearBorradoresConfiguracionPlanilla } from "../src/utils/plantillasConfiguracionPlanilla.js";
+import {
+  cambiarActivoFilaBorrador,
+  crearBorradoresConfiguracionPlanilla,
+  moverFilaBorrador
+} from "../src/utils/plantillasConfiguracionPlanilla.js";
 
 const firma = (valor) => JSON.stringify(valor);
 const contexto = { turno: "tarde", mes: "2026-08" };
@@ -115,23 +119,179 @@ await probar("8 crear borradores no muta configuracionSectores ni fuente 34A", (
   }), fuenteAntes);
 });
 
+const crearBorradorPrueba = () => crearBorradoresConfiguracionPlanilla({
+  estadoMensual: crearEstadoMensualVacio(), ...contexto
+}).enfermero;
+
+await probar("9 subir mueve exactamente una posición y normaliza orden", () => {
+  const original = crearBorradorPrueba();
+  const fila = original.filas[2];
+  const resultado = moverFilaBorrador(original, fila.filaId, "arriba");
+  assert.equal(resultado.filas[1].filaId, fila.filaId);
+  assert.deepEqual(resultado.filas.map((item) => item.orden),
+    resultado.filas.map((_, indice) => indice));
+  assert.notEqual(resultado, original);
+});
+
+await probar("10 bajar mueve exactamente una posición", () => {
+  const original = crearBorradorPrueba();
+  const fila = original.filas[1];
+  const resultado = moverFilaBorrador(original, fila.filaId, "abajo");
+  assert.equal(resultado.filas[2].filaId, fila.filaId);
+});
+
+await probar("11 los límites no permiten mover fuera de rango", () => {
+  const original = crearBorradorPrueba();
+  assert.equal(moverFilaBorrador(original, original.filas[0].filaId, "arriba"), original);
+  assert.equal(moverFilaBorrador(original, original.filas.at(-1).filaId, "abajo"), original);
+});
+
+await probar("12 reordenar preserva identidad y contenido de cada fila", () => {
+  const original = crearBorradorPrueba();
+  const firmas = new Map(original.filas.map(({ orden: _orden, ...fila }) => [fila.filaId, firma(fila)]));
+  const resultado = moverFilaBorrador(original, original.filas[3].filaId, "arriba");
+  for (const { orden: _orden, ...fila } of resultado.filas) {
+    assert.equal(firma(fila), firmas.get(fila.filaId));
+  }
+});
+
+await probar("13 activar o desactivar sólo modifica activo y conserva la fila", () => {
+  const original = crearBorradorPrueba();
+  const objetivo = original.filas[1];
+  const resultado = cambiarActivoFilaBorrador(original, objetivo.filaId, false);
+  assert.equal(resultado.filas.length, original.filas.length);
+  const modificada = resultado.filas.find((fila) => fila.filaId === objetivo.filaId);
+  assert.equal(modificada.activo, false);
+  const { activo: _antes, ...identidadAntes } = objetivo;
+  const { activo: _despues, ...identidadDespues } = modificada;
+  assert.deepEqual(identidadDespues, identidadAntes);
+  assert.equal(original.filas[1].activo, true);
+});
+
+await probar("14 editar Enfermeros no modifica Licenciados ni el origen", () => {
+  const origen = crearEstadoMensualVacio();
+  const origenAntes = firma(origen);
+  const borradores = crearBorradoresConfiguracionPlanilla({ estadoMensual: origen, ...contexto });
+  const licenciadoAntes = firma(borradores.licenciado);
+  const enfermeroEditado = cambiarActivoFilaBorrador(
+    borradores.enfermero, borradores.enfermero.filas[0].filaId, false
+  );
+  assert.equal(firma(borradores.licenciado), licenciadoAntes);
+  assert.equal(firma(origen), origenAntes);
+  assert.notEqual(enfermeroEditado, borradores.enfermero);
+});
+
+await probar("15 cancelar y recrear vuelve a heredar el origen", () => {
+  const origen = crearEstadoMensualVacio();
+  let transitorio = crearBorradoresConfiguracionPlanilla({ estadoMensual: origen, ...contexto });
+  transitorio = {
+    ...transitorio,
+    enfermero: cambiarActivoFilaBorrador(
+      transitorio.enfermero, transitorio.enfermero.filas[0].filaId, false
+    )
+  };
+  assert.equal(transitorio.enfermero.filas[0].activo, false);
+  transitorio = null;
+  const recreado = crearBorradoresConfiguracionPlanilla({ estadoMensual: origen, ...contexto });
+  assert.equal(transitorio, null);
+  assert.equal(recreado.enfermero.filas[0].activo, true);
+});
+
+await probar("16 T6 y T3 mantienen todas sus identidades al moverlos", () => {
+  const origen = crearEstadoMensualVacio();
+  origen.planillas.enfermeros.posicionesMensualesAdicionales = ["T6"];
+  origen.planillas.licenciados.posicionesMensualesAdicionales = ["T3"];
+  const borradores = crearBorradoresConfiguracionPlanilla({ estadoMensual: origen, ...contexto });
+  for (const [categoria, etiqueta] of [["enfermero", "T6"], ["licenciado", "T3"]]) {
+    const original = borradores[categoria].filas.find((fila) => fila.etiqueta === etiqueta);
+    const movido = moverFilaBorrador(borradores[categoria], original.filaId, "arriba")
+      .filas.find((fila) => fila.filaId === original.filaId);
+    assert.equal(movido.filaId, original.filaId);
+    assert.equal(movido.turnanteId, original.turnanteId);
+    assert.equal(movido.ordinalTurnante, original.ordinalTurnante);
+    assert.equal(movido.tipo, original.tipo);
+  }
+});
+
 const servidor = await createServer({ server: { middlewareMode: true }, appType: "custom" });
 try {
-  const { default: ConfiguracionPlanilla } = await servidor.ssrLoadModule(
+  const moduloConfiguracion = await servidor.ssrLoadModule(
     "/src/components/configuracion/ConfiguracionPlanilla.jsx"
   );
+  const { default: ConfiguracionPlanilla, FilaConfiguracionPlanilla } = moduloConfiguracion;
   const { default: PanelPrepararMes } = await servidor.ssrLoadModule(
     "/src/components/mes/PanelPrepararMes.jsx"
   );
   const borradores = crearBorradoresConfiguracionPlanilla({
     estadoMensual: crearEstadoMensualVacio(), ...contexto
   });
-  await probar("9 primer render del editor controlado no lanza", () => {
-    assert.doesNotThrow(() => renderToStaticMarkup(
+  await probar("17 primer render y controles no lanzan", () => {
+    let html = "";
+    assert.doesNotThrow(() => { html = renderToStaticMarkup(
       React.createElement(ConfiguracionPlanilla, { borradores })
-    ));
+    ); });
+    assert.match(html, />↑</);
+    assert.match(html, />↓</);
+    assert.match(html, /Activo/);
+    assert.match(html, /disabled=""/);
   });
-  await probar("10 editor se muestra dentro de PanelPrepararMes", () => {
+  await probar("18 primera subida y última bajada están deshabilitadas", () => {
+    const html = renderToStaticMarkup(React.createElement(ConfiguracionPlanilla, { borradores }));
+    assert.match(html, /aria-label="Subir REA 1" disabled=""/);
+    assert.equal(html.includes(
+      `aria-label="Bajar ${borradores.enfermero.filas.at(-1).etiqueta}" disabled=""`
+    ), true);
+  });
+  await probar("19 una fila inactiva sigue visible e identificada", () => {
+    const inactivos = {
+      ...borradores,
+      enfermero: cambiarActivoFilaBorrador(
+        borradores.enfermero, borradores.enfermero.filas[0].filaId, false
+      )
+    };
+    const html = renderToStaticMarkup(React.createElement(
+      ConfiguracionPlanilla, { borradores: inactivos }
+    ));
+    assert.match(html, /REA 1/);
+    assert.match(html, /Inactivo/);
+  });
+  await probar("20 click Activo actualiza el harness y permite volver a Activo", () => {
+    let borradorControlado = borradores.enfermero;
+    const filaId = borradorControlado.filas[0].filaId;
+    const onCambiarActivo = (id) => {
+      borradorControlado = cambiarActivoFilaBorrador(
+        borradorControlado,
+        id,
+        !borradorControlado.filas.find((fila) => fila.filaId === id).activo
+      );
+    };
+    const obtenerBotonEstado = () => {
+      const fila = borradorControlado.filas.find((item) => item.filaId === filaId);
+      const elemento = FilaConfiguracionPlanilla({
+        fila, indice: 0, cantidadFilas: borradorControlado.filas.length,
+        onMover: () => {}, onCambiarActivo
+      });
+      const pendientes = [elemento];
+      while (pendientes.length) {
+        const actual = pendientes.shift();
+        if (actual?.type === "button" && ["Activo", "Inactivo"].includes(actual.props.children)) {
+          return actual;
+        }
+        React.Children.forEach(actual?.props?.children, (hijo) => pendientes.push(hijo));
+      }
+      return null;
+    };
+    const activo = obtenerBotonEstado();
+    assert.equal(activo.props.children, "Activo");
+    activo.props.onClick();
+    const inactivo = obtenerBotonEstado();
+    assert.equal(inactivo.props.children, "Inactivo");
+    assert.equal(borradorControlado.filas[0].activo, false);
+    inactivo.props.onClick();
+    assert.equal(obtenerBotonEstado().props.children, "Activo");
+    assert.equal(borradorControlado.filas[0].activo, true);
+  });
+  await probar("21 editor se muestra dentro de PanelPrepararMes", () => {
     const analisis = {
       turnoNombre: "Tarde", mesOrigen: "2026-08", mesDestino: "2026-09",
       revisionDestino: "1", destino: { clasificacion: "vacío" },
@@ -154,7 +314,7 @@ try {
   await servidor.close();
 }
 
-await probar("11 cambiar categoría sólo cambia selección local", async () => {
+await probar("22 cambiar categoría sólo cambia selección local", async () => {
   const fuente = await readFile(new URL(
     "../src/components/configuracion/ConfiguracionPlanilla.jsx", import.meta.url
   ), "utf8");
@@ -162,28 +322,28 @@ await probar("11 cambiar categoría sólo cambia selección local", async () => 
   assert.doesNotMatch(fuente, /setBorradores|setPlantillas/);
 });
 
-await probar("12 no existe sección independiente ni restricción exclusiva", async () => {
+await probar("23 no existe sección independiente ni restricción exclusiva", async () => {
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(app, /titulo="⚙️ Configuración de Planilla"/);
   assert.doesNotMatch(app, /esPerfilSupervision\(perfil\)[\s\S]{0,200}ConfiguracionPlanilla/);
   assert.match(app, /borradoresConfiguracionPlanilla=\{preparacionMes\.borradoresConfiguracionPlanilla\}/);
 });
 
-await probar("13 cancelar descarta el estado transitorio completo", async () => {
+await probar("24 cancelar descarta el estado transitorio completo", async () => {
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
   assert.match(app, /onCancelar=\{\(\) => setPreparacionMes\(null\)\}/);
 });
 
-await probar("14 no existe persistencia del borrador", async () => {
+await probar("25 no existe persistencia, drag and drop ni creación de snapshot", async () => {
   const fuentes = await Promise.all([
     "../src/utils/plantillasConfiguracionPlanilla.js",
     "../src/components/configuracion/ConfiguracionPlanilla.jsx",
     "../src/components/mes/PanelPrepararMes.jsx"
   ].map((ruta) => readFile(new URL(ruta, import.meta.url), "utf8")));
-  assert.doesNotMatch(fuentes.join("\n"), /localStorage|supabase|guardarEstado/i);
+  assert.doesNotMatch(fuentes.join("\n"), /localStorage|supabase|guardarEstado|drag|draggable|crearSnapshotConfiguracionPlanilla/i);
 });
 
-await probar("15 el borrador todavía no llega al constructor de mes", async () => {
+await probar("26 el borrador todavía no llega al constructor de mes", async () => {
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
   assert.match(app, /construirEstadoMesNuevo\(\{\s*analisis: preparacionMes\.analisis\s*\}\)/);
 });

@@ -105,6 +105,7 @@ import {
   validarRespuestaRestaurada
 } from "./utils/restauracionHistorial.js";
 import { reiniciarMesEnEstado } from "./utils/limpiezaSegura.js";
+import { crearBorradoresConfiguracionPlanilla } from "./utils/plantillasConfiguracionPlanilla.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
@@ -1657,6 +1658,11 @@ const iniciarPreparacionMes = async () => {
   setPreparacionMes({
     estado: "lista",
     contexto,
+    borradoresConfiguracionPlanilla: crearBorradoresConfiguracionPlanilla({
+      estadoMensual: origen.estado,
+      turno: turnoId,
+      mes: mesOrigen
+    }),
     analisis: {
       ...analisis,
       turnoNombre: TURNOS[turnoId]?.nombre || turnoId
@@ -2100,6 +2106,7 @@ return (
             }) && (
               <PanelPrepararMes
                 analisis={preparacionMes.analisis}
+                borradoresConfiguracionPlanilla={preparacionMes.borradoresConfiguracionPlanilla}
                 error={preparacionMes.error}
                 onCancelar={() => setPreparacionMes(null)}
                 onConfirmar={confirmarPreparacionMes}

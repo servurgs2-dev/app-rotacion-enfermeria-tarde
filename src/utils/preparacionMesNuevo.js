@@ -20,6 +20,11 @@ import {
   obtenerFilasBasePlanilla,
   quitarTurnanteMensualDeDistribucion
 } from "./turnanteMensual.js";
+import {
+  copiarSnapshotConfiguracionPlanilla,
+  crearSnapshotConfiguracionPlanilla,
+  esSnapshotConfiguracionPlanillaValido
+} from "./configuracionPlanilla.js";
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -90,6 +95,7 @@ export const detectarContenidoMensual = (estado) => {
     const clavesPlanillaConocidas = new Set([
       "semana1", "semana2", "semana3", "semana4", "semana5", "semana6",
       "coberturaLibreSM", "generacionFlexible",
+      "posicionesMensualesAdicionales",
       ...(categoria === "enfermeros" ? ["rotacion3Dias"] : [])
     ]);
     Object.entries(planilla).forEach(([clave, valor]) => {
@@ -125,7 +131,8 @@ export const detectarContenidoMensual = (estado) => {
     }
   }
   const clavesEstadoConocidas = new Set([
-    "personal", "planillas", "calendario", "licencias", "certificaciones"
+    "personal", "planillas", "calendario", "licencias", "certificaciones",
+    "configuracionPlanilla"
   ]);
   Object.entries(estado).forEach(([clave, valor]) => {
     registrar(
@@ -405,6 +412,20 @@ export const analizarPreparacionMesNuevo = ({
     estadoOrigen.certificaciones,
     mesDestino
   );
+  const obtenerPosicionesMensualesAdicionales = (categoria) => {
+    const posiciones = estadoDestino?.planillas?.[categoria]
+      ?.posicionesMensualesAdicionales;
+    return Array.isArray(posiciones) ? [...posiciones] : [];
+  };
+  const copiarSnapshotDestinoValido = (categoria) => {
+    const snapshot = estadoDestino?.configuracionPlanilla?.[categoria];
+    return esSnapshotConfiguracionPlanillaValido(snapshot) &&
+      snapshot.turnoId === turnoId &&
+      snapshot.categoria === categoria &&
+      snapshot.mes === mesDestino
+      ? copiarSnapshotConfiguracionPlanilla(snapshot)
+      : null;
+  };
   return {
     ok: true,
     turnoId,
@@ -420,6 +441,10 @@ export const analizarPreparacionMesNuevo = ({
     },
     licencias,
     certificaciones,
+    configuracionPlanillaDestino: {
+      enfermero: copiarSnapshotDestinoValido("enfermero"),
+      licenciado: copiarSnapshotDestinoValido("licenciado")
+    },
     enfermeros: {
       estrategia: estrategiaEnfermeros,
       filas: filasEnfermeros,
@@ -427,14 +452,18 @@ export const analizarPreparacionMesNuevo = ({
       claveBase: claveBaseEnfermeros,
       analisis: analisisEnfermeros,
       bloquesDestino,
-      sectoresCriticos: configuracionSectores.enfermero.sectoresCriticos
+      sectoresCriticos: configuracionSectores.enfermero.sectoresCriticos,
+      posicionesMensualesAdicionales:
+        obtenerPosicionesMensualesAdicionales("enfermeros")
     },
     licenciados: {
       estrategia: estrategiaLicenciados,
       filas: filasLicenciados,
       base: clonar(baseLic.distribucion),
       claveBase: baseLic.clave,
-      cantidadPersonas: validacionLic.cantidadPersonas
+      cantidadPersonas: validacionLic.cantidadPersonas,
+      posicionesMensualesAdicionales:
+        obtenerPosicionesMensualesAdicionales("licenciados")
     },
     rotacionEnfermerosOrigen: clonar(
       estadoOrigen.planillas?.enfermeros?.rotacion3Dias || {}
@@ -466,6 +495,11 @@ export const construirEstadoMesNuevo = ({ analisis } = {}) => {
     ),
     coberturaLibreSM: {}
   };
+  if (analisis.licenciados.posicionesMensualesAdicionales?.length) {
+    planillaLicBase.posicionesMensualesAdicionales = [
+      ...analisis.licenciados.posicionesMensualesAdicionales
+    ];
+  }
   const coberturaLic = analisis.coberturaLicenciadosBase;
   if (coberturaLic) planillaLicBase.coberturaLibreSM.semana1 = clonar(coberturaLic);
 
@@ -525,9 +559,35 @@ export const construirEstadoMesNuevo = ({ analisis } = {}) => {
     }
   }
 
+  if (analisis.enfermeros.posicionesMensualesAdicionales?.length) {
+    planillaEnfermeros.posicionesMensualesAdicionales = [
+      ...analisis.enfermeros.posicionesMensualesAdicionales
+    ];
+  }
+
+  const configuracionPlanilla = {
+    enfermero: analisis.configuracionPlanillaDestino?.enfermero ||
+      crearSnapshotConfiguracionPlanilla({
+        turno: analisis.turnoId,
+        categoria: "enfermero",
+        mes: analisis.mesDestino,
+        posicionesMensualesAdicionales:
+          analisis.enfermeros.posicionesMensualesAdicionales
+      }),
+    licenciado: analisis.configuracionPlanillaDestino?.licenciado ||
+      crearSnapshotConfiguracionPlanilla({
+        turno: analisis.turnoId,
+        categoria: "licenciado",
+        mes: analisis.mesDestino,
+        posicionesMensualesAdicionales:
+          analisis.licenciados.posicionesMensualesAdicionales
+      })
+  };
+
   const vacio = crearEstadoMensualVacio();
   const estado = normalizarEstadoMensual({
     ...vacio,
+    configuracionPlanilla,
     personal: clonar(analisis.personal),
     planillas: {
       enfermeros: planillaEnfermeros,

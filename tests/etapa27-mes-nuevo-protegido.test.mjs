@@ -525,13 +525,13 @@ await probar("76 persona duplicada bloquea", () => {
 await probar("77 conserva validación entre turnos", () => assert.match(app, /validarPersonasDisponiblesEnOtrosTurnos/));
 await probar("78 confirmación usa una actualización funcional", () => {
   const inicio = app.indexOf("const confirmarPreparacionMes");
-  const fin = app.indexOf("\n\nreturn (", inicio);
+  const fin = inicio + app.slice(inicio).search(/\r?\n\r?\nreturn \(/);
   const bloque = app.slice(inicio, fin);
   assert.equal((bloque.match(/setEstadoPorTurnoMes\(\(prev\)/g) || []).length, 1);
 });
 await probar("79 no usa setters separados", () => {
   const inicio = app.indexOf("const confirmarPreparacionMes");
-  const fin = app.indexOf("\n\nreturn (", inicio);
+  const fin = inicio + app.slice(inicio).search(/\r?\n\r?\nreturn \(/);
   const bloque = app.slice(inicio, fin);
   assert.doesNotMatch(bloque, /setPlanillaEnfermeros|setPlanillaLicenciados|setLicencias|setCertificaciones/);
 });

@@ -38,6 +38,7 @@
     "test:configuracion-planilla": "node tests/configuracion-planilla.test.mjs",
     "test:snapshot-configuracion-planilla": "node tests/snapshot-configuracion-planilla.test.mjs",
     "test:preparacion-snapshot-configuracion-planilla": "node tests/preparacion-snapshot-configuracion-planilla.test.mjs",
+    "test:planilla-configuracion-efectiva": "node tests/planilla-configuracion-efectiva.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

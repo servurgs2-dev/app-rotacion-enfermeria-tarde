@@ -64,17 +64,20 @@ import {
 import { obtenerOpcionesSelectorPlanilla } from "../../utils/opcionesSelectorPlanilla.js";
 import {
   eliminarTurnanteMensual,
-  estaHabilitadoTurnanteMensual,
   habilitarTurnanteMensual,
   obtenerCapacidadNormalPlanilla,
-  obtenerFilasBasePlanilla,
-  obtenerFilasEfectivasPlanilla,
   obtenerPosicionTurnanteMensual,
   validarEliminacionTurnanteMensual
 } from "../../utils/turnanteMensual.js";
+import {
+  obtenerConfiguracionPlanillaEfectiva,
+  obtenerEtiquetasFilasPlanilla,
+  obtenerFilasActivas
+} from "../../utils/configuracionPlanilla.js";
 
 function PlanillaMensual({
   personal,
+  estadoMensual,
   planilla,
   setPlanilla,
   tipo,
@@ -84,14 +87,10 @@ function PlanillaMensual({
   soloLectura = false,
   versionHistoricaActiva = false
 }) {
-  const personalFiltrado = personal.filter((p) => p.categoria === tipo);
-  const idsDuplicados = obtenerIdsPersonalDuplicados(personal);
-  const {
-    sectoresFijos,
-    turnantes,
-    posicionesTurnantes,
-    sectoresCriticos
-  } = configuracionSectores[tipo];
+  const personalSeguro = Array.isArray(personal) ? personal : [];
+  const personalFiltrado = personalSeguro.filter((p) => p.categoria === tipo);
+  const idsDuplicados = obtenerIdsPersonalDuplicados(personalSeguro);
+  const sectoresCriticos = configuracionSectores[tipo]?.sectoresCriticos || [];
   const estrategia = obtenerEstrategiaRotacionPlanilla({
     turnoId,
     tipo,
@@ -129,14 +128,18 @@ function PlanillaMensual({
     versionHistoricaActiva ? "historica" : "actual"
   ].join("|");
 
-  const filasBase = obtenerFilasBasePlanilla({
-    sectoresFijos,
-    turnantes,
-    posicionesTurnantes
-  }, tipo);
-  const filas = obtenerFilasEfectivasPlanilla(filasBase, planilla, tipo);
+  const configuracionEfectiva = obtenerConfiguracionPlanillaEfectiva({
+    estadoMensual,
+    turno: turnoId,
+    categoria: tipo,
+    mes: mesActivo
+  });
+  const filas = obtenerEtiquetasFilasPlanilla(
+    obtenerFilasActivas(configuracionEfectiva?.filas)
+      .sort((filaA, filaB) => filaA.orden - filaB.orden)
+  );
   const posicionTurnanteMensual = obtenerPosicionTurnanteMensual(tipo);
-  const turnanteMensualHabilitado = estaHabilitadoTurnanteMensual(planilla, tipo);
+  const turnanteMensualHabilitado = filas.includes(posicionTurnanteMensual);
   const capacidadNormal = obtenerCapacidadNormalPlanilla(tipo);
 
   useEffect(() => {

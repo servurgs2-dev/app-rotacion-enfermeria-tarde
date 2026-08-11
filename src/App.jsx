@@ -1951,6 +1951,7 @@ return (
     <PlanillaMensual
       soloLectura={modoSoloLecturaEfectiva}
       personal={personal}
+      estadoMensual={mesData}
       planilla={planillaEnfermeros}
       setPlanilla={setPlanillaEnfermeros}
       tipo="enfermero"
@@ -1964,6 +1965,7 @@ return (
     <PlanillaMensual
       soloLectura={modoSoloLecturaEfectiva}
       personal={personal}
+      estadoMensual={mesData}
       planilla={planillaLicenciados}
       setPlanilla={setPlanillaLicenciados}
       tipo="licenciado"

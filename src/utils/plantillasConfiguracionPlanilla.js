@@ -47,6 +47,19 @@ export const obtenerBorradorConfiguracionPlanilla = (borradores, categoria) =>
 export const normalizarOrdenFilasBorrador = (filas = []) =>
   filas.map((fila, orden) => ({ ...fila, orden }));
 
+export const moverFilaBorradorAIndice = (borrador, filaId, indiceDestino) => {
+  if (!borrador || !Array.isArray(borrador.filas)) return borrador;
+  const filasOrdenadas = [...borrador.filas].sort((a, b) => a.orden - b.orden);
+  const indiceOrigen = filasOrdenadas.findIndex((fila) => fila.filaId === filaId);
+  if (indiceOrigen < 0 || !Number.isInteger(indiceDestino)) return borrador;
+  const destino = Math.max(0, Math.min(indiceDestino, filasOrdenadas.length - 1));
+  if (indiceOrigen === destino) return borrador;
+  const filasMovidas = [...filasOrdenadas];
+  const [filaMovida] = filasMovidas.splice(indiceOrigen, 1);
+  filasMovidas.splice(destino, 0, filaMovida);
+  return { ...borrador, filas: normalizarOrdenFilasBorrador(filasMovidas) };
+};
+
 export const moverFilaBorrador = (borrador, filaId, direccion) => {
   if (!borrador || !Array.isArray(borrador.filas)) return borrador;
   const filasOrdenadas = [...borrador.filas].sort((a, b) => a.orden - b.orden);
@@ -56,11 +69,7 @@ export const moverFilaBorrador = (borrador, filaId, direccion) => {
   if (indice < 0 || desplazamiento === 0 || destino < 0 || destino >= filasOrdenadas.length) {
     return borrador;
   }
-  const filasMovidas = [...filasOrdenadas];
-  [filasMovidas[indice], filasMovidas[destino]] = [
-    filasMovidas[destino], filasMovidas[indice]
-  ];
-  return { ...borrador, filas: normalizarOrdenFilasBorrador(filasMovidas) };
+  return moverFilaBorradorAIndice(borrador, filaId, destino);
 };
 
 export const cambiarActivoFilaBorrador = (borrador, filaId, activo) => {

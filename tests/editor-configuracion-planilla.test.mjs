@@ -12,7 +12,8 @@ import { crearEstadoMensualVacio } from "../src/utils/estadoMensual.js";
 import {
   cambiarActivoFilaBorrador,
   crearBorradoresConfiguracionPlanilla,
-  moverFilaBorrador
+  moverFilaBorrador,
+  moverFilaBorradorAIndice
 } from "../src/utils/plantillasConfiguracionPlanilla.js";
 
 const firma = (valor) => JSON.stringify(valor);
@@ -213,6 +214,66 @@ await probar("16 T6 y T3 mantienen todas sus identidades al moverlos", () => {
   }
 });
 
+await probar("17 drag mueve entre índices, extremos y ambas direcciones", () => {
+  const original = crearBorradorPrueba();
+  const fila = original.filas[5];
+  const haciaArriba = moverFilaBorradorAIndice(original, fila.filaId, 2);
+  assert.equal(haciaArriba.filas[2].filaId, fila.filaId);
+  const aPrimera = moverFilaBorradorAIndice(haciaArriba, fila.filaId, 0);
+  assert.equal(aPrimera.filas[0].filaId, fila.filaId);
+  const aUltima = moverFilaBorradorAIndice(aPrimera, fila.filaId, 999);
+  assert.equal(aUltima.filas.at(-1).filaId, fila.filaId);
+  const haciaAbajo = moverFilaBorradorAIndice(original, original.filas[1].filaId, 4);
+  assert.equal(haciaAbajo.filas[4].filaId, original.filas[1].filaId);
+});
+
+await probar("18 drag seguro normaliza y no muta el borrador", () => {
+  const original = crearBorradorPrueba();
+  const antes = firma(original);
+  const misma = moverFilaBorradorAIndice(original, original.filas[2].filaId, 2);
+  const inexistente = moverFilaBorradorAIndice(original, "fila-inexistente", 1);
+  assert.equal(misma, original);
+  assert.equal(inexistente, original);
+  const resultado = moverFilaBorradorAIndice(original, original.filas[5].filaId, 2);
+  assert.deepEqual(resultado.filas.map((fila) => fila.orden),
+    resultado.filas.map((_, indice) => indice));
+  assert.equal(firma(original), antes);
+});
+
+await probar("19 drag sólo cambia orden y conserva estado e identidades", () => {
+  const originalActivo = crearBorradorPrueba();
+  const objetivo = originalActivo.filas.find((fila) => fila.tipo === "turnante");
+  const original = cambiarActivoFilaBorrador(originalActivo, objetivo.filaId, false);
+  const firmaSinOrden = ({ orden: _orden, ...fila }) => firma(fila);
+  const antes = firmaSinOrden(original.filas.find((fila) => fila.filaId === objetivo.filaId));
+  const resultado = moverFilaBorradorAIndice(original, objetivo.filaId, 0);
+  const despues = resultado.filas[0];
+  assert.equal(firmaSinOrden(despues), antes);
+  assert.equal(despues.activo, false);
+});
+
+await probar("20 drag conserva T6/T3 y no cruza categorías", () => {
+  const origen = crearEstadoMensualVacio();
+  origen.planillas.enfermeros.posicionesMensualesAdicionales = ["T6"];
+  origen.planillas.licenciados.posicionesMensualesAdicionales = ["T3"];
+  const borradores = crearBorradoresConfiguracionPlanilla({ estadoMensual: origen, ...contexto });
+  const licenciaAntes = firma(borradores.licenciado);
+  for (const [categoria, etiqueta] of [["enfermero", "T6"], ["licenciado", "T3"]]) {
+    const original = borradores[categoria].filas.find((fila) => fila.etiqueta === etiqueta);
+    const movido = moverFilaBorradorAIndice(borradores[categoria], original.filaId, 0).filas[0];
+    assert.deepEqual({
+      filaId: movido.filaId, tipo: movido.tipo, turnanteId: movido.turnanteId,
+      ordinalTurnante: movido.ordinalTurnante, activo: movido.activo
+    }, {
+      filaId: original.filaId, tipo: original.tipo, turnanteId: original.turnanteId,
+      ordinalTurnante: original.ordinalTurnante, activo: original.activo
+    });
+  }
+  moverFilaBorradorAIndice(borradores.enfermero,
+    borradores.enfermero.filas.at(-1).filaId, 0);
+  assert.equal(firma(borradores.licenciado), licenciaAntes);
+});
+
 const servidor = await createServer({ server: { middlewareMode: true }, appType: "custom" });
 try {
   const moduloConfiguracion = await servidor.ssrLoadModule(
@@ -225,7 +286,7 @@ try {
   const borradores = crearBorradoresConfiguracionPlanilla({
     estadoMensual: crearEstadoMensualVacio(), ...contexto
   });
-  await probar("17 primer render y controles no lanzan", () => {
+  await probar("21 primer render y controles no lanzan", () => {
     let html = "";
     assert.doesNotThrow(() => { html = renderToStaticMarkup(
       React.createElement(ConfiguracionPlanilla, { borradores })
@@ -233,6 +294,7 @@ try {
     assert.match(html, />↑</);
     assert.match(html, />↓</);
     assert.match(html, /Activo/);
+    assert.match(html, /aria-label="Arrastrar REA 1"/);
     assert.match(html, /disabled=""/);
   });
   await probar("18 primera subida y última bajada están deshabilitadas", () => {
@@ -334,13 +396,18 @@ await probar("24 cancelar descarta el estado transitorio completo", async () => 
   assert.match(app, /onCancelar=\{\(\) => setPreparacionMes\(null\)\}/);
 });
 
-await probar("25 no existe persistencia, drag and drop ni creación de snapshot", async () => {
+await probar("29 drag usa la integración actual sin persistencia ni snapshots", async () => {
   const fuentes = await Promise.all([
     "../src/utils/plantillasConfiguracionPlanilla.js",
     "../src/components/configuracion/ConfiguracionPlanilla.jsx",
     "../src/components/mes/PanelPrepararMes.jsx"
   ].map((ruta) => readFile(new URL(ruta, import.meta.url), "utf8")));
-  assert.doesNotMatch(fuentes.join("\n"), /localStorage|supabase|guardarEstado|drag|draggable|crearSnapshotConfiguracionPlanilla/i);
+  const fuente = fuentes.join("\n");
+  assert.doesNotMatch(fuente, /localStorage|supabase|guardarEstado|crearSnapshotConfiguracionPlanilla/i);
+  assert.match(fuente, /DragDropProvider/);
+  assert.match(fuente, /useSortable\(\{[\s\S]*?id: fila\.filaId/);
+  assert.match(fuente, /handleRef/);
+  assert.match(fuente, /moverFilaBorradorAIndice/);
 });
 
 await probar("26 el borrador validado llega al constructor de mes", async () => {

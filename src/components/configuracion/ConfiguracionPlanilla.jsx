@@ -1,8 +1,11 @@
 import { useMemo, useState } from "react";
+import { DragDropProvider } from "@dnd-kit/react";
+import { isSortable, useSortable } from "@dnd-kit/react/sortable";
 import {
   CATEGORIAS_PLANTILLA_PLANILLA,
   cambiarActivoFilaBorrador,
   moverFilaBorrador,
+  moverFilaBorradorAIndice,
   obtenerBorradorConfiguracionPlanilla
 } from "../../utils/plantillasConfiguracionPlanilla.js";
 
@@ -16,12 +19,22 @@ export function FilaConfiguracionPlanilla({
   indice,
   cantidadFilas,
   onMover,
-  onCambiarActivo
+  onCambiarActivo,
+  filaRef,
+  handleRef,
+  arrastrando = false
 }) {
   return (
-    <tr className={fila.activo ? "" : "bg-slate-50 opacity-70"}>
+    <tr ref={filaRef} className={`${fila.activo ? "" : "bg-slate-50 opacity-70"} ${
+      arrastrando ? "relative z-10 bg-blue-50 shadow-md" : ""
+    }`}>
       <td className="px-3 py-3 font-medium text-slate-700">{fila.orden + 1}</td>
-      <td className="px-3 py-3"><div className="flex gap-1">
+      <td className="px-3 py-3"><div className="flex items-center gap-1">
+        <button ref={handleRef} type="button" aria-label={`Arrastrar ${fila.etiqueta}`}
+          title="Arrastrar para reordenar" style={{ touchAction: "none" }}
+          className="cursor-grab rounded border border-slate-300 bg-slate-50 px-2 py-1 text-slate-600 active:cursor-grabbing">
+          ☰
+        </button>
         <button type="button" aria-label={`Subir ${fila.etiqueta}`} disabled={indice === 0}
           onClick={() => onMover(fila.filaId, "arriba")}
           className="rounded border px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40">↑</button>
@@ -49,6 +62,19 @@ export function FilaConfiguracionPlanilla({
   );
 }
 
+function FilaOrdenableConfiguracionPlanilla(props) {
+  const { fila, indice, categoria } = props;
+  const { ref, handleRef, isDragging } = useSortable({
+    id: fila.filaId,
+    index: indice,
+    group: categoria,
+    type: "fila-planilla",
+    accept: "fila-planilla"
+  });
+  return <FilaConfiguracionPlanilla {...props} filaRef={ref} handleRef={handleRef}
+    arrastrando={isDragging} />;
+}
+
 function ConfiguracionPlanilla({ borradores = {}, onActualizarBorrador }) {
   const [categoria, setCategoria] = useState("enfermero");
   const borrador = obtenerBorradorConfiguracionPlanilla(borradores, categoria);
@@ -57,6 +83,12 @@ function ConfiguracionPlanilla({ borradores = {}, onActualizarBorrador }) {
     [borrador]
   );
   const actualizar = (actualizador) => onActualizarBorrador?.(categoria, actualizador);
+  const finalizarArrastre = (evento) => {
+    if (evento.canceled || !isSortable(evento.operation.source)) return;
+    const origen = evento.operation.source;
+    if (origen.group !== categoria || origen.initialGroup !== categoria) return;
+    actualizar((actual) => moverFilaBorradorAIndice(actual, origen.id, origen.index));
+  };
 
   return (
     <div>
@@ -80,6 +112,7 @@ function ConfiguracionPlanilla({ borradores = {}, onActualizarBorrador }) {
           </select>
         </label>
       </div>
+      <DragDropProvider onDragEnd={finalizarArrastre}>
       <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -92,7 +125,8 @@ function ConfiguracionPlanilla({ borradores = {}, onActualizarBorrador }) {
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
             {filas.map((fila, indice) => (
-              <FilaConfiguracionPlanilla key={fila.filaId} fila={fila} indice={indice}
+              <FilaOrdenableConfiguracionPlanilla key={fila.filaId} fila={fila} indice={indice}
+                categoria={categoria}
                 cantidadFilas={filas.length}
                 onMover={(filaId, direccion) => actualizar(
                   (actual) => moverFilaBorrador(actual, filaId, direccion)
@@ -109,6 +143,7 @@ function ConfiguracionPlanilla({ borradores = {}, onActualizarBorrador }) {
           </tbody>
         </table>
       </div>
+      </DragDropProvider>
     </div>
   );
 }

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   crearRegistroNoDisponible,
+  excluirAusenciasOperativasNoDisponiblesDeAsignaciones,
   MOTIVOS_NO_DISPONIBLE,
+  OPCIONES_MOTIVO_NO_DISPONIBLE,
   obtenerEtiquetaMotivoNoDisponible,
   obtenerNoDisponiblesDelDia,
   reemplazarRegistroNoDisponible
@@ -293,6 +295,58 @@ probar("28 el PDF usa la etiqueta abreviada sin agregar tablas", () => {
 probar("29 el panel diario presenta motivos sin tocar Planilla semanal", () => {
   assert.match(calendarioFuente, /PanelNoDisponible/);
   assert.doesNotMatch(panelFuente, /planilla|generarRotacion/i);
+});
+probar("30 Adhesión a PARO es opción manual exacta y Cambio con otro turno no lo es", () => {
+  assert.equal(MOTIVOS_NO_DISPONIBLE.ADHESION_PARO, "adhesion_paro");
+  assert.deepEqual(
+    OPCIONES_MOTIVO_NO_DISPONIBLE.find((opcion) => opcion.valor === "adhesion_paro"),
+    { valor: "adhesion_paro", etiqueta: "Adhesión a PARO" }
+  );
+  assert.equal(
+    OPCIONES_MOTIVO_NO_DISPONIBLE.some(
+      (opcion) => opcion.valor === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO
+    ),
+    false
+  );
+  assert.equal(MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO, "cambio_otro_turno");
+});
+probar("31 Adhesión a PARO es ausencia operativa simple sin __EMPTY__", () => {
+  const registro = crearRegistroNoDisponible({
+    ...base,
+    motivo: MOTIVOS_NO_DISPONIBLE.ADHESION_PARO
+  }).registro;
+  const [resultado] = excluirAusenciasOperativasNoDisponiblesDeAsignaciones({
+    asignaciones: [{ nombre: "REA 1", enfermero: persona, vacioManual: false }],
+    registros: [registro],
+    personal
+  });
+  assert.equal(registro.motivo, "adhesion_paro");
+  assert.equal(obtenerEtiquetaMotivoNoDisponible(registro), "Adhesión a PARO");
+  assert.equal(resultado.enfermero, null);
+  assert.equal(resultado.excluidoPorNoDisponible, true);
+  assert.equal(resultado.vacioManual, false);
+  assert.equal(resultado.cambioManualProtegido, undefined);
+  assert.equal(JSON.stringify(resultado).includes("__EMPTY__"), false);
+});
+probar("32 Otro motivo conserva texto y libera sin __EMPTY__ ni protección manual", () => {
+  const registro = crearRegistroNoDisponible({
+    ...base,
+    motivo: MOTIVOS_NO_DISPONIBLE.OTRO,
+    detalle: "Ausencia informada"
+  }).registro;
+  const [resultado] = excluirAusenciasOperativasNoDisponiblesDeAsignaciones({
+    asignaciones: [{ nombre: "REA 1", enfermero: persona, vacioManual: false }],
+    registros: [registro],
+    personal
+  });
+  assert.equal(registro.motivo, "otro");
+  assert.equal(registro.detalle, "Ausencia informada");
+  assert.equal(obtenerEtiquetaMotivoNoDisponible(registro), "Otro motivo");
+  assert.equal(resultado.enfermero, null);
+  assert.equal(resultado.excluidoPorNoDisponible, true);
+  assert.equal(resultado.vacioManual, false);
+  assert.equal(resultado.cambioManualProtegido, undefined);
+  assert.equal(JSON.stringify(resultado).includes("__EMPTY__"), false);
 });
 probar("30 no existe SQL nuevo", () => {
   const helper = fs.readFileSync(

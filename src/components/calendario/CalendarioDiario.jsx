@@ -28,7 +28,11 @@ import {
   referenciaCorrespondeAPersona,
   resolverPersonaDesdeReferencia
 } from "../../utils/referenciasPersonas.js";
-import { aplicarMovimientosCalendario } from "../../utils/cambiosCalendario.js";
+import {
+  aplicarMovimientosCalendario,
+  crearMovimientosEntreFilasCalendario
+} from "../../utils/cambiosCalendario.js";
+import { construirAsignacionesDiariasCalendario } from "../../utils/pipelineCalendarioDiario.js";
 import {
   agregarExtraALista,
   configurarTipoExtra,
@@ -64,11 +68,15 @@ import {
 } from "../../utils/ausenciasCalendario.js";
 import {
   aplicarCoberturaLibreSaludMental,
-  obtenerSectorSaludMental,
+  SECTOR_ID_SALUD_MENTAL,
   obtenerTitularSaludMental,
   puedeCubrirLibreSaludMental,
   resolverCoberturaSaludMental
 } from "../../utils/coberturaSaludMental.js";
+import { aplicarPrioridadGeneralPorSectorId } from "../../utils/prioridadesSectores.js";
+import {
+  resolverClaveNormalizadaParaFila
+} from "../../utils/resolucionIdentidadesPlanilla.js";
 import { crearResumenTurno } from "../../utils/resumenTurno.js";
 import {
   cerrarFechaCategoria,
@@ -89,7 +97,10 @@ import {
   redistribuirPorBoxes,
   validarContextoRedistribucion
 } from "../../utils/redistribucionEnfermeros.js";
-import { aplicarPrioridadCoberturaParejas } from "../../utils/coberturaParejasEnfermeros.js";
+import {
+  aplicarPrioridadCoberturaParejas,
+  PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
+} from "../../utils/coberturaParejasEnfermeros.js";
 import {
   formatearAlertaSectoresCriticos,
   obtenerSectoresCriticosSinCobertura
@@ -107,6 +118,7 @@ import {
 } from "../../utils/cambioOtroTurno.js";
 import {
   crearRegistroNoDisponible,
+  excluirAusenciasOperativasNoDisponiblesDeAsignaciones,
   MOTIVOS_NO_DISPONIBLE,
   obtenerEtiquetaTurnoDestino,
   obtenerNoDisponiblesDelDia,
@@ -174,6 +186,7 @@ function CalendarioDiario({
 
 const {
   cambiosDia = {},
+  procedenciaCambiosDia = {},
   cambiosParoDia = {},
   noDisponibles = {},
   extras = {},
@@ -200,6 +213,8 @@ const {
     sectoresCriticos = [],
     sectoresBajaPrioridad = [],
     prioridadSectores = [],
+    sectoresCriticosIds = [],
+    prioridadSectoresIds = [],
     sectoresParo = [],
     prioridadesParo = {},
     ordenVisual = []
@@ -219,6 +234,7 @@ const {
     ordenVisualLegacy: ordenVisual
   });
   const {
+    filasConfiguracion,
     filas,
     turnantes: turnantesEfectivos,
     sectores: sectoresEfectivos,
@@ -641,41 +657,34 @@ const abrirFormularioExtraLibre = (persona) => {
 };
 
 const asignacionOrdenada = (() => {
-let asignacionCompleta = filasCalendario.map((fila) => {
-  const override = cambiosDia[keyDia]?.[normalizar(fila)];
-
-  let enfermero;
-
-  if (override && override !== "__EMPTY__") {
-    enfermero = resolverPersonaDesdeReferencia(
-      override,
-      [...personalFiltrado, ...extrasDia]
-    );
-  } else if (!override) {
-    enfermero = resolverPersonaDesdeReferencia(
-      planillaPeriodoEfectiva[fila],
-      personal
-    );
-  }
-
-  return {
-    nombre: fila,
-    enfermero: enfermero || null,
-    vacioManual: override === "__EMPTY__",
-    tipo: turnantesEfectivos.includes(fila) ? "turnante" : "sector"
-  };
+let asignacionCompleta = construirAsignacionesDiariasCalendario({
+  filasCalendario,
+  filasConfiguracion,
+  planillaPeriodoEfectiva,
+  cambiosDia: cambiosDia[keyDia],
+  procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
+  personal,
+  personalDisponibleParaOverrides: [...personalFiltrado, ...extrasDia],
+  turnantes: turnantesEfectivos
 });
 
 asignacionCompleta = excluirCertificadosDeAsignaciones({
   asignaciones: asignacionCompleta,
   estaCertificada: estaCertificadoHoy
 });
+asignacionCompleta = excluirAusenciasOperativasNoDisponiblesDeAsignaciones({
+  asignaciones: asignacionCompleta,
+  registros: noDisponibles[keyDia],
+  personal: personalFiltrado
+});
 
-const sectorSaludMental = obtenerSectorSaludMental(tipo);
+const filaSaludMental = filasConfiguracion.find(
+  (fila) => fila.tipo === "sector" && fila.sectorId === SECTOR_ID_SALUD_MENTAL
+);
 const titularSaludMental = obtenerTitularSaludMental({
   planillaSemana: planillaPeriodo,
   personal: personalFiltrado,
-  tipo
+  fila: filaSaludMental
 });
 const coberturaSaludMental = resolverCoberturaSaludMental({
   coberturas: coberturasSaludMental,
@@ -685,7 +694,7 @@ const coberturaSaludMental = resolverCoberturaSaludMental({
 const cambiosActivosDia = cambiosActivos[keyDia] || {};
 const existeCambioManualSaludMental = Object.hasOwn(
   cambiosActivosDia,
-  normalizar(sectorSaludMental)
+  resolverClaveNormalizadaParaFila({ distribucion: cambiosActivosDia, fila: filaSaludMental })
 );
 const coberturaDisponible = puedeCubrirLibreSaludMental({
   persona: coberturaSaludMental,
@@ -698,7 +707,7 @@ const coberturaDisponible = puedeCubrirLibreSaludMental({
 
 asignacionCompleta = aplicarCoberturaLibreSaludMental({
   asignaciones: asignacionCompleta,
-  sector: sectorSaludMental,
+  sectorId: SECTOR_ID_SALUD_MENTAL,
   titular: titularSaludMental,
   cobertura: coberturaSaludMental,
   titularLibre: Boolean(
@@ -724,7 +733,10 @@ const resolucionOperativa = resolverTurnantesYCoberturasOperativas({
     tipo === "enfermero" && !esDiaParo
       ? aplicarPrioridadCoberturaParejas({
           asignaciones: sectores,
+          distribucionBase: planillaPeriodo,
+          personal,
           cambiosDia: cambiosDia[keyDia],
+          procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
           esPersonaDisponible: puedeAplicarseCoberturaDirecta,
           estadoMensual,
           turno: turnoActivo,
@@ -753,25 +765,10 @@ let asignacionBase = resolucionOperativa.asignaciones;
       }
     });
   } else {
-    prioridadSectores.forEach((sector, indiceSector) => {
-      const destino = asignacionBase.find(
-        (item) => normalizar(item.nombre) === normalizar(sector)
-      );
-
-      if (!destino || destino.enfermero || destino.vacioManual) return;
-
-      for (let indiceDonante = prioridadSectores.length - 1; indiceDonante > indiceSector; indiceDonante--) {
-        const donante = asignacionBase.find(
-          (item) => normalizar(item.nombre) === normalizar(prioridadSectores[indiceDonante])
-        );
-
-        if (donante?.enfermero && !estaAusente(donante.enfermero)) {
-          destino.enfermero = donante.enfermero;
-          donante.enfermero = null;
-          donante.sacrificado = true;
-          break;
-        }
-      }
+    asignacionBase = aplicarPrioridadGeneralPorSectorId({
+      asignaciones: asignacionBase,
+      prioridadSectorIds: prioridadSectoresIds,
+      esPersonaDisponible: (persona) => !estaAusente(persona)
     });
   }
 
@@ -1648,7 +1645,8 @@ useEffect(() => {
     : asignacionOrdenada;
   const sectoresCriticosSinCobertura = obtenerSectoresCriticosSinCobertura({
     asignaciones: asignacionesMostradas,
-    sectoresCriticos: datosResumenTurno.sectoresCriticos
+    sectoresCriticosIds: esDiaParo ? [] : sectoresCriticosIds,
+    sectoresCriticosLegacy: esDiaParo ? sectoresCriticos : []
   });
   const alertaSectoresCriticos = formatearAlertaSectoresCriticos(
     sectoresCriticosSinCobertura
@@ -1861,6 +1859,18 @@ useEffect(() => {
             ...cambiosPrevios,
             [keyDia]: nuevo
           },
+          ...(claveCambiosActivos === "cambiosDia" ? {
+            procedenciaCambiosDia: {
+              ...(prev.procedenciaCambiosDia || {}),
+              [keyDia]: Object.fromEntries(
+                Object.entries(prev.procedenciaCambiosDia?.[keyDia] || {}).filter(
+                  ([clave]) => !movimientosReales.some(
+                    (movimiento) => normalizar(movimiento.sector) === normalizar(clave)
+                  )
+                )
+              )
+            }
+          } : {}),
           asistenciaDia: quitarPersonasDeSinAsignar({
             asistenciaDia: prev.asistenciaDia,
             fecha: keyDia,
@@ -1930,10 +1940,10 @@ useEffect(() => {
       return;
     }
 
-    guardarMovimientos([
-      { sector: item.nombre, persona: seleccionado.enfermero },
-      { sector: seleccionado.nombre, persona: item.enfermero }
-    ]);
+    guardarMovimientos(crearMovimientosEntreFilasCalendario({
+      seleccionado,
+      destino: item
+    }));
 
     setSeleccionado(null);
   };
@@ -2032,6 +2042,15 @@ useEffect(() => {
         cambiosDia: {
           ...(prev.cambiosDia || {}),
           [keyDia]: redistribucion.cambios
+        },
+        procedenciaCambiosDia: {
+          ...(prev.procedenciaCambiosDia || {}),
+          [keyDia]: Object.fromEntries(
+            Object.keys(redistribucion.cambios).map((clave) => [
+              clave,
+              PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
+            ])
+          )
         }
       };
     });

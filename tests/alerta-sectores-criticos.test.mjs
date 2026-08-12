@@ -13,12 +13,16 @@ const probar = (nombre, prueba) => {
   console.log(`✓ ${nombre}`);
 };
 
-const criticos = configuracionSectores.enfermero.sectoresCriticos;
+const criticos = configuracionSectores.enfermero.sectoresCriticosIds;
+const ids = { "REA 1": "rea_1", SM: "salud_mental", "REA 2": "rea_2", "EXPLORA 2": "explora_2", "SILLON 2": "sillon_2", "PRE INT 2": "pre_int_2" };
+const conIdentidad = (asignaciones) => asignaciones.map((fila) => ({
+  tipo: "sector", sectorId: ids[fila.nombre] || fila.sectorId, etiqueta: fila.nombre, ...fila
+}));
 const persona = { id: "p1", nombre: "Persona A" };
 const detectar = (asignaciones, lista = criticos) =>
   obtenerSectoresCriticosSinCobertura({
-    asignaciones,
-    sectoresCriticos: lista
+    asignaciones: conIdentidad(asignaciones),
+    sectoresCriticosIds: lista
   });
 const calendario = fs.readFileSync(
   new URL("../src/components/calendario/CalendarioDiario.jsx", import.meta.url),
@@ -30,7 +34,7 @@ const resumen = fs.readFileSync(
 );
 
 probar("1 REA 1 vacío genera alerta usando la configuración real", () => {
-  assert.ok(criticos.includes("REA 1"));
+  assert.ok(criticos.includes("rea_1"));
   assert.deepEqual(detectar([{ nombre: "REA 1", enfermero: null }]), ["REA 1"]);
 });
 probar("2 un sector crítico cubierto no genera alerta", () => {
@@ -48,7 +52,7 @@ probar("3 dos críticos vacíos aparecen en la misma alerta", () => {
 });
 ["REA 2", "EXPLORA 2", "SILLON 2", "PRE INT 2"].forEach((sector, indice) => {
   probar(`${4 + indice} ${sector} vacío no genera alerta`, () => {
-    assert.equal(criticos.includes(sector), false);
+    assert.equal(criticos.includes(ids[sector]), false);
     assert.deepEqual(detectar([{ nombre: sector, enfermero: null }]), []);
   });
 });
@@ -56,7 +60,7 @@ probar("8 una posición T vacía no genera alerta", () => {
   assert.deepEqual(detectar([{ nombre: "T1", tipo: "turnante", enfermero: null }]), []);
 });
 probar("9 SIN ASIGNAR no genera alerta", () => {
-  assert.deepEqual(detectar([{ nombre: "SIN ASIGNAR", enfermero: null }], ["SIN ASIGNAR"]), []);
+  assert.deepEqual(detectar([{ nombre: "SIN ASIGNAR", enfermero: null }], ["sin_asignar"]), []);
 });
 probar("10 la alerta se evalúa después de asignacionesMostradas", () => {
   const final = calendario.indexOf("const asignacionesMostradas");

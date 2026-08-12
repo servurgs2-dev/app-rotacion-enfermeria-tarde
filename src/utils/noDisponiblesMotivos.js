@@ -5,6 +5,7 @@ import {
 import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
 import {
   crearReferenciaPersona,
+  referenciaCorrespondeAPersona,
   resolverPersonaDesdeReferencia
 } from "./referenciasPersonas.js";
 
@@ -12,16 +13,13 @@ export const MOTIVOS_NO_DISPONIBLE = Object.freeze({
   FALTA_CON_AVISO: "falta_con_aviso",
   CAMBIO_OTRO_TURNO: "cambio_otro_turno",
   SUPERVISION_OTRO_TURNO: "supervision_otro_turno",
+  ADHESION_PARO: "adhesion_paro",
   CERTIFICACION_DIA: "certificacion_dia",
   OTRO: "otro"
 });
 
 export const OPCIONES_MOTIVO_NO_DISPONIBLE = Object.freeze([
   { valor: MOTIVOS_NO_DISPONIBLE.FALTA_CON_AVISO, etiqueta: "Falta con aviso" },
-  {
-    valor: MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO,
-    etiqueta: "Cambio con funcionario de otro turno"
-  },
   {
     valor: MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO,
     etiqueta: "Supervisión solicitó otro turno"
@@ -30,6 +28,7 @@ export const OPCIONES_MOTIVO_NO_DISPONIBLE = Object.freeze([
     valor: MOTIVOS_NO_DISPONIBLE.CERTIFICACION_DIA,
     etiqueta: "Certificación por el día"
   },
+  { valor: MOTIVOS_NO_DISPONIBLE.ADHESION_PARO, etiqueta: "Adhesión a PARO" },
   { valor: MOTIVOS_NO_DISPONIBLE.OTRO, etiqueta: "Otro motivo" }
 ]);
 
@@ -37,6 +36,7 @@ const ETIQUETAS = Object.freeze({
   [MOTIVOS_NO_DISPONIBLE.FALTA_CON_AVISO]: "Falta con aviso",
   [MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO]: "Cambio con otro turno",
   [MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO]: "Supervisión solicitó otro turno",
+  [MOTIVOS_NO_DISPONIBLE.ADHESION_PARO]: "Adhesión a PARO",
   [MOTIVOS_NO_DISPONIBLE.OTRO]: "Otro motivo"
 });
 
@@ -44,6 +44,7 @@ const ETIQUETAS_BREVES = Object.freeze({
   [MOTIVOS_NO_DISPONIBLE.FALTA_CON_AVISO]: "Falta con aviso",
   [MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO]: "Cambio de turno",
   [MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO]: "Supervisión",
+  [MOTIVOS_NO_DISPONIBLE.ADHESION_PARO]: "Adhesión a PARO",
   [MOTIVOS_NO_DISPONIBLE.OTRO]: "Otro motivo"
 });
 
@@ -72,7 +73,7 @@ export const validarDatosNoDisponible = ({
   detalle,
   turnoDestino
 } = {}) => {
-  if (!OPCIONES_MOTIVO_NO_DISPONIBLE.some((opcion) => opcion.valor === motivo)) {
+  if (!Object.values(MOTIVOS_NO_DISPONIBLE).includes(motivo)) {
     return "Seleccioná un motivo.";
   }
   if (motivo === MOTIVOS_NO_DISPONIBLE.OTRO && !texto(detalle)) {
@@ -149,6 +150,28 @@ export const reemplazarRegistroNoDisponible = ({
   });
   return reemplazado ? resultado : [...resultado, registro];
 };
+
+const MOTIVOS_AUSENCIA_OPERATIVA_SIMPLE = new Set([
+  MOTIVOS_NO_DISPONIBLE.FALTA_CON_AVISO,
+  MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO,
+  MOTIVOS_NO_DISPONIBLE.ADHESION_PARO,
+  MOTIVOS_NO_DISPONIBLE.OTRO
+]);
+
+export const excluirAusenciasOperativasNoDisponiblesDeAsignaciones = ({
+  asignaciones = [],
+  registros = [],
+  personal = []
+} = {}) => (Array.isArray(asignaciones) ? asignaciones : []).map((asignacion) => {
+  const ausenciaOperativa = asignacion?.enfermero && (Array.isArray(registros) ? registros : []).some(
+    (registro) =>
+      MOTIVOS_AUSENCIA_OPERATIVA_SIMPLE.has(registro?.motivo) &&
+      referenciaCorrespondeAPersona(registro, asignacion.enfermero, personal)
+  );
+  return ausenciaOperativa
+    ? { ...asignacion, enfermero: null, excluidoPorNoDisponible: true }
+    : asignacion;
+});
 
 const certificacionVigente = (certificacion, fecha) =>
   esObjeto(certificacion) &&

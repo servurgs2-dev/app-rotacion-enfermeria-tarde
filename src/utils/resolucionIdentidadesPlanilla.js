@@ -3,6 +3,7 @@ import {
   obtenerConfiguracionPlanillaEfectiva,
   obtenerFilasActivas
 } from "./configuracionPlanilla.js";
+import { normalizar } from "./texto.js";
 
 const tieneTexto = (valor) => typeof valor === "string" && valor.trim().length > 0;
 const esDistribucion = (valor) => Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -53,6 +54,17 @@ export const resolverClaveDistribucionParaFila = ({ distribucion, fila } = {}) =
   }
   for (const alias of clavesHistoricasFila(fila)) {
     if (alias !== fila.etiqueta && Object.hasOwn(distribucion, alias)) return alias;
+  }
+  return null;
+};
+
+export const resolverClaveNormalizadaParaFila = ({ distribucion, fila } = {}) => {
+  if (!esDistribucion(distribucion) || !fila) return null;
+  const candidatas = [fila.etiqueta, ...clavesHistoricasFila(fila)]
+    .filter(tieneTexto)
+    .map(normalizar);
+  for (const candidata of [...new Set(candidatas)]) {
+    if (Object.hasOwn(distribucion, candidata)) return candidata;
   }
   return null;
 };

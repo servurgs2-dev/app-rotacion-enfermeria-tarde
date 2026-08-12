@@ -120,11 +120,14 @@ export const esDistribucionPorBoxes = (cambiosFecha = {}) =>
 
 export const quitarRedistribucionFecha = (calendario = {}, fecha) => {
   const cambiosDia = { ...(calendario.cambiosDia || {}) };
+  const procedenciaCambiosDia = { ...(calendario.procedenciaCambiosDia || {}) };
   delete cambiosDia[fecha];
+  delete procedenciaCambiosDia[fecha];
 
   return {
     ...calendario,
-    cambiosDia
+    cambiosDia,
+    procedenciaCambiosDia
   };
 };
 

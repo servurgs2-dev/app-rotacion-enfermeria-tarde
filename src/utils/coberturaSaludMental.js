@@ -3,13 +3,13 @@ import {
   personasCompartenIdentidad
 } from "./identidadPersonas.js";
 import { resolverPersonaDesdeReferencia } from "./referenciasPersonas.js";
+import { resolverClaveDistribucionParaFila } from "./resolucionIdentidadesPlanilla.js";
 
-export const obtenerSectorSaludMental = (tipo) =>
-  tipo === "enfermero" ? "SM" : "Salud Mental";
+export const SECTOR_ID_SALUD_MENTAL = "salud_mental";
 
-export const obtenerTitularSaludMental = ({ planillaSemana, personal, tipo }) =>
+export const obtenerTitularSaludMental = ({ planillaSemana, personal, fila }) =>
   resolverPersonaDesdeReferencia(
-    planillaSemana?.[obtenerSectorSaludMental(tipo)],
+    planillaSemana?.[resolverClaveDistribucionParaFila({ distribucion: planillaSemana, fila })],
     personal
   );
 
@@ -52,7 +52,7 @@ export const puedeCubrirLibreSaludMental = ({
 
 export const aplicarCoberturaLibreSaludMental = ({
   asignaciones,
-  sector,
+  sectorId = SECTOR_ID_SALUD_MENTAL,
   titular,
   cobertura,
   titularLibre,
@@ -61,17 +61,16 @@ export const aplicarCoberturaLibreSaludMental = ({
 }) => {
   const base = Array.isArray(asignaciones) ? asignaciones : [];
   if (
-    !sector ||
     !titular ||
     !cobertura ||
     !titularLibre ||
     !coberturaDisponible ||
     existeCambioManual ||
-    !base.some((asignacion) => asignacion?.nombre === sector)
+    !base.some((asignacion) => asignacion?.sectorId === sectorId)
   ) return base;
 
   return base.map((asignacion) => {
-    if (asignacion?.nombre === sector) {
+    if (asignacion?.sectorId === sectorId) {
       return { ...asignacion, enfermero: cobertura, coberturaLibreSM: true };
     }
     if (personasCompartenIdentidad(asignacion?.enfermero, cobertura)) {

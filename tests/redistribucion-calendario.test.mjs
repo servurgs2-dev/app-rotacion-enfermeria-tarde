@@ -358,7 +358,7 @@ probar("59 la prioridad por parejas ocurre antes de sacrificar sectores", () => 
   );
   assert.ok(
     calendario.indexOf("const resolucionOperativa = resolverTurnantesYCoberturasOperativas") <
-    calendario.indexOf("prioridadSectores.forEach")
+    calendario.indexOf("asignacionBase = aplicarPrioridadGeneralPorSectorId")
   );
 });
 probar("60 un sector principal cubierto no mueve la pareja", () => {

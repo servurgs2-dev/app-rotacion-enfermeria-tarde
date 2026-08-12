@@ -343,9 +343,9 @@ await probar("25 no existe persistencia, drag and drop ni creación de snapshot"
   assert.doesNotMatch(fuentes.join("\n"), /localStorage|supabase|guardarEstado|drag|draggable|crearSnapshotConfiguracionPlanilla/i);
 });
 
-await probar("26 el borrador todavía no llega al constructor de mes", async () => {
+await probar("26 el borrador validado llega al constructor de mes", async () => {
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
-  assert.match(app, /construirEstadoMesNuevo\(\{\s*analisis: preparacionMes\.analisis\s*\}\)/);
+  assert.match(app, /validarBorradoresConfiguracionPlanilla\([\s\S]*?construirEstadoMesNuevo\(\{[\s\S]*?borradoresConfiguracionPlanilla: validacionBorradores\.borradores/);
 });
 
 console.log(`\n${total} pruebas del borrador mensual de configuración superadas.`);

@@ -34,8 +34,9 @@ const crearAgostoLegacy = () => {
   return estado;
 };
 
-const prepararSeptiembre = ({ destino = crearEstadoMensualVacio() } = {}) => {
+const prepararSeptiembre = ({ destino = crearEstadoMensualVacio(), configurarOrigen } = {}) => {
   const origen = crearAgostoLegacy();
+  configurarOrigen?.(origen);
   const analisis = analizarPreparacionMesNuevo({
     turnoId: "tarde",
     mesOrigen: "2026-08",
@@ -73,15 +74,15 @@ probar("6 usa las categorías correctas", () => {
   assert.equal(snapshots.licenciado.categoria, "licenciado");
 });
 probar("7 T6 se refleja cuando está habilitado", () => {
-  const destino = crearEstadoMensualVacio();
-  destino.planillas.enfermeros.posicionesMensualesAdicionales = ["T6"];
-  const snapshot = prepararSeptiembre({ destino }).resultado.estado.configuracionPlanilla.enfermero;
+  const snapshot = prepararSeptiembre({ configurarOrigen: (origen) => {
+    origen.planillas.enfermeros.posicionesMensualesAdicionales = ["T6"];
+  } }).resultado.estado.configuracionPlanilla.enfermero;
   assert.equal(snapshot.filas.some((fila) => fila.etiqueta === "T6"), true);
 });
 probar("8 T3 se refleja cuando está habilitado", () => {
-  const destino = crearEstadoMensualVacio();
-  destino.planillas.licenciados.posicionesMensualesAdicionales = ["T3"];
-  const snapshot = prepararSeptiembre({ destino }).resultado.estado.configuracionPlanilla.licenciado;
+  const snapshot = prepararSeptiembre({ configurarOrigen: (origen) => {
+    origen.planillas.licenciados.posicionesMensualesAdicionales = ["T3"];
+  } }).resultado.estado.configuracionPlanilla.licenciado;
   assert.equal(snapshot.filas.some((fila) => fila.etiqueta === "T3"), true);
 });
 probar("9 sin T6/T3 no aparecen adicionales", () => {

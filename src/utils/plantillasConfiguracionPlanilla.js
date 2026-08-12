@@ -74,3 +74,97 @@ export const cambiarActivoFilaBorrador = (borrador, filaId, activo) => {
     )
   };
 };
+
+const errorValidacion = (categoria, detalle) => ({
+  ok: false,
+  mensaje: `La estructura de ${categoria === "enfermero" ? "Enfermeros" : "Licenciados"} no es válida: ${detalle}`
+});
+
+export const validarBorradorConfiguracionPlanilla = ({
+  borrador,
+  turno,
+  categoria,
+  mesOrigen
+} = {}) => {
+  if (!borrador || typeof borrador !== "object" || Array.isArray(borrador)) {
+    return errorValidacion(categoria, "falta el borrador.");
+  }
+  if (borrador.turnoId !== turno || borrador.categoria !== categoria ||
+      borrador.mesOrigen !== mesOrigen) {
+    return errorValidacion(categoria, "el contexto de turno o mes no coincide.");
+  }
+  if (!Array.isArray(borrador.filas) || borrador.filas.length === 0) {
+    return errorValidacion(categoria, "las filas son obligatorias.");
+  }
+  const filaIds = new Set();
+  const sectorIds = new Set();
+  const turnanteIds = new Set();
+  const ordenes = new Set();
+  for (const fila of borrador.filas) {
+    if (!fila || typeof fila !== "object" || Array.isArray(fila)) {
+      return errorValidacion(categoria, "existe una fila inválida.");
+    }
+    if (typeof fila.filaId !== "string" || !fila.filaId.trim()) {
+      return errorValidacion(categoria, "todas las filas deben conservar filaId.");
+    }
+    if (filaIds.has(fila.filaId)) return errorValidacion(categoria, `filaId duplicado: ${fila.filaId}.`);
+    filaIds.add(fila.filaId);
+    if (!Number.isInteger(fila.orden) || fila.orden < 0 || ordenes.has(fila.orden)) {
+      return errorValidacion(categoria, "el orden debe contener enteros únicos no negativos.");
+    }
+    ordenes.add(fila.orden);
+    if (!['sector', 'turnante'].includes(fila.tipo)) {
+      return errorValidacion(categoria, `tipo inválido en ${fila.filaId}.`);
+    }
+    if (typeof fila.etiqueta !== "string" || !fila.etiqueta.trim()) {
+      return errorValidacion(categoria, `falta la etiqueta en ${fila.filaId}.`);
+    }
+    if (typeof fila.activo !== "boolean") {
+      return errorValidacion(categoria, `el estado activo es inválido en ${fila.filaId}.`);
+    }
+    if (fila.tipo === "sector") {
+      if (typeof fila.sectorId !== "string" || !fila.sectorId.trim()) {
+        return errorValidacion(categoria, `falta sectorId en ${fila.filaId}.`);
+      }
+      if (sectorIds.has(fila.sectorId)) return errorValidacion(categoria, `sectorId duplicado: ${fila.sectorId}.`);
+      sectorIds.add(fila.sectorId);
+    } else {
+      if (typeof fila.turnanteId !== "string" || !fila.turnanteId.trim()) {
+        return errorValidacion(categoria, `falta turnanteId en ${fila.filaId}.`);
+      }
+      if (!Number.isInteger(fila.ordinalTurnante) || fila.ordinalTurnante <= 0) {
+        return errorValidacion(categoria, `ordinalTurnante inválido en ${fila.filaId}.`);
+      }
+      if (turnanteIds.has(fila.turnanteId)) return errorValidacion(categoria, `turnanteId duplicado: ${fila.turnanteId}.`);
+      turnanteIds.add(fila.turnanteId);
+    }
+  }
+  return {
+    ok: true,
+    borrador: {
+      turnoId: borrador.turnoId,
+      categoria: borrador.categoria,
+      mesOrigen: borrador.mesOrigen,
+      filas: normalizarOrdenFilasBorrador(
+        [...borrador.filas].sort((a, b) => a.orden - b.orden)
+      )
+    }
+  };
+};
+
+export const validarBorradoresConfiguracionPlanilla = ({
+  borradores,
+  turno,
+  mesOrigen
+} = {}) => {
+  if (!turno || !mesOrigen) return { ok: false, mensaje: "Falta el contexto de la estructura a confirmar." };
+  const validados = {};
+  for (const categoria of CATEGORIAS_PLANTILLA_PLANILLA) {
+    const resultado = validarBorradorConfiguracionPlanilla({
+      borrador: borradores?.[categoria], turno, categoria, mesOrigen
+    });
+    if (!resultado.ok) return resultado;
+    validados[categoria] = resultado.borrador;
+  }
+  return { ok: true, borradores: validados };
+};

@@ -105,7 +105,7 @@ import {
   validarRespuestaRestaurada
 } from "./utils/restauracionHistorial.js";
 import { reiniciarMesEnEstado } from "./utils/limpiezaSegura.js";
-import { crearBorradoresConfiguracionPlanilla } from "./utils/plantillasConfiguracionPlanilla.js";
+import { validarBorradoresConfiguracionPlanilla } from "./utils/plantillasConfiguracionPlanilla.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
@@ -1658,11 +1658,7 @@ const iniciarPreparacionMes = async () => {
   setPreparacionMes({
     estado: "lista",
     contexto,
-    borradoresConfiguracionPlanilla: crearBorradoresConfiguracionPlanilla({
-      estadoMensual: origen.estado,
-      turno: turnoId,
-      mes: mesOrigen
-    }),
+    borradoresConfiguracionPlanilla: analisis.borradoresConfiguracionPlanilla,
     analisis: {
       ...analisis,
       turnoNombre: TURNOS[turnoId]?.nombre || turnoId
@@ -1700,8 +1696,18 @@ const confirmarPreparacionMes = () => {
     }));
     return;
   }
+  const validacionBorradores = validarBorradoresConfiguracionPlanilla({
+    borradores: preparacionMes.borradoresConfiguracionPlanilla,
+    turno: contextoActual.turnoId,
+    mesOrigen: contextoActual.mesOrigen
+  });
+  if (!validacionBorradores.ok) {
+    setPreparacionMes((actual) => ({ ...actual, error: validacionBorradores.mensaje }));
+    return;
+  }
   const construccion = construirEstadoMesNuevo({
-    analisis: preparacionMes.analisis
+    analisis: preparacionMes.analisis,
+    borradoresConfiguracionPlanilla: validacionBorradores.borradores
   });
   if (!construccion.ok) {
     setPreparacionMes((actual) => ({ ...actual, error: construccion.mensaje }));

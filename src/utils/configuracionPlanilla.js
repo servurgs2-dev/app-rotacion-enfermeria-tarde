@@ -171,6 +171,28 @@ export const crearSnapshotConfiguracionPlanilla = ({
   };
 };
 
+export const crearSnapshotConfiguracionPlanillaDesdeFilas = ({
+  turno,
+  categoria,
+  mes,
+  filas
+} = {}) => {
+  if (!tieneTexto(turno) || !tieneTexto(categoria) || !tieneTexto(mes) || !Array.isArray(filas)) {
+    throw new Error("El contexto y las filas son obligatorios para confirmar la configuración de Planilla.");
+  }
+  const turnoId = turno.trim();
+  const categoriaNormalizada = categoria.trim();
+  const mesNormalizado = mes.trim();
+  return {
+    schemaVersion: SCHEMA_VERSION_CONFIGURACION_PLANILLA,
+    versionId: `${turnoId}:${categoriaNormalizada}:${mesNormalizado}:v${SCHEMA_VERSION_CONFIGURACION_PLANILLA}`,
+    turnoId,
+    categoria: categoriaNormalizada,
+    mes: mesNormalizado,
+    filas: filas.map(copiarFilaSnapshot)
+  };
+};
+
 export const obtenerConfiguracionPlanillaEfectiva = ({
   estadoMensual,
   turno,

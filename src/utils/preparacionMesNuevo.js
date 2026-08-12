@@ -22,9 +22,13 @@ import {
 } from "./turnanteMensual.js";
 import {
   copiarSnapshotConfiguracionPlanilla,
-  crearSnapshotConfiguracionPlanilla,
+  crearSnapshotConfiguracionPlanillaDesdeFilas,
   esSnapshotConfiguracionPlanillaValido
 } from "./configuracionPlanilla.js";
+import {
+  crearBorradoresConfiguracionPlanilla,
+  validarBorradoresConfiguracionPlanilla
+} from "./plantillasConfiguracionPlanilla.js";
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -445,6 +449,11 @@ export const analizarPreparacionMesNuevo = ({
       enfermero: copiarSnapshotDestinoValido("enfermero"),
       licenciado: copiarSnapshotDestinoValido("licenciado")
     },
+    borradoresConfiguracionPlanilla: crearBorradoresConfiguracionPlanilla({
+      estadoMensual: estadoOrigen,
+      turno: turnoId,
+      mes: mesOrigen
+    }),
     enfermeros: {
       estrategia: estrategiaEnfermeros,
       filas: filasEnfermeros,
@@ -483,10 +492,34 @@ export const analizarPreparacionMesNuevo = ({
   };
 };
 
-export const construirEstadoMesNuevo = ({ analisis } = {}) => {
+export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlanilla } = {}) => {
   if (!analisis?.ok) {
     return { ok: false, mensaje: "La preparación del mes no es válida." };
   }
+  const validacionBorradores = validarBorradoresConfiguracionPlanilla({
+    borradores: borradoresConfiguracionPlanilla || analisis.borradoresConfiguracionPlanilla,
+    turno: analisis.turnoId,
+    mesOrigen: analisis.mesOrigen
+  });
+  if (!validacionBorradores.ok) return validacionBorradores;
+  const configuracionPlanilla = Object.fromEntries(
+    ["enfermero", "licenciado"].map((categoria) => [
+      categoria,
+      analisis.configuracionPlanillaDestino?.[categoria] ||
+        crearSnapshotConfiguracionPlanillaDesdeFilas({
+          turno: analisis.turnoId,
+          categoria,
+          mes: analisis.mesDestino,
+          filas: validacionBorradores.borradores[categoria].filas
+        })
+    ])
+  );
+  const posicionAdicionalActiva = (categoria, etiqueta) =>
+    configuracionPlanilla[categoria].filas.some((fila) =>
+      fila.tipo === "turnante" && fila.etiqueta === etiqueta && fila.activo === true
+    ) ? [etiqueta] : [];
+  const posicionesEnfermeros = posicionAdicionalActiva("enfermero", "T6");
+  const posicionesLicenciados = posicionAdicionalActiva("licenciado", "T3");
   const planillaLicBase = {
     ...crearPlanillaMensualVacia(),
     semana1: quitarTurnanteMensualDeDistribucion(
@@ -495,10 +528,8 @@ export const construirEstadoMesNuevo = ({ analisis } = {}) => {
     ),
     coberturaLibreSM: {}
   };
-  if (analisis.licenciados.posicionesMensualesAdicionales?.length) {
-    planillaLicBase.posicionesMensualesAdicionales = [
-      ...analisis.licenciados.posicionesMensualesAdicionales
-    ];
+  if (posicionesLicenciados.length) {
+    planillaLicBase.posicionesMensualesAdicionales = posicionesLicenciados;
   }
   const coberturaLic = analisis.coberturaLicenciadosBase;
   if (coberturaLic) planillaLicBase.coberturaLibreSM.semana1 = clonar(coberturaLic);
@@ -559,30 +590,9 @@ export const construirEstadoMesNuevo = ({ analisis } = {}) => {
     }
   }
 
-  if (analisis.enfermeros.posicionesMensualesAdicionales?.length) {
-    planillaEnfermeros.posicionesMensualesAdicionales = [
-      ...analisis.enfermeros.posicionesMensualesAdicionales
-    ];
+  if (posicionesEnfermeros.length) {
+    planillaEnfermeros.posicionesMensualesAdicionales = posicionesEnfermeros;
   }
-
-  const configuracionPlanilla = {
-    enfermero: analisis.configuracionPlanillaDestino?.enfermero ||
-      crearSnapshotConfiguracionPlanilla({
-        turno: analisis.turnoId,
-        categoria: "enfermero",
-        mes: analisis.mesDestino,
-        posicionesMensualesAdicionales:
-          analisis.enfermeros.posicionesMensualesAdicionales
-      }),
-    licenciado: analisis.configuracionPlanillaDestino?.licenciado ||
-      crearSnapshotConfiguracionPlanilla({
-        turno: analisis.turnoId,
-        categoria: "licenciado",
-        mes: analisis.mesDestino,
-        posicionesMensualesAdicionales:
-          analisis.licenciados.posicionesMensualesAdicionales
-      })
-  };
 
   const vacio = crearEstadoMensualVacio();
   const estado = normalizarEstadoMensual({

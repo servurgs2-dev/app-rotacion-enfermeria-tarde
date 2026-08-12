@@ -43,6 +43,7 @@
     "test:pdf-configuracion-efectiva": "node tests/pdf-configuracion-efectiva.test.mjs",
     "test:editor-configuracion-planilla": "node tests/editor-configuracion-planilla.test.mjs",
     "test:confirmacion-configuracion-planilla": "node tests/confirmacion-configuracion-planilla.test.mjs",
+    "test:resolucion-identidades-planilla": "node tests/resolucion-identidades-planilla.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

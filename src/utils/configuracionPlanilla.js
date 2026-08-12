@@ -47,6 +47,9 @@ const inferirTipo = (configuracion) => configuracion === configuracionSectores.e
 export const obtenerSectorIdPorNombreHistorico = (nombre) =>
   indiceSectorPorAlias.get(normalizar(nombre))?.sectorId || "";
 
+export const obtenerAliasesSector = (sectorId) =>
+  [...(indiceSectorPorId.get(sectorId)?.aliases || [])];
+
 export const obtenerEtiquetaSector = (sectorId, { tipo } = {}) => {
   if (sectorId === "salud_mental" && tipo === "enfermero") return "SM";
   return indiceSectorPorId.get(sectorId)?.etiqueta || "";

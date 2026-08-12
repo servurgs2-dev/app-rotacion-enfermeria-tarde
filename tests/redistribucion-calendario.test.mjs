@@ -314,7 +314,16 @@ const crearAsignacionesPareja = (principal, secundario, personaSecundaria = pers
   { nombre: "OBSERVACIÓN", enfermero: personas[1] }
 ];
 
-PAREJAS_COBERTURA_ENFERMEROS.forEach(({ principal, secundario }, indice) => {
+const ETIQUETAS_PAREJAS = {
+  rea_1: "REA 1", rea_2: "REA 2",
+  explora_1: "EXPLORA 1", explora_2: "EXPLORA 2",
+  sillon_1: "SILLÓN 1", sillon_2: "SILLON 2",
+  pre_int_1: "PRE INT 1", pre_int_2: "PRE INT 2"
+};
+
+PAREJAS_COBERTURA_ENFERMEROS.forEach(({ destinoSectorId, origenSectorId }, indice) => {
+  const principal = ETIQUETAS_PAREJAS[destinoSectorId];
+  const secundario = ETIQUETAS_PAREJAS[origenSectorId];
   probar(`${50 + indice * 2} ${principal} recibe prioritariamente a ${secundario}`, () => {
     const resultado = aplicarPrioridadCoberturaParejas({
       asignaciones: crearAsignacionesPareja(principal, secundario)
@@ -331,14 +340,16 @@ PAREJAS_COBERTURA_ENFERMEROS.forEach(({ principal, secundario }, indice) => {
   });
 });
 
-probar("58 la prioridad por parejas ocurre antes de extras y Turnantes", () => {
+probar("58 parejas preceden a Turnantes y coberturas directas quedan al final", () => {
   const helper = fs.readFileSync(new URL("../src/utils/distribucionTurnantesCoberturas.js", import.meta.url), "utf8");
   const llamadaParejas = helper.indexOf("sectores = ajustarSectores(sectores)");
   const buscarTurnante = helper.indexOf("fila.enfermero = tomarTurnante()", llamadaParejas);
   const buscarExtra = helper.indexOf("fila.enfermero = tomarExtra()", llamadaParejas);
+  const coberturaDirecta = helper.indexOf("const conCoberturas = aplicarCoberturasDirectasExtras", llamadaParejas);
   assert.ok(llamadaParejas > 0);
   assert.ok(llamadaParejas < buscarTurnante);
   assert.ok(llamadaParejas < buscarExtra);
+  assert.ok(buscarTurnante < coberturaDirecta);
 });
 probar("59 la prioridad por parejas ocurre antes de sacrificar sectores", () => {
   assert.ok(

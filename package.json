@@ -44,6 +44,7 @@
     "test:editor-configuracion-planilla": "node tests/editor-configuracion-planilla.test.mjs",
     "test:confirmacion-configuracion-planilla": "node tests/confirmacion-configuracion-planilla.test.mjs",
     "test:resolucion-identidades-planilla": "node tests/resolucion-identidades-planilla.test.mjs",
+    "test:cobertura-parejas-ids": "node tests/cobertura-parejas-ids.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

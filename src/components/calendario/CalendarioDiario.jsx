@@ -725,7 +725,11 @@ const resolucionOperativa = resolverTurnantesYCoberturasOperativas({
       ? aplicarPrioridadCoberturaParejas({
           asignaciones: sectores,
           cambiosDia: cambiosDia[keyDia],
-          esPersonaDisponible: puedeAplicarseCoberturaDirecta
+          esPersonaDisponible: puedeAplicarseCoberturaDirecta,
+          estadoMensual,
+          turno: turnoActivo,
+          categoria: tipo,
+          mes: mesActivo
         })
       : sectores
 });

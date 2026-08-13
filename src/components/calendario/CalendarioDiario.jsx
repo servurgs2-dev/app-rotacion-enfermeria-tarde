@@ -94,6 +94,7 @@ import {
   obtenerSectoresVisiblesOpcion1,
   quitarRedistribucionFecha,
   recalcularRedistribucionOpcion1Automatica,
+  recalcularRedistribucionOpcion2Automatica,
   redistribuirCritica,
   redistribuirPorBoxes,
   validarContextoRedistribucion
@@ -331,7 +332,7 @@ const tipoRedistribucionActiva = distribucionOpcion1Activa
     : null;
 const obtenerFilasRedistribucion = (filasOriginales) => {
   if (distribucionPorBoxesActiva) {
-    return obtenerSectoresVisiblesBoxes(filasOriginales);
+    return obtenerSectoresVisiblesBoxes(filasOriginales, filasConfiguracion);
   }
   if (distribucionOpcion1Activa) {
     return obtenerSectoresVisiblesOpcion1(filasOriginales, filasConfiguracion);
@@ -680,6 +681,15 @@ asignacionCompleta = excluirAusenciasOperativasNoDisponiblesDeAsignaciones({
 });
 if (distribucionOpcion1Activa) {
   asignacionCompleta = recalcularRedistribucionOpcion1Automatica({
+    asignaciones: asignacionCompleta,
+    cambiosDia: cambiosDia[keyDia],
+    procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
+    ordenVisual: ordenVisualEfectivo,
+    filasConfiguracion,
+    procedenciaAutomatica: PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
+  });
+} else if (distribucionPorBoxesActiva) {
+  asignacionCompleta = recalcularRedistribucionOpcion2Automatica({
     asignaciones: asignacionCompleta,
     cambiosDia: cambiosDia[keyDia],
     procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
@@ -2032,7 +2042,8 @@ useEffect(() => {
       : confirmacionRedistribucion.tipo === "boxes"
         ? redistribuirPorBoxes({
             asignaciones: asignacionesSinAusentes,
-            ordenVisual,
+            ordenVisual: ordenVisualEfectivo,
+            filasConfiguracion,
             prioridadSectores
           })
         : redistribuirCritica({

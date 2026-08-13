@@ -28,11 +28,16 @@ import {
 } from "../src/utils/gruposRedistribucion.js";
 import {
   esDistribucionOpcion1,
+  esDistribucionPorBoxes,
   obtenerDestinosVisiblesOpcion1,
+  obtenerDestinosVisiblesOpcion2,
+  obtenerSectoresVisiblesBoxes,
   obtenerSectoresVisiblesOpcion1,
   PRIORIDAD_REDISTRIBUCION_OPCION_1,
+  PRIORIDAD_REDISTRIBUCION_OPCION_2,
   quitarRedistribucionFecha,
   recalcularRedistribucionOpcion1Automatica,
+  recalcularRedistribucionOpcion2Automatica,
   redistribuirCritica,
   redistribuirPorBoxes,
   SECTORES_REDISTRIBUCION_BOXES,
@@ -388,6 +393,170 @@ probar("destinos manuales quedan fuera del recálculo automático", () => {
     filasConfiguracion: flujo.filasConfiguracion
   });
   assert.equal(resultado.find((fila) => fila.sectorId === "sillon_2").enfermero, manual);
+});
+
+probar("prioridad de opción 2 distingue cinco groupId y nueve sectorId", () => {
+  assert.deepEqual(
+    PRIORIDAD_REDISTRIBUCION_OPCION_2.slice(0, 6),
+    [
+      { tipo: "sector", sectorId: "rea_1" },
+      ...MODOS_REDISTRIBUCION[1].groups.map((grupo) => ({ tipo: "grupo", groupId: grupo.groupId }))
+    ]
+  );
+  assert.deepEqual(
+    PRIORIDAD_REDISTRIBUCION_OPCION_2.slice(6).map((item) => item.sectorId),
+    ["sillon_1", "explora_1", "pre_int_1", "salud_mental", "pre_int_2", "sillon_2", "explora_2", "rea_2"]
+  );
+  assert.equal(PRIORIDAD_REDISTRIBUCION_OPCION_2.some((item) => Object.hasOwn(item, "etiqueta")), false);
+});
+probar("opción 2 sustituye las seis filas por sectorId aunque se renombren", () => {
+  const estado = crearEstadoSnapshot();
+  const filas = estado.configuracionPlanilla.enfermero.filas;
+  SECTOR_IDS_REEMPLAZADOS_REDISTRIBUCION.forEach((sectorId, indice) => {
+    filas.find((fila) => fila.sectorId === sectorId).etiqueta = `Boxes O2 ${indice + 1}`;
+  });
+  const ordenVisual = filas.map((fila) => fila.etiqueta);
+  const destinos = obtenerDestinosVisiblesOpcion2({ ordenVisual, filasConfiguracion: filas });
+  assert.equal(destinos.filter((destino) => destino.tipo === "grupo").length, 5);
+  assert.equal(destinos.some((destino) => SECTOR_IDS_REEMPLAZADOS_REDISTRIBUCION.includes(destino.sectorId)), false);
+  assert.equal(destinos.some((destino) => String(destino.etiqueta).startsWith("Boxes O2")), false);
+});
+probar("renombrados y Drag & Drop no alteran prioridad de opción 2", () => {
+  const estado = crearEstadoSnapshot();
+  const filas = estado.configuracionPlanilla.enfermero.filas;
+  const prioritarios = PRIORIDAD_REDISTRIBUCION_OPCION_2.filter((item) => item.tipo === "sector");
+  prioritarios.forEach((item, indice) => {
+    filas.find((fila) => fila.sectorId === item.sectorId).etiqueta = `O2 Prioridad ${indice + 1}`;
+  });
+  const turnantes = filas.filter((fila) => fila.tipo === "turnante").reverse();
+  const ordenVisual = [
+    ...turnantes.map((fila) => fila.etiqueta),
+    ...filas.filter((fila) => fila.tipo === "sector").reverse().map((fila) => fila.etiqueta)
+  ];
+  const resultado = redistribuirPorBoxes({ asignaciones: [], ordenVisual, filasConfiguracion: filas });
+  assert.deepEqual(
+    resultado.asignaciones.slice(0, 14).map((fila) => fila.nombre),
+    [
+      "O2 Prioridad 1",
+      ...SECTORES_REDISTRIBUCION_BOXES,
+      ...Array.from({ length: 8 }, (_, indice) => `O2 Prioridad ${indice + 2}`)
+    ]
+  );
+  assert.deepEqual(resultado.asignaciones.slice(-turnantes.length).map((fila) => fila.nombre), turnantes.map((fila) => fila.etiqueta));
+});
+probar("sector inactivo no reaparece en opción 2", () => {
+  const estado = crearEstadoSnapshot();
+  const filas = estado.configuracionPlanilla.enfermero.filas;
+  filas.find((fila) => fila.sectorId === "boxes_20_22_24").activo = false;
+  const activas = filas.filter((fila) => fila.activo !== false);
+  const destinos = obtenerDestinosVisiblesOpcion2({
+    ordenVisual: activas.map((fila) => fila.etiqueta),
+    filasConfiguracion: activas
+  });
+  assert.equal(destinos.some((destino) => destino.sectorId === "boxes_20_22_24"), false);
+  assert.equal(destinos.filter((destino) => destino.tipo === "grupo").length, 5);
+});
+
+const ejecutarAusenciaPosteriorOpcion2 = ({ groupId, motivo, cantidad = 14 }) => {
+  const estado = crearEstadoSnapshot();
+  const filasConfiguracion = estado.configuracionPlanilla.enfermero.filas;
+  const ordenVisual = filasConfiguracion.map((fila) => fila.etiqueta);
+  const personas = Array.from({ length: cantidad }, (_, indice) => ({
+    id: `o2-persona-${indice + 1}`,
+    nombre: `O2 Persona ${indice + 1}`,
+    categoria: "enfermero"
+  }));
+  const inicial = redistribuirPorBoxes({
+    asignaciones: personas.map((enfermero, indice) => ({ nombre: `Origen O2 ${indice}`, enfermero })),
+    ordenVisual,
+    filasConfiguracion
+  });
+  const procedencia = Object.fromEntries(Object.keys(inicial.cambios).map((clave) => [
+    clave,
+    "redistribucion_automatica"
+  ]));
+  const filasCalendario = obtenerSectoresVisiblesBoxes(ordenVisual, filasConfiguracion);
+  let asignaciones = construirAsignacionesDiariasCalendario({
+    filasCalendario,
+    filasConfiguracion,
+    planillaPeriodoEfectiva: {},
+    cambiosDia: inicial.cambios,
+    procedenciaCambiosDia: procedencia,
+    personal: personas,
+    turnantes: []
+  });
+  const etiquetaGrupo = obtenerEtiquetaGrupoRedistribucion(groupId);
+  const ausente = asignaciones.find((fila) => fila.nombre === etiquetaGrupo).enfermero;
+  const { registro, error } = crearRegistroNoDisponible({
+    persona: ausente,
+    motivo,
+    detalle: motivo === MOTIVOS_NO_DISPONIBLE.OTRO ? "Informado" : "",
+    turnoDestino: motivo === MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO ? "manana" : ""
+  });
+  assert.equal(error, "");
+  asignaciones = excluirAusenciasOperativasNoDisponiblesDeAsignaciones({
+    asignaciones,
+    registros: [registro],
+    personal: personas
+  });
+  const antes = asignaciones.map((fila) => ({ ...fila }));
+  const resultado = recalcularRedistribucionOpcion2Automatica({
+    asignaciones,
+    cambiosDia: inicial.cambios,
+    procedenciaCambiosDia: procedencia,
+    ordenVisual,
+    filasConfiguracion
+  });
+  return { resultado, antes, ausente, inicial, procedencia, filasConfiguracion, ordenVisual };
+};
+
+probar("opción 2 recalcula 10 personas y grupo prioritario gana a PRE INT 2", () => {
+  const flujo = ejecutarAusenciaPosteriorOpcion2({
+    groupId: "opcion_2_boxes_8_14",
+    motivo: MOTIVOS_NO_DISPONIBLE.FALTA_CON_AVISO,
+    cantidad: 11
+  });
+  const cubiertas = flujo.resultado.filter((fila) => fila.enfermero);
+  assert.equal(cubiertas.length, 10);
+  assert.ok(flujo.resultado.find((fila) => fila.nombre === "8–14").enfermero);
+  assert.equal(flujo.resultado.find((fila) => fila.sectorId === "pre_int_2").enfermero, null);
+  assert.equal(flujo.resultado.some((fila) => fila.enfermero?.id === flujo.ausente.id), false);
+  assert.equal(new Set(cubiertas.map((fila) => fila.enfermero.id)).size, 10);
+});
+for (const [indice, grupo] of MODOS_REDISTRIBUCION[1].groups.entries()) {
+  probar(`ausencia posterior en grupo O2 ${grupo.etiqueta} recalcula`, () => {
+    const motivos = [
+      MOTIVOS_NO_DISPONIBLE.FALTA_CON_AVISO,
+      MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO,
+      MOTIVOS_NO_DISPONIBLE.ADHESION_PARO
+    ];
+    const flujo = ejecutarAusenciaPosteriorOpcion2({ groupId: grupo.groupId, motivo: motivos[indice % motivos.length] });
+    assert.ok(flujo.resultado.find((fila) => fila.nombre === grupo.etiqueta).enfermero);
+    assert.equal(flujo.resultado.some((fila) => fila.enfermero?.id === flujo.ausente.id), false);
+  });
+}
+probar("opción 2 protege un destino manual durante el recálculo", () => {
+  const flujo = ejecutarAusenciaPosteriorOpcion2({
+    groupId: "opcion_2_boxes_15_20",
+    motivo: MOTIVOS_NO_DISPONIBLE.OTRO
+  });
+  const claveManual = normalizar("SILLON 2");
+  const manual = flujo.antes.find((fila) => fila.sectorId === "sillon_2").enfermero;
+  const procedencia = { ...flujo.procedencia };
+  delete procedencia[claveManual];
+  const resultado = recalcularRedistribucionOpcion2Automatica({
+    asignaciones: flujo.antes,
+    cambiosDia: flujo.inicial.cambios,
+    procedenciaCambiosDia: procedencia,
+    ordenVisual: flujo.ordenVisual,
+    filasConfiguracion: flujo.filasConfiguracion
+  });
+  assert.equal(resultado.find((fila) => fila.sectorId === "sillon_2").enfermero, manual);
+});
+probar("detección Opción 2 usa modeId y rechaza claves parciales", () => {
+  assert.equal(esDistribucionPorBoxes({ [normalizar("DX 23–29")]: "__EMPTY__" }), true);
+  assert.equal(esDistribucionPorBoxes({ "DX 23-29 parcial": "__EMPTY__" }), false);
+  assert.equal(esDistribucionPorBoxes({ desconocida: "__EMPTY__" }), false);
 });
 
 console.log(`\n${total} pruebas de grupos de redistribución por identidad pasaron.`);

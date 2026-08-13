@@ -1,13 +1,20 @@
 import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
 import { crearReferenciaPersona } from "./referenciasPersonas.js";
+import { obtenerSectorIdPorNombreHistorico } from "./configuracionPlanilla.js";
+import {
+  MODE_IDS_REDISTRIBUCION,
+  obtenerModoRedistribucionPorId,
+  resolverGrupoRedistribucion,
+  SECTOR_IDS_REEMPLAZADOS_REDISTRIBUCION
+} from "./gruposRedistribucion.js";
 import { normalizar } from "./texto.js";
 
-export const SECTORES_REDISTRIBUCION_OPCION_1 = [
-  "1–3 + 19–22",
-  "4–10",
-  "11–18",
-  "23–30"
-];
+const MODO_OPCION_1 = obtenerModoRedistribucionPorId(
+  MODE_IDS_REDISTRIBUCION.OPCION_1
+);
+
+export const SECTORES_REDISTRIBUCION_OPCION_1 = MODO_OPCION_1.groups
+  .map((grupo) => grupo.etiqueta);
 
 export const SECTORES_REDISTRIBUCION_BOXES = [
   "1–3 + 21 y 22",
@@ -25,6 +32,24 @@ const SECTORES_REEMPLAZADOS_POR_BOXES = new Set([
   "20-22-24",
   "DX 25-30"
 ].map(normalizar));
+
+const SECTOR_IDS_REEMPLAZADOS = new Set(SECTOR_IDS_REEMPLAZADOS_REDISTRIBUCION);
+
+export const PRIORIDAD_REDISTRIBUCION_OPCION_1 = Object.freeze([
+  Object.freeze({ tipo: "sector", sectorId: "rea_1" }),
+  ...MODO_OPCION_1.groups.map((grupo) => Object.freeze({
+    tipo: "grupo",
+    groupId: grupo.groupId
+  })),
+  Object.freeze({ tipo: "sector", sectorId: "sillon_1" }),
+  Object.freeze({ tipo: "sector", sectorId: "explora_1" }),
+  Object.freeze({ tipo: "sector", sectorId: "pre_int_1" }),
+  Object.freeze({ tipo: "sector", sectorId: "salud_mental" }),
+  Object.freeze({ tipo: "sector", sectorId: "pre_int_2" }),
+  Object.freeze({ tipo: "sector", sectorId: "sillon_2" }),
+  Object.freeze({ tipo: "sector", sectorId: "explora_2" }),
+  Object.freeze({ tipo: "sector", sectorId: "rea_2" })
+]);
 
 const esFilaVisible = (fila) =>
   Boolean(fila) && fila !== "DIVIDER" && normalizar(fila) !== "SIN ASIGNAR";
@@ -77,6 +102,43 @@ const crearRedistribucion = ({
   };
 };
 
+const claveDestino = (destino) => {
+  if (typeof destino === "string") return `etiqueta:${normalizar(destino)}`;
+  if (destino?.tipo === "sector" && destino.sectorId) return `sector:${destino.sectorId}`;
+  if (destino?.tipo === "grupo" && destino.groupId) return `grupo:${destino.groupId}`;
+  return `etiqueta:${normalizar(destino?.etiqueta)}`;
+};
+
+const etiquetaDestino = (destino) => typeof destino === "string"
+  ? destino
+  : destino?.etiqueta;
+
+const crearRedistribucionPorIdentidades = ({ asignaciones, destinos, prioridad }) => {
+  const visibles = (destinos || []).filter((destino) => esFilaVisible(etiquetaDestino(destino)));
+  const porIdentidad = new Map(visibles.map((destino) => [claveDestino(destino), destino]));
+  const orden = [];
+  const identidadesAgregadas = new Set();
+  [...(prioridad || []), ...visibles].forEach((identidad) => {
+    const destino = porIdentidad.get(claveDestino(identidad));
+    if (!destino) return;
+    const clave = claveDestino(destino);
+    if (identidadesAgregadas.has(clave)) return;
+    identidadesAgregadas.add(clave);
+    orden.push(destino);
+  });
+  const personas = obtenerPersonasUnicas(asignaciones);
+  const cambios = {};
+  const resultado = orden.map((destino, indice) => {
+    const persona = personas[indice] || null;
+    const etiqueta = etiquetaDestino(destino);
+    cambios[normalizar(etiqueta)] = persona
+      ? crearReferenciaPersona(persona)
+      : "__EMPTY__";
+    return { nombre: etiqueta, enfermero: persona, tipo: "sector" };
+  });
+  return { ok: true, asignaciones: resultado, cambios, personasConsideradas: personas.length };
+};
+
 const obtenerSectoresVisiblesAgrupados = (ordenVisual = [], grupos = []) => {
   const resultado = [];
   let boxesInsertados = false;
@@ -96,11 +158,46 @@ const obtenerSectoresVisiblesAgrupados = (ordenVisual = [], grupos = []) => {
   return resultado;
 };
 
-export const obtenerSectoresVisiblesOpcion1 = (ordenVisual = []) =>
-  obtenerSectoresVisiblesAgrupados(
-    ordenVisual,
-    SECTORES_REDISTRIBUCION_OPCION_1
-  );
+export const obtenerDestinosVisiblesOpcion1 = ({
+  ordenVisual = [],
+  filasConfiguracion = []
+} = {}) => {
+  const filasPorEtiqueta = new Map(filasConfiguracion.map((fila) => [fila.etiqueta, fila]));
+  const resultado = [];
+  let gruposInsertados = false;
+  ordenVisual.forEach((etiqueta) => {
+    const fila = filasPorEtiqueta.get(etiqueta);
+    const sectorId = fila?.tipo === "sector"
+      ? fila.sectorId
+      : obtenerSectorIdPorNombreHistorico(etiqueta);
+    if (SECTOR_IDS_REEMPLAZADOS.has(sectorId)) {
+      if (!gruposInsertados) {
+        resultado.push(...MODO_OPCION_1.groups.map((grupo) => ({
+          tipo: "grupo",
+          groupId: grupo.groupId,
+          etiqueta: grupo.etiqueta
+        })));
+        gruposInsertados = true;
+      }
+      return;
+    }
+    resultado.push(fila
+      ? {
+          tipo: fila.tipo,
+          sectorId: fila.sectorId,
+          turnanteId: fila.turnanteId,
+          etiqueta
+        }
+      : sectorId
+        ? { tipo: "sector", sectorId, etiqueta }
+        : { tipo: "visual", etiqueta });
+  });
+  return resultado;
+};
+
+export const obtenerSectoresVisiblesOpcion1 = (ordenVisual = [], filasConfiguracion = []) =>
+  obtenerDestinosVisiblesOpcion1({ ordenVisual, filasConfiguracion })
+    .map((destino) => destino.etiqueta);
 
 export const obtenerSectoresVisiblesBoxes = (ordenVisual = []) =>
   obtenerSectoresVisiblesAgrupados(
@@ -109,8 +206,8 @@ export const obtenerSectoresVisiblesBoxes = (ordenVisual = []) =>
   );
 
 export const esDistribucionOpcion1 = (cambiosFecha = {}) =>
-  SECTORES_REDISTRIBUCION_OPCION_1.some((sector) =>
-    Object.hasOwn(cambiosFecha || {}, normalizar(sector))
+  Object.keys(cambiosFecha || {}).some((clave) =>
+    resolverGrupoRedistribucion(clave)?.modeId === MODE_IDS_REDISTRIBUCION.OPCION_1
   );
 
 export const esDistribucionPorBoxes = (cambiosFecha = {}) =>
@@ -133,23 +230,60 @@ export const quitarRedistribucionFecha = (calendario = {}, fecha) => {
 
 export const redistribuirCritica = ({
   asignaciones,
-  ordenVisual
-}) => crearRedistribucion({
+  ordenVisual,
+  filasConfiguracion = []
+}) => crearRedistribucionPorIdentidades({
   asignaciones,
-  sectoresVisibles: obtenerSectoresVisiblesOpcion1(ordenVisual),
-  prioridad: [
-    "REA 1",
-    ...SECTORES_REDISTRIBUCION_OPCION_1,
-    "SILLÓN 1",
-    "EXPLORA 1",
-    "PRE INT 1",
-    "SM",
-    "PRE INT 2",
-    "SILLON 2",
-    "EXPLORA 2",
-    "REA 2"
-  ]
+  destinos: obtenerDestinosVisiblesOpcion1({ ordenVisual, filasConfiguracion }),
+  prioridad: PRIORIDAD_REDISTRIBUCION_OPCION_1
 });
+
+export const recalcularRedistribucionOpcion1Automatica = ({
+  asignaciones,
+  cambiosDia = {},
+  procedenciaCambiosDia = {},
+  ordenVisual,
+  filasConfiguracion = [],
+  procedenciaAutomatica = "redistribucion_automatica"
+} = {}) => {
+  if (!esDistribucionOpcion1(cambiosDia) || !Array.isArray(asignaciones)) {
+    return Array.isArray(asignaciones) ? asignaciones.map((fila) => ({ ...fila })) : [];
+  }
+  const destinos = obtenerDestinosVisiblesOpcion1({ ordenVisual, filasConfiguracion });
+  const asignacionesPorClave = new Map(asignaciones.map((fila) => [normalizar(fila?.nombre), fila]));
+  const destinosAutomaticos = destinos.filter((destino) =>
+    procedenciaCambiosDia?.[normalizar(etiquetaDestino(destino))] === procedenciaAutomatica
+  );
+  const clavesAutomaticas = new Set(destinosAutomaticos.map((destino) =>
+    normalizar(etiquetaDestino(destino))
+  ));
+  const ordenAutomatico = crearRedistribucionPorIdentidades({
+    asignaciones: [],
+    destinos: destinosAutomaticos,
+    prioridad: PRIORIDAD_REDISTRIBUCION_OPCION_1
+  }).asignaciones;
+  const candidatos = obtenerPersonasUnicas(ordenAutomatico.map((destino) =>
+    asignacionesPorClave.get(normalizar(destino.nombre))
+  ));
+  const redistribucion = crearRedistribucionPorIdentidades({
+    asignaciones: candidatos.map((enfermero) => ({ enfermero })),
+    destinos: destinosAutomaticos,
+    prioridad: PRIORIDAD_REDISTRIBUCION_OPCION_1
+  });
+  const personasPorDestino = new Map(redistribucion.asignaciones.map((fila) =>
+    [normalizar(fila.nombre), fila.enfermero]
+  ));
+  return asignaciones.map((fila) => {
+    const clave = normalizar(fila?.nombre);
+    if (!clavesAutomaticas.has(clave) || !asignacionesPorClave.has(clave)) return { ...fila };
+    return {
+      ...fila,
+      enfermero: personasPorDestino.get(clave) || null,
+      vacioManual: false,
+      cambioManualProtegido: false
+    };
+  });
+};
 
 export const redistribuirPorBoxes = ({
   asignaciones,

@@ -93,6 +93,7 @@ import {
   obtenerSectoresVisiblesBoxes,
   obtenerSectoresVisiblesOpcion1,
   quitarRedistribucionFecha,
+  recalcularRedistribucionOpcion1Automatica,
   redistribuirCritica,
   redistribuirPorBoxes,
   validarContextoRedistribucion
@@ -333,7 +334,7 @@ const obtenerFilasRedistribucion = (filasOriginales) => {
     return obtenerSectoresVisiblesBoxes(filasOriginales);
   }
   if (distribucionOpcion1Activa) {
-    return obtenerSectoresVisiblesOpcion1(filasOriginales);
+    return obtenerSectoresVisiblesOpcion1(filasOriginales, filasConfiguracion);
   }
   return filasOriginales;
 };
@@ -677,6 +678,16 @@ asignacionCompleta = excluirAusenciasOperativasNoDisponiblesDeAsignaciones({
   registros: noDisponibles[keyDia],
   personal: personalFiltrado
 });
+if (distribucionOpcion1Activa) {
+  asignacionCompleta = recalcularRedistribucionOpcion1Automatica({
+    asignaciones: asignacionCompleta,
+    cambiosDia: cambiosDia[keyDia],
+    procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
+    ordenVisual: ordenVisualEfectivo,
+    filasConfiguracion,
+    procedenciaAutomatica: PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
+  });
+}
 
 const filaSaludMental = filasConfiguracion.find(
   (fila) => fila.tipo === "sector" && fila.sectorId === SECTOR_ID_SALUD_MENTAL
@@ -2026,7 +2037,8 @@ useEffect(() => {
           })
         : redistribuirCritica({
             asignaciones: asignacionesSinAusentes,
-            ordenVisual,
+            ordenVisual: ordenVisualEfectivo,
+            filasConfiguracion,
             prioridadSectores
           });
 

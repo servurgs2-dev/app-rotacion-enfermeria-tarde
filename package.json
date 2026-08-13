@@ -23,6 +23,7 @@
     "test:ausencias-calendario": "node tests/ausencias-calendario.test.mjs",
     "test:pdf-planilla": "node tests/pdf-planilla.test.mjs",
     "test:pdf-calendario-diario": "node tests/pdf-calendario-diario.test.mjs",
+    "test:pdf-identidades": "node tests/pdf-identidades.test.mjs",
     "test:no-disponibles-motivos": "node tests/no-disponibles-motivos.test.mjs",
     "test:extras-calendario": "node tests/extras-calendario.test.mjs",
     "test:extras-coberturas": "node tests/extras-coberturas.test.mjs",

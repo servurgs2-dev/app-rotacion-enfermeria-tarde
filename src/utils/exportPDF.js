@@ -18,7 +18,12 @@ import {
   obtenerFilasActivas
 } from "./configuracionPlanilla.js";
 import { resolverEstructuraCalendario } from "./estructuraCalendario.js";
-import { normalizar } from "./texto.js";
+import {
+  crearIdentidadSector,
+  crearIdentidadTurnante,
+  obtenerClaveIdentidadOperativa,
+  resolverIdentidadOperativaAsignacion
+} from "./identidadOperativaAsignaciones.js";
 
 
 // 🔹 PLANILLA
@@ -643,14 +648,26 @@ export const obtenerAsignacionesCalendarioPDF = ({
   }
 
   const estructura = resolverEstructuraCalendario({ configuracionEfectiva });
-  const nombresConfigurados = new Set(
-    configuracionEfectiva.filas.map((fila) => normalizar(fila.etiqueta))
+  const claveFilaConfigurada = (fila) => obtenerClaveIdentidadOperativa(
+    fila.tipo === "sector"
+      ? crearIdentidadSector(fila.sectorId)
+      : crearIdentidadTurnante(fila.turnanteId)
+  );
+  const clavesConfiguradas = new Set(
+    configuracionEfectiva.filas.map(claveFilaConfigurada).filter(Boolean)
+  );
+  const clavesSectoresActivos = estructura.filasConfiguracion
+    .filter((fila) => fila.tipo === "sector")
+    .map(claveFilaConfigurada)
+    .filter(Boolean);
+  const clavesAsignaciones = asignacionesActuales.map((asignacion) =>
+    obtenerClaveIdentidadOperativa(resolverIdentidadOperativaAsignacion(asignacion))
   );
   const usados = new Set();
-  const ordenadas = estructura.sectores.flatMap((sector) => {
+  const ordenadas = clavesSectoresActivos.flatMap((claveSector) => {
     const indice = asignacionesActuales.findIndex((asignacion, indiceActual) =>
       !usados.has(indiceActual) &&
-      normalizar(asignacion?.nombre) === normalizar(sector)
+      clavesAsignaciones[indiceActual] === claveSector
     );
     if (indice < 0) return [];
     usados.add(indice);
@@ -660,7 +677,7 @@ export const obtenerAsignacionesCalendarioPDF = ({
     if (
       !usados.has(indice) &&
       asignacion?.tipo !== "divider" &&
-      !nombresConfigurados.has(normalizar(asignacion?.nombre))
+      !clavesConfiguradas.has(clavesAsignaciones[indice])
     ) {
       ordenadas.push(asignacion);
     }

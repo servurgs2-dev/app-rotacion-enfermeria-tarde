@@ -26,6 +26,11 @@ export const crearIdentidadSintetica = (syntheticId) =>
     ? { tipoIdentidad: "sintetico", syntheticId }
     : null;
 
+export const crearIdentidadTurnante = (turnanteId) =>
+  typeof turnanteId === "string" && /^turnante_[1-9]\d*$/.test(turnanteId)
+    ? { tipoIdentidad: "turnante", turnanteId }
+    : null;
+
 export const obtenerClaveIdentidadOperativa = (identidad) => {
   if (identidad?.tipoIdentidad === "sector" && identidad.sectorId) {
     return `sector:${identidad.sectorId}`;
@@ -36,6 +41,9 @@ export const obtenerClaveIdentidadOperativa = (identidad) => {
   if (identidad?.tipoIdentidad === "sintetico" && identidad.syntheticId) {
     return `sintetico:${identidad.syntheticId}`;
   }
+  if (identidad?.tipoIdentidad === "turnante" && identidad.turnanteId) {
+    return `turnante:${identidad.turnanteId}`;
+  }
   return null;
 };
 
@@ -44,7 +52,8 @@ export const resolverIdentidadOperativaAsignacion = (asignacion) => {
 
   const explicita = crearIdentidadSector(asignacion.sectorId) ||
     crearIdentidadGrupo(asignacion.groupId) ||
-    crearIdentidadSintetica(asignacion.syntheticId);
+    crearIdentidadSintetica(asignacion.syntheticId) ||
+    crearIdentidadTurnante(asignacion.turnanteId);
   if (explicita) return explicita;
 
   const etiqueta = asignacion.nombre ?? asignacion.etiqueta;
@@ -56,6 +65,10 @@ export const resolverIdentidadOperativaAsignacion = (asignacion) => {
   const sintetico = obtenerDestinoSinteticoReanimacionSillonesPorClave(etiqueta);
   if (sintetico) return crearIdentidadSintetica(sintetico.syntheticId);
 
+  const coincidenciaTurnante = /^T([1-9]\d*)$/i.exec(etiqueta.trim());
+  if (coincidenciaTurnante) {
+    return crearIdentidadTurnante(`turnante_${Number(coincidenciaTurnante[1])}`);
+  }
+
   return crearIdentidadSector(obtenerSectorIdPorNombreHistorico(etiqueta));
 };
-

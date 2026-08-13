@@ -14,6 +14,7 @@ import {
   resolverPersonaPermanenteParaExtra
 } from "./extrasPersonas.js";
 import { parsearFechaIsoUTC } from "./periodosRotacionPlanilla.js";
+import { normalizar } from "./texto.js";
 
 const esObjetoValido = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -51,6 +52,7 @@ export const crearRotacion3DiasVacia = () => ({
 
 const crearCalendarioCategoriaVacio = () => ({
   cambiosDia: {},
+  procedenciaCambiosDia: {},
   cambiosParoDia: {},
   extras: {},
   noDisponibles: {},
@@ -147,6 +149,23 @@ const normalizarNoDisponiblesPorDia = (noDisponiblesPorDia, personal) =>
         : referencias
     ])
   );
+
+const normalizarProcedenciaCambiosPorDia = (procedenciaPorDia) => {
+  if (!esObjetoValido(procedenciaPorDia)) return {};
+
+  return Object.fromEntries(
+    Object.entries(procedenciaPorDia).flatMap(([fecha, procedencias]) => {
+      if (!esObjetoValido(procedencias)) return [];
+
+      return [[fecha, Object.fromEntries(
+        Object.entries(procedencias).flatMap(([clave, valor]) => {
+          const claveNormalizada = normalizar(clave);
+          return claveNormalizada ? [[claveNormalizada, clonarValor(valor)]] : [];
+        })
+      )]];
+    })
+  );
+};
 
 export const crearEstadoMensualVacio = () => ({
   personal: [],
@@ -290,6 +309,9 @@ const normalizarCalendarioCategoria = (calendario, personal, categoria) => {
     personal,
     normalizado.extras,
     aliasesExtras
+  );
+  normalizado.procedenciaCambiosDia = normalizarProcedenciaCambiosPorDia(
+    normalizado.procedenciaCambiosDia
   );
   normalizado.cambiosParoDia = normalizarCambiosPersonasPorDia(
     normalizado.cambiosParoDia,

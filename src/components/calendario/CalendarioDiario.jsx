@@ -145,6 +145,11 @@ import {
   agregarCertificacionPorElDia,
   eliminarCertificacionPorElDia
 } from "../../utils/certificacionesPersonas.js";
+import {
+  dividirReanimacionSillones,
+  esDestinoSinteticoReanimacionSillones,
+  SECTOR_ID_REANIMACION_SILLONES
+} from "../../utils/reanimacionSillones.js";
 
 const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
   const clave = obtenerClaveIdentidadPersona({
@@ -239,7 +244,6 @@ const {
     filasConfiguracion,
     filas,
     turnantes: turnantesEfectivos,
-    sectores: sectoresEfectivos,
     ordenVisual: ordenVisualEfectivo
   } = estructuraCalendario;
 
@@ -819,123 +823,20 @@ const sobrantes = [...personalFiltrado, ...extrasDia].filter((e) => {
   return true;
 });
 
-const filaReanimacionSillones = asignacionFinal.find(
-  (item) => normalizar(item.nombre) === normalizar("Reanimación + Sillones")
-);
-const seDivideReanimacionSillones =
-  tipo === "licenciado" &&
-  !esDiaParo &&
-  !hayHuecosFinal &&
-  Boolean(filaReanimacionSillones?.enfermero) &&
-  sobrantes.length > 0;
-
 let asignacionParaMostrar = asignacionFinal;
 let ordenVisualActivo = obtenerFilasRedistribucion(ordenVisualEfectivo);
-
-if (seDivideReanimacionSillones) {
-  const filasDivididas = [
-    {
-      nombre: "Reanimación",
-      enfermero: filaReanimacionSillones.enfermero,
-      tipo: "sector"
-    },
-    {
-      nombre: "Sillones",
-      enfermero: sobrantes[0],
-      tipo: "sector"
-    },
-    ...sobrantes.slice(1).map((enfermero) => ({
-      nombre: "SIN ASIGNAR",
-      enfermero,
-      tipo: "sector"
-    }))
-  ];
-
-  asignacionParaMostrar = [
-    ...asignacionFinal.filter(
-      (item) => normalizar(item.nombre) !== normalizar("Reanimación + Sillones")
-    ),
-    ...filasDivididas
-  ];
-
-  const cambiosDivididos = cambiosDia[keyDia] || {};
-  const nombresFilasDivididas = ["Reanimación", "Sillones"];
-  const operaciones = [];
-  const personasSolicitadas = new Set();
-
-  nombresFilasDivididas.forEach((nombreFila) => {
-    const destino = asignacionParaMostrar.find(
-      (item) => normalizar(item.nombre) === normalizar(nombreFila)
-    );
-    const referenciaSolicitada = cambiosDivididos[normalizar(nombreFila)];
-
-    if (!destino || !referenciaSolicitada || referenciaSolicitada === "__EMPTY__") return;
-
-    const personaSolicitada = resolverPersonaDesdeReferencia(
-      referenciaSolicitada,
-      [...personalFiltrado, ...extrasDia]
-    );
-    const enfermero = asignacionParaMostrar.find(
-      (item) => personasCompartenIdentidad(item.enfermero, personaSolicitada)
-    )?.enfermero;
-    const claveIdentidad = obtenerClaveIdentidadPersona(enfermero);
-
-    if (!enfermero || !claveIdentidad || personasSolicitadas.has(claveIdentidad)) return;
-
-    const fuente = asignacionParaMostrar.find(
-      (item) => obtenerClaveIdentidadPersona(item.enfermero) === claveIdentidad
-    );
-
-    if (!fuente) return;
-
-    personasSolicitadas.add(claveIdentidad);
-    operaciones.push({ destino, fuente, enfermero, desplazado: destino.enfermero });
-  });
-
-  const destinosConCambio = new Set(
-    operaciones.map(({ destino }) => normalizar(destino.nombre))
-  );
-
-  operaciones.forEach(({ fuente }) => {
-    fuente.enfermero = null;
-  });
-
-  operaciones.forEach(({ destino, enfermero }) => {
-    destino.enfermero = enfermero;
-  });
-
-  const personasParaReubicar = operaciones
-    .map(({ desplazado }) => desplazado)
-    .filter((enfermero) =>
-      enfermero &&
-      !personasSolicitadas.has(obtenerClaveIdentidadPersona(enfermero))
-    );
-  const identidadesYaAsignadas = new Set(
-    asignacionParaMostrar
-      .map((item) => obtenerClaveIdentidadPersona(item.enfermero))
-      .filter(Boolean)
-  );
-
-  operaciones.forEach(({ fuente }) => {
-    if (destinosConCambio.has(normalizar(fuente.nombre)) || fuente.enfermero) return;
-
-    const indiceReubicacion = personasParaReubicar.findIndex(
-      (enfermero) =>
-        !identidadesYaAsignadas.has(obtenerClaveIdentidadPersona(enfermero))
-    );
-    const enfermero = personasParaReubicar[indiceReubicacion];
-
-    if (enfermero) {
-      fuente.enfermero = enfermero;
-      identidadesYaAsignadas.add(obtenerClaveIdentidadPersona(enfermero));
-    }
-  });
-
-  ordenVisualActivo = ordenVisualEfectivo.flatMap((item) =>
-    normalizar(item) === normalizar("Reanimación + Sillones")
-      ? ["Reanimación", "Sillones"]
-      : [item]
-  );
+const divisionReanimacionSillones = dividirReanimacionSillones({
+  asignaciones: asignacionFinal,
+  sobrantes,
+  categoria: tipo,
+  esDiaParo,
+  cambiosDia: cambiosDia[keyDia],
+  personalDisponible: [...personalFiltrado, ...extrasDia],
+  ordenVisual: ordenVisualEfectivo
+});
+if (divisionReanimacionSillones.seDivide) {
+  asignacionParaMostrar = divisionReanimacionSillones.asignaciones;
+  ordenVisualActivo = divisionReanimacionSillones.ordenVisual;
 } else if (!hayHuecosFinal && sobrantes.length > 0) {
   asignacionFinal.push({
     nombre: "SILLONES 3",
@@ -1624,18 +1525,26 @@ useEffect(() => {
   const personasPrevistas = obtenerPersonasPrevistas(asignacionOrdenada);
   const datosResumenTurno = (() => {
     const hayFilasDivididas = tipo === "licenciado" &&
-      asignacionOrdenada.some((item) => normalizar(item?.nombre) === "REANIMACION") &&
-      asignacionOrdenada.some((item) => normalizar(item?.nombre) === "SILLONES");
+      asignacionOrdenada.filter(esDestinoSinteticoReanimacionSillones).length === 2;
     const expandirReanimacion = (sectores) => sectores.flatMap((sector) =>
       hayFilasDivididas && normalizar(sector) === "REANIMACION + SILLONES"
         ? ["Reanimación", "Sillones"]
         : [sector]
     );
+    const sectoresEfectivosPresentacion = filasConfiguracion
+      .filter((fila) => fila.tipo === "sector")
+      .flatMap((fila) =>
+        hayFilasDivididas && fila.sectorId === SECTOR_ID_REANIMACION_SILLONES
+          ? ["Reanimación", "Sillones"]
+          : [fila.etiqueta]
+      );
     const sectoresReales = distribucionPorBoxesActiva || distribucionOpcion1Activa
       ? obtenerFilasRedistribucion(ordenVisualEfectivo).filter(
           (fila) => fila !== "DIVIDER" && normalizar(fila) !== "SIN ASIGNAR"
         )
-      : expandirReanimacion(esDiaParo ? sectoresParo : sectoresEfectivos);
+      : esDiaParo
+        ? expandirReanimacion(sectoresParo)
+        : sectoresEfectivosPresentacion;
     const criticosPanel = expandirReanimacion(sectoresCriticos);
     const personasConLicencia = personalFiltrado.filter(estaDeLicenciaHoy);
     const personasNoDisponibles = personalFiltrado.filter(estaNoDisponible);
@@ -1904,10 +1813,9 @@ useEffect(() => {
     const esFilaDividida = (fila) =>
       tipo === "licenciado" &&
       !esDiaParo &&
-      fila &&
-      ["REANIMACION", "SILLONES"].includes(normalizar(fila.nombre)) &&
+      esDestinoSinteticoReanimacionSillones(fila) &&
       asignacionOrdenada.some(
-        (asignacion) => normalizar(asignacion.nombre) === normalizar(fila.nombre)
+        (asignacion) => asignacion.syntheticId === fila.syntheticId
       );
 
     if (esFilaDividida(item) || esFilaDividida(seleccionado)) {

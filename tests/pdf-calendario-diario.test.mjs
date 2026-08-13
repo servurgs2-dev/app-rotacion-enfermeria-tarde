@@ -179,6 +179,12 @@ probar("11d tablas y encabezados usan negrita y alto contraste", () => {
   assert.match(fuente, /1: \{ cellWidth: 81, fontStyle: "bold" \}/);
   assert.match(fuente, /textColor: \[15, 23, 42\]/);
 });
+probar("11e Sin cobertura usa peso normal y medio punto menos", () => {
+  const fuente = fs.readFileSync("src/utils/exportPDF.js", "utf8");
+  assert.match(fuente, /String\(datos\.cell\.raw\)\.trim\(\) === "SIN COBERTURA"/);
+  assert.match(fuente, /datos\.cell\.styles\.fontStyle = "normal"/);
+  assert.match(fuente, /datos\.cell\.styles\.fontSize = perfilVisual\.fuenteTabla - 0\.5/);
+});
 probar("12 mantiene Redistribución opción 1", () => {
   assert.ok(asignacionesEnfermeros.some((fila) => fila.nombre === "1-3 + 19-22"));
 });

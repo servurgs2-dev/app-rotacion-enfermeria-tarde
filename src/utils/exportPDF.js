@@ -850,6 +850,16 @@ export const crearCalendarioDiarioPDF = ({
         0: { cellWidth: 56, fontStyle: "bold" },
         1: { cellWidth: 81, fontStyle: "bold" }
       },
+      didParseCell: (datos) => {
+        if (
+          datos.section === "body" &&
+          datos.column.index === 1 &&
+          String(datos.cell.raw).trim() === "SIN COBERTURA"
+        ) {
+          datos.cell.styles.fontStyle = "normal";
+          datos.cell.styles.fontSize = perfilVisual.fuenteTabla - 0.5;
+        }
+      },
       pageBreak: "avoid",
       rowPageBreak: "avoid"
     });

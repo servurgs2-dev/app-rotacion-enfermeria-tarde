@@ -1,4 +1,3 @@
-import { normalizar } from "./texto.js";
 import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
 import { obtenerEtiquetaPersona } from "./nombresPersonas.js";
 import { obtenerConfiguracionTurno } from "../config/turnos.js";
@@ -8,52 +7,68 @@ import {
   normalizarMaternal,
   obtenerAjusteMaternal
 } from "./maternal.js";
+import {
+  crearIdentidadSector,
+  crearIdentidadSintetica,
+  obtenerClaveIdentidadOperativa,
+  resolverIdentidadOperativaAsignacion
+} from "./identidadOperativaAsignaciones.js";
+import { SYNTHETIC_IDS_REANIMACION_SILLONES } from "./reanimacionSillones.js";
+
+const sectores = (...sectorIds) => sectorIds.map(crearIdentidadSector);
+const sinteticos = (...syntheticIds) => syntheticIds.map(crearIdentidadSintetica);
 
 export const gruposOperativos = [
   {
     nombre: "Triaje",
-    licenciados: ["Triage 1", "Triage 2"],
+    licenciados: sectores("triage_1", "triage_2"),
     enfermeros: [],
     esTriaje: true
   },
   {
     nombre: "Reanimación y Sillones",
-    licenciados: ["Reanimación + Sillones", "Reanimación", "Sillones"],
-    enfermeros: ["REA 1", "REA 2", "SILLÓN 1", "SILLON 2", "SILLONES 3"]
+    licenciados: [
+      ...sectores("reanimacion_sillones"),
+      ...sinteticos(
+        SYNTHETIC_IDS_REANIMACION_SILLONES.REANIMACION,
+        SYNTHETIC_IDS_REANIMACION_SILLONES.SILLONES
+      )
+    ],
+    enfermeros: sectores("rea_1", "rea_2", "sillon_1", "sillon_2", "sillones_3")
   },
   {
     nombre: "Estabiliza",
-    licenciados: ["Estabiliza"],
-    enfermeros: ["1-3 + 21", "4-7"]
+    licenciados: sectores("estabiliza"),
+    enfermeros: sectores("boxes_1_3_21", "boxes_4_7")
   },
   {
     nombre: "Observación",
-    licenciados: ["Observación 1", "Observación 2"],
-    enfermeros: ["8-13", "14-19", "20-22-24"]
+    licenciados: sectores("observacion_1", "observacion_2"),
+    enfermeros: sectores("boxes_8_13", "boxes_14_19", "boxes_20_22_24")
   },
   {
     nombre: "Diagnóstico",
-    licenciados: ["Diagnostico"],
-    enfermeros: ["DX 25-30"]
+    licenciados: sectores("diagnostico"),
+    enfermeros: sectores("dx_25_30")
   },
   {
     nombre: "Explora",
-    licenciados: ["Explora"],
-    enfermeros: ["EXPLORA 1", "EXPLORA 2"],
+    licenciados: sectores("explora"),
+    enfermeros: sectores("explora_1", "explora_2"),
     respaldoSiSinCobertura: {
-      sector: "Explora",
-      responsable: "Diagnostico"
+      sector: crearIdentidadSector("explora"),
+      responsable: crearIdentidadSector("diagnostico")
     }
   },
   {
     nombre: "Preinternación",
-    licenciados: ["Preinternación"],
-    enfermeros: ["PRE INT 1", "PRE INT 2"]
+    licenciados: sectores("preinternacion"),
+    enfermeros: sectores("pre_int_1", "pre_int_2")
   },
   {
     nombre: "Salud Mental",
-    licenciados: ["Salud Mental"],
-    enfermeros: ["SM"]
+    licenciados: sectores("salud_mental"),
+    enfermeros: sectores("salud_mental")
   }
 ];
 
@@ -86,23 +101,34 @@ export const obtenerHorarioEfectivo = (persona, configTurno = obtenerConfiguraci
   };
 };
 
-const obtenerAsignados = (asignaciones, sectores) => {
-  const sectoresBuscados = new Set(sectores.map(normalizar));
+const obtenerPersonaCanonica = (personaAsignada, personal) => {
+  const identidad = obtenerClaveIdentidadPersona(personaAsignada);
+  if (!identidad) return personaAsignada;
+  return (Array.isArray(personal) ? personal : []).find(
+    (persona) => obtenerClaveIdentidadPersona(persona) === identidad
+  ) || personaAsignada;
+};
+
+const obtenerAsignados = (asignaciones, sectores, personal) => {
+  const sectoresBuscados = new Set(sectores.map(obtenerClaveIdentidadOperativa).filter(Boolean));
   const personas = new Map();
 
   asignaciones.forEach((asignacion) => {
     if (
       !asignacion?.enfermero ||
+      asignacion.activo === false ||
       asignacion.tipo === "divider" ||
-      normalizar(asignacion.nombre) === "SIN ASIGNAR" ||
-      !sectoresBuscados.has(normalizar(asignacion.nombre))
+      !sectoresBuscados.has(obtenerClaveIdentidadOperativa(
+        resolverIdentidadOperativaAsignacion(asignacion)
+      ))
     ) {
       return;
     }
 
-    const clavePersona = obtenerClaveIdentidadPersona(asignacion.enfermero);
+    const persona = obtenerPersonaCanonica(asignacion.enfermero, personal);
+    const clavePersona = obtenerClaveIdentidadPersona(persona);
     if (clavePersona && !personas.has(clavePersona)) {
-      personas.set(clavePersona, asignacion.enfermero);
+      personas.set(clavePersona, persona);
     }
   });
 
@@ -155,12 +181,9 @@ const generarAlertaGrupo = (grupo, personas, configTurno) => {
   const momentoCritico = momentosCriticos[0];
   if (!momentoCritico) return null;
 
-  const todasLasPersonasSalen = momentoCritico.personasQueSalen.length === personas.length;
-  const salidaDescripcion = todasLasPersonasSalen
-    ? `a las ${momentoCritico.hora} se retiran las ${personas.length} personas asignadas.`
-    : `a las ${momentoCritico.hora} ${
-      momentoCritico.personasQueSalen.length === 1 ? "se retira" : "se retiran"
-    } ${listarNombres(momentoCritico.personasQueSalen, personas)}.`;
+  const salidaDescripcion = `a las ${momentoCritico.hora} ${
+    momentoCritico.personasQueSalen.length === 1 ? "se retira" : "se retiran"
+  } ${listarNombres(momentoCritico.personasQueSalen, personas)}.`;
 
   if (momentoCritico.personasRestantes === 0) {
     return `⚠️ ${grupo.nombre}: ${salidaDescripcion} El sector queda sin cobertura hasta las ${horaCierre}.`;
@@ -176,17 +199,18 @@ const generarAlertaGrupo = (grupo, personas, configTurno) => {
 export const generarAlertasHorarios = ({
   enfermeros = [],
   licenciados = [],
+  personal = [],
   configTurno = obtenerConfiguracionTurno()
 }) =>
   gruposOperativos.flatMap((grupo) => {
-    const responsablesHabituales = obtenerAsignados(licenciados, grupo.licenciados);
+    const responsablesHabituales = obtenerAsignados(licenciados, grupo.licenciados, personal);
     const sectorRespaldo = grupo.respaldoSiSinCobertura;
     const responsables = responsablesHabituales.length > 0 || !sectorRespaldo
       ? responsablesHabituales
-      : obtenerAsignados(licenciados, [sectorRespaldo.responsable]);
+      : obtenerAsignados(licenciados, [sectorRespaldo.responsable], personal);
     const personas = [
       ...responsables,
-      ...obtenerAsignados(enfermeros, grupo.enfermeros)
+      ...obtenerAsignados(enfermeros, grupo.enfermeros, personal)
     ];
     const personasUnicas = [...new Map(
       personas

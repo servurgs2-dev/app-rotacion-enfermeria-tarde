@@ -213,6 +213,7 @@ const getMesData = (mes, turnoId = turnoActivo) => {
 
 
 const mesData = getMesData(mesActivo);
+const personal = mesData.personal;
 const diasParo = mesData.calendario?.diasParo || {};
 const keyDiaActual = keyDiaFromDate(fecha);
 const esDiaParoActual = Boolean(diasParo[keyDiaActual]);
@@ -229,12 +230,10 @@ const alertasHorarios = useMemo(() => {
   return generarAlertasHorarios({
     enfermeros: dataPDFEnf.asignaciones,
     licenciados: dataPDFLic.asignaciones,
+    personal,
     configTurno
   });
-}, [configTurno, dataPDFEnf, dataPDFLic, esDiaParoActual, keyDiaActual]);
-
-// 🔹 PERSONAL
-const personal = mesData.personal;
+}, [configTurno, dataPDFEnf, dataPDFLic, esDiaParoActual, keyDiaActual, personal]);
 
 // 🔹 PLANILLAS
 const planillaEnfermeros = mesData.planillas.enfermeros;

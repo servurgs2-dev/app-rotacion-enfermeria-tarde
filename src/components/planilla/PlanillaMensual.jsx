@@ -74,6 +74,11 @@ import {
   obtenerEtiquetasFilasPlanilla,
   obtenerFilasActivas
 } from "../../utils/configuracionPlanilla.js";
+import {
+  adaptarPlanillaSaludMental,
+  obtenerFilaSaludMentalActiva,
+  obtenerReferenciaSaludMental
+} from "../../utils/saludMentalGeneracion.js";
 
 function PlanillaMensual({
   personal,
@@ -134,10 +139,12 @@ function PlanillaMensual({
     categoria: tipo,
     mes: mesActivo
   });
-  const filas = obtenerEtiquetasFilasPlanilla(
-    obtenerFilasActivas(configuracionEfectiva?.filas)
-      .sort((filaA, filaB) => filaA.orden - filaB.orden)
-  );
+  const filasConfiguracion = [...(configuracionEfectiva?.filas || [])]
+    .sort((filaA, filaB) => filaA.orden - filaB.orden);
+  const filasActivas = obtenerFilasActivas(filasConfiguracion);
+  const filas = obtenerEtiquetasFilasPlanilla(filasActivas);
+  const filaSaludMental = obtenerFilaSaludMentalActiva(filasConfiguracion);
+  const etiquetaSaludMental = filaSaludMental?.etiqueta || null;
   const posicionTurnanteMensual = obtenerPosicionTurnanteMensual(tipo);
   const turnanteMensualHabilitado = filas.includes(posicionTurnanteMensual);
   const capacidadNormal = obtenerCapacidadNormalPlanilla(tipo);
@@ -240,26 +247,32 @@ function PlanillaMensual({
 
     if (usaRotacionTresDias) {
       const esMesInicial = evaluacionGeneracion.esMesInicial;
-      const preparar = (rotacion3Dias) => esMesInicial
-        ? regenerarRotacion3DiasDesdePrimerBloque({
-            rotacion3Dias,
+      const preparar = (planillaActual) => {
+        const planillaAdaptada = adaptarPlanillaSaludMental({
+          planilla: planillaActual,
+          filasConfiguracion
+        });
+        return esMesInicial
+          ? regenerarRotacion3DiasDesdePrimerBloque({
+            rotacion3Dias: planillaAdaptada.rotacion3Dias,
             periodos,
             filas,
-            filasFijas: ["SM"],
+            filasFijas: etiquetaSaludMental ? [etiquetaSaludMental] : [],
             posicionesNoAplicables,
             estrategia
           })
-        : prepararRotacion3DiasParaGenerar({
-            rotacion3Dias,
+          : prepararRotacion3DiasParaGenerar({
+            rotacion3Dias: planillaAdaptada.rotacion3Dias,
             periodos,
             filas,
-            filasFijas: ["SM"],
+            filasFijas: etiquetaSaludMental ? [etiquetaSaludMental] : [],
             posicionesNoAplicables,
             estrategia
           });
+      };
 
       setPlanilla((prev) => {
-        const resultado = preparar(prev?.rotacion3Dias);
+        const resultado = preparar(prev);
         if (!resultado.ok) return prev;
         return {
           ...prev,
@@ -270,10 +283,13 @@ function PlanillaMensual({
     } else {
       setPlanilla((prev) => ({
         ...generarRotacionMensual({
-          planilla: prev,
+          planilla: adaptarPlanillaSaludMental({
+            planilla: prev,
+            filasConfiguracion
+          }),
           filas,
           semanas: periodos,
-          filaFija: "SM",
+          filaFija: etiquetaSaludMental,
           personal: personalFiltrado,
           posicionesNoAplicables
         }),
@@ -361,22 +377,28 @@ function PlanillaMensual({
       }
 
       const esMesInicial = evaluacionGeneracion.esMesInicial;
-      const prepararGeneracion = (rotacion3Dias) => (esMesInicial
-        ? regenerarRotacion3DiasDesdePrimerBloque({
-            rotacion3Dias,
+      const prepararGeneracion = (planillaActual) => {
+        const planillaAdaptada = adaptarPlanillaSaludMental({
+          planilla: planillaActual,
+          filasConfiguracion
+        });
+        return esMesInicial
+          ? regenerarRotacion3DiasDesdePrimerBloque({
+            rotacion3Dias: planillaAdaptada.rotacion3Dias,
             periodos,
             filas,
-            filasFijas: ["SM"],
+            filasFijas: etiquetaSaludMental ? [etiquetaSaludMental] : [],
             estrategia
           })
-        : prepararRotacion3DiasParaGenerar({
-            rotacion3Dias,
+          : prepararRotacion3DiasParaGenerar({
+            rotacion3Dias: planillaAdaptada.rotacion3Dias,
             periodos,
             filas,
-            filasFijas: ["SM"],
+            filasFijas: etiquetaSaludMental ? [etiquetaSaludMental] : [],
             estrategia
-          }));
-      const preparacionActual = prepararGeneracion(planilla?.rotacion3Dias);
+          });
+      };
+      const preparacionActual = prepararGeneracion(planilla);
       if (!preparacionActual.ok) {
         alert("Completá el primer bloque de la rotación antes de generar los siguientes.");
         return;
@@ -395,7 +417,7 @@ function PlanillaMensual({
       ) return;
 
       setPlanilla((prev) => {
-        const preparacion = prepararGeneracion(prev?.rotacion3Dias);
+        const preparacion = prepararGeneracion(prev);
         if (!preparacion.ok) return prev;
 
         return {
@@ -406,11 +428,14 @@ function PlanillaMensual({
       return;
     }
 
-    setPlanilla(generarRotacionMensual({
-      planilla,
+    setPlanilla((prev) => generarRotacionMensual({
+      planilla: adaptarPlanillaSaludMental({
+        planilla: prev,
+        filasConfiguracion
+      }),
       filas,
       semanas: periodos,
-      filaFija: tipo === "enfermero" ? "SM" : "Salud Mental",
+      filaFija: etiquetaSaludMental,
       personal: personalFiltrado
     }));
   }
@@ -1022,10 +1047,12 @@ function PlanillaMensual({
                   : "Cubre libre de Salud Mental"}
               </td>
               {periodos.map((periodo) => {
-                const sectorSM = tipo === "enfermero" ? "SM" : "Salud Mental";
                 const valoresPeriodo = obtenerValoresPeriodo(periodo);
                 const titular = resolverPersonaDesdeReferencia(
-                  valoresPeriodo[sectorSM],
+                  obtenerReferenciaSaludMental({
+                    distribucion: valoresPeriodo,
+                    fila: filaSaludMental
+                  }),
                   personalFiltrado
                 );
                 const referencia = usaRotacionTresDias

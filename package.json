@@ -47,6 +47,7 @@
     "test:resolucion-identidades-planilla": "node tests/resolucion-identidades-planilla.test.mjs",
     "test:cobertura-parejas-ids": "node tests/cobertura-parejas-ids.test.mjs",
     "test:criticos-prioridades-ids": "node tests/criticos-prioridades-ids.test.mjs",
+    "test:generacion-salud-mental-ids": "node tests/generacion-salud-mental-ids.test.mjs",
     "test:grupos-redistribucion-ids": "node tests/grupos-redistribucion-ids.test.mjs",
     "test:reanimacion-sillones-ids": "node tests/reanimacion-sillones-ids.test.mjs",
     "test:alertas-identidades": "node tests/alertas-identidades.test.mjs",

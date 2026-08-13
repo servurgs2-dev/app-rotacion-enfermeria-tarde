@@ -398,7 +398,9 @@ export const generarRotacionMensual = ({
     (fila) => fila !== filaFija && !excluidas.has(fila)
   );
   const baseRotable = filasRotables.map((fila) => semana1[fila] || "");
-  const tieneAsignacionFija = Object.prototype.hasOwnProperty.call(semana1, filaFija);
+  const tieneFilaFija = typeof filaFija === "string" && filaFija.length > 0;
+  const tieneAsignacionFija = tieneFilaFija &&
+    Object.prototype.hasOwnProperty.call(semana1, filaFija);
   const referenciaFija = tieneAsignacionFija && !excluidas.has(filaFija)
     ? semana1[filaFija]
     : "";
@@ -426,7 +428,9 @@ export const generarRotacionMensual = ({
         : clonarAsignacion(referencia);
     });
 
-    semanaGenerada[filaFija] = clonarAsignacion(referenciaFija);
+    if (tieneFilaFija) {
+      semanaGenerada[filaFija] = clonarAsignacion(referenciaFija);
+    }
     excluidas.forEach((fila) => {
       semanaGenerada[fila] = "";
     });

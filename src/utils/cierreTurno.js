@@ -8,6 +8,10 @@ import {
 } from "./asistenciaPersonas.js";
 import { normalizar } from "./texto.js";
 import { quitarGeneracionFlexible } from "./generacionFlexiblePlanilla.js";
+import {
+  obtenerClaveIdentidadOperativa,
+  resolverIdentidadOperativaAsignacion
+} from "./identidadOperativaAsignaciones.js";
 
 const esObjeto = (valor) => Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
 const clonarSerializable = (valor) => JSON.parse(JSON.stringify(valor));
@@ -44,6 +48,7 @@ export const crearSnapshotCierreTurno = ({
   certificaciones,
   noDisponibles,
   extrasRegistrados,
+  destinosOperativos,
   sectoresReales = []
 }) => {
   const previstas = obtenerPersonasPrevistas(asignaciones);
@@ -53,10 +58,34 @@ export const crearSnapshotCierreTurno = ({
       obtenerEstadoAsistencia(asistencia, persona)
     ])
   );
-  const sectoresSinCobertura = (Array.isArray(sectoresReales) ? sectoresReales : [])
-    .filter((sector) => !asignaciones.some(
-      (asignacion) => normalizar(asignacion?.nombre) === normalizar(sector) && asignacion?.enfermero
-    ));
+  const asignacionesPorIdentidad = new Map((Array.isArray(asignaciones) ? asignaciones : [])
+    .flatMap((asignacion) => {
+      const clave = obtenerClaveIdentidadOperativa(
+        resolverIdentidadOperativaAsignacion(asignacion)
+      );
+      return clave ? [[clave, asignacion]] : [];
+    }));
+  const destinosUnicos = new Map();
+  if (Array.isArray(destinosOperativos)) {
+    destinosOperativos.forEach((destino) => {
+      if (!destino || destino.tipo === "divider") return;
+      const identidad = resolverIdentidadOperativaAsignacion(destino);
+      const clave = obtenerClaveIdentidadOperativa(identidad);
+      if (!clave || identidad?.tipoIdentidad === "turnante" || destinosUnicos.has(clave)) return;
+      destinosUnicos.set(clave, {
+        etiqueta: destino.etiqueta || destino.nombre,
+        asignacion: asignacionesPorIdentidad.get(clave)
+      });
+    });
+  }
+  const sectoresSinCobertura = Array.isArray(destinosOperativos)
+    ? [...destinosUnicos.values()]
+      .filter(({ asignacion }) => !asignacion?.enfermero)
+      .map(({ etiqueta }) => etiqueta)
+    : (Array.isArray(sectoresReales) ? sectoresReales : [])
+      .filter((sector) => !asignaciones.some(
+        (asignacion) => normalizar(asignacion?.nombre) === normalizar(sector) && asignacion?.enfermero
+      ));
 
   return clonarSerializable({
     fecha,

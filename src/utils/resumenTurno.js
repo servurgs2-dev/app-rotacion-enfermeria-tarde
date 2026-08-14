@@ -6,6 +6,10 @@ import {
   resumirAsistencia
 } from "./asistenciaPersonas.js";
 import { normalizar } from "./texto.js";
+import {
+  obtenerClaveIdentidadOperativa,
+  resolverIdentidadOperativaAsignacion
+} from "./identidadOperativaAsignaciones.js";
 
 const clavesPersonas = (personas) => new Set(
   (Array.isArray(personas) ? personas : [])
@@ -15,6 +19,28 @@ const clavesPersonas = (personas) => new Set(
 
 const contarPersonas = (personas) => clavesPersonas(personas).size;
 
+const crearDestinosLegacy = (sectores) => (Array.isArray(sectores) ? sectores : [])
+  .map((etiqueta) => ({ etiqueta, claveLegacy: normalizar(etiqueta) }))
+  .filter((destino) => destino.claveLegacy);
+
+const crearDestinosOperativos = (destinos, sectoresLegacy) => {
+  if (!Array.isArray(destinos)) return crearDestinosLegacy(sectoresLegacy);
+  const unicos = new Map();
+  destinos.forEach((destino) => {
+    if (!destino || destino.tipo === "divider") return;
+    const identidad = resolverIdentidadOperativaAsignacion(destino);
+    const claveIdentidad = obtenerClaveIdentidadOperativa(identidad);
+    if (!claveIdentidad || identidad?.tipoIdentidad === "turnante") return;
+    if (!unicos.has(claveIdentidad)) {
+      unicos.set(claveIdentidad, {
+        etiqueta: destino.etiqueta || destino.nombre,
+        claveIdentidad
+      });
+    }
+  });
+  return [...unicos.values()];
+};
+
 export const crearResumenTurno = ({
   asignaciones = [],
   asistencia = {},
@@ -23,6 +49,9 @@ export const crearResumenTurno = ({
   certificaciones = [],
   noDisponibles = [],
   extras = [],
+  destinosOperativos,
+  sectoresCriticosIds = [],
+  sectorIdSaludMental = "salud_mental",
   sectoresReales = [],
   sectoresCriticos = [],
   sectoresSaludMental = []
@@ -33,17 +62,28 @@ export const crearResumenTurno = ({
   const clavesLicencias = clavesPersonas(licencias);
   const clavesCertificaciones = clavesPersonas(certificaciones);
   const clavesNoDisponibles = clavesPersonas(noDisponibles);
-  const criticos = new Set(sectoresCriticos.map(normalizar));
-  const saludMental = new Set(sectoresSaludMental.map(normalizar));
+  const criticosIds = new Set(sectoresCriticosIds);
+  const criticosLegacy = new Set(sectoresCriticos.map(normalizar));
+  const saludMentalLegacy = new Set(sectoresSaludMental.map(normalizar));
+  const asignacionesPorIdentidad = new Map();
   const asignacionesPorSector = new Map();
 
   asignaciones.forEach((asignacion) => {
+    const claveIdentidad = obtenerClaveIdentidadOperativa(
+      resolverIdentidadOperativaAsignacion(asignacion)
+    );
+    if (claveIdentidad) asignacionesPorIdentidad.set(claveIdentidad, asignacion);
     const sector = normalizar(asignacion?.nombre);
     if (sector) asignacionesPorSector.set(sector, asignacion);
   });
 
-  const sectoresVacios = sectoresReales
-    .map((sector) => ({ sector, asignacion: asignacionesPorSector.get(normalizar(sector)) }))
+  const sectoresVacios = crearDestinosOperativos(destinosOperativos, sectoresReales)
+    .map((destino) => ({
+      ...destino,
+      asignacion: destino.claveIdentidad
+        ? asignacionesPorIdentidad.get(destino.claveIdentidad)
+        : asignacionesPorSector.get(destino.claveLegacy)
+    }))
     .filter(({ asignacion }) => !asignacion?.enfermero);
 
   const alertas = new Map();
@@ -51,28 +91,31 @@ export const crearResumenTurno = ({
     if (!alertas.has(alerta.id)) alertas.set(alerta.id, alerta);
   };
 
-  sectoresVacios.forEach(({ sector }) => {
-    const claveSector = normalizar(sector);
-    if (saludMental.has(claveSector)) {
+  sectoresVacios.forEach(({ etiqueta, claveIdentidad, claveLegacy }) => {
+    const clavePresentacion = normalizar(etiqueta);
+    const sectorId = claveIdentidad?.startsWith("sector:")
+      ? claveIdentidad.slice("sector:".length)
+      : null;
+    if (sectorId === sectorIdSaludMental || (!claveIdentidad && saludMentalLegacy.has(claveLegacy))) {
       agregarAlerta({
-        id: `salud-mental-sin-cobertura:${claveSector}`,
+        id: `salud-mental-sin-cobertura:${clavePresentacion}`,
         nivel: "critica",
         tipo: "salud_mental_sin_cobertura",
-        mensaje: `${sector} está sin cobertura.`
+        mensaje: `${etiqueta} está sin cobertura.`
       });
-    } else if (criticos.has(claveSector)) {
+    } else if ((sectorId && criticosIds.has(sectorId)) || (!claveIdentidad && criticosLegacy.has(claveLegacy))) {
       agregarAlerta({
-        id: `sector-critico-sin-cobertura:${claveSector}`,
+        id: `sector-critico-sin-cobertura:${clavePresentacion}`,
         nivel: "critica",
         tipo: "sector_critico_sin_cobertura",
-        mensaje: `${sector} está sin cobertura.`
+        mensaje: `${etiqueta} está sin cobertura.`
       });
     } else {
       agregarAlerta({
-        id: `sector-sin-cobertura:${claveSector}`,
+        id: `sector-sin-cobertura:${clavePresentacion}`,
         nivel: "informacion",
         tipo: "sector_sin_cobertura",
-        mensaje: `${sector} está sin cobertura.`
+        mensaje: `${etiqueta} está sin cobertura.`
       });
     }
   });

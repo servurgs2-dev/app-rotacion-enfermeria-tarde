@@ -702,7 +702,6 @@ if (distribucionOpcion1Activa) {
     procedenciaAutomatica: PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
   });
 }
-
 const filaSaludMental = filasConfiguracion.find(
   (fila) => fila.tipo === "sector" && fila.sectorId === SECTOR_ID_SALUD_MENTAL
 );
@@ -1554,12 +1553,18 @@ useEffect(() => {
         ? ["SM + Preinternación"]
         : ["Salud Mental"];
 
+    const destinosOperativos = esDiaParo
+      ? undefined
+      : asignacionOrdenada.filter((fila) => fila?.tipo !== "divider");
+
     return {
       libres,
       licencias: personasConLicencia,
       certificaciones: certificados,
       noDisponibles: personasNoDisponibles,
       extras: extrasDia,
+      destinosOperativos,
+      sectoresCriticosIds,
       sectoresReales,
       sectoresCriticos: criticosPanel,
       sectoresSaludMental
@@ -1627,6 +1632,7 @@ useEffect(() => {
       certificaciones: datosResumenTurno.certificaciones,
       noDisponibles: datosResumenTurno.noDisponibles,
       extrasRegistrados: datosResumenTurno.extras,
+      destinosOperativos: datosResumenTurno.destinosOperativos,
       sectoresReales: datosResumenTurno.sectoresReales
     });
     setCalendario((prev) => ({

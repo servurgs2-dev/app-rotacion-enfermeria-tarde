@@ -50,6 +50,7 @@
     "test:generacion-salud-mental-ids": "node tests/generacion-salud-mental-ids.test.mjs",
     "test:grupos-redistribucion-ids": "node tests/grupos-redistribucion-ids.test.mjs",
     "test:reanimacion-sillones-ids": "node tests/reanimacion-sillones-ids.test.mjs",
+    "test:resumen-cierre-identidades": "node tests/resumen-cierre-identidades.test.mjs",
     "test:alertas-identidades": "node tests/alertas-identidades.test.mjs",
     "preview": "vite preview"
   },

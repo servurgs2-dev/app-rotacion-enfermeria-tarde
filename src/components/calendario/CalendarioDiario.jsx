@@ -150,6 +150,11 @@ import {
   esDestinoSinteticoReanimacionSillones,
   SECTOR_ID_REANIMACION_SILLONES
 } from "../../utils/reanimacionSillones.js";
+import {
+  DESTINOS_DINAMICOS_ENFERMEROS,
+  incorporarDestinosDinamicosAlOrden,
+  resolverDestinosDinamicosCalendario
+} from "../../utils/destinosDinamicosCalendario.js";
 
 const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
   const clave = obtenerClaveIdentidadPersona({
@@ -836,18 +841,36 @@ const divisionReanimacionSillones = dividirReanimacionSillones({
 if (divisionReanimacionSillones.seDivide) {
   asignacionParaMostrar = divisionReanimacionSillones.asignaciones;
   ordenVisualActivo = divisionReanimacionSillones.ordenVisual;
-} else if (!hayHuecosFinal && sobrantes.length > 0) {
-  asignacionFinal.push({
-    nombre: "SILLONES 3",
-    enfermero: sobrantes[0]
-  });
+} else {
+  const destinosDinamicos = tipo === "enfermero"
+    ? resolverDestinosDinamicosCalendario({
+        destinos: DESTINOS_DINAMICOS_ENFERMEROS,
+        cambiosDia: cambiosDia[keyDia],
+        sobrantes,
+        habilitarAutomaticos: !hayHuecosFinal
+      })
+    : { asignaciones: [], sobrantes };
 
-  sobrantes.slice(1).forEach((e) => {
-    asignacionFinal.push({
-      nombre: "SIN ASIGNAR",
-      enfermero: e
+  if (destinosDinamicos.asignaciones.length > 0) {
+    asignacionParaMostrar = [
+      ...asignacionFinal,
+      ...destinosDinamicos.asignaciones
+    ];
+    ordenVisualActivo = incorporarDestinosDinamicosAlOrden({
+      ordenVisual: ordenVisualActivo,
+      destinosPresentes: destinosDinamicos.asignaciones,
+      filasConfiguracion
     });
-  });
+  }
+
+  if (!hayHuecosFinal) {
+    destinosDinamicos.sobrantes.forEach((e) => {
+      asignacionParaMostrar.push({
+        nombre: "SIN ASIGNAR",
+        enfermero: e
+      });
+    });
+  }
 }
 
 if (esDiaParo) {

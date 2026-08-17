@@ -509,6 +509,29 @@ export const agregarExtraALista = (lista, extra) => {
   return [...extras, { ...extra, id: extraId }];
 };
 
+export const agregarExtraAlCalendario = ({
+  calendarioCategoria,
+  fecha,
+  extra
+} = {}) => {
+  if (!esObjeto(calendarioCategoria) || !String(fecha || "").trim() || !extra) {
+    return calendarioCategoria;
+  }
+  const extrasPorDia = esObjeto(calendarioCategoria.extras)
+    ? calendarioCategoria.extras
+    : {};
+  const listaActual = Array.isArray(extrasPorDia[fecha]) ? extrasPorDia[fecha] : [];
+  const listaSiguiente = agregarExtraALista(listaActual, extra);
+  if (listaSiguiente === listaActual) return calendarioCategoria;
+  return {
+    ...calendarioCategoria,
+    extras: {
+      ...extrasPorDia,
+      [fecha]: listaSiguiente
+    }
+  };
+};
+
 const limpiarCambiosDelExtra = (
   cambiosPorDia,
   fecha,

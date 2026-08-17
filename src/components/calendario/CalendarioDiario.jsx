@@ -32,9 +32,12 @@ import {
   aplicarMovimientosCalendario,
   crearMovimientosEntreFilasCalendario
 } from "../../utils/cambiosCalendario.js";
-import { construirAsignacionesDiariasCalendario } from "../../utils/pipelineCalendarioDiario.js";
 import {
-  agregarExtraALista,
+  construirAsignacionesDiariasCalendario,
+  incorporarPersonasSinAsignar
+} from "../../utils/pipelineCalendarioDiario.js";
+import {
+  agregarExtraAlCalendario,
   configurarTipoExtra,
   crearExtraDesdeLibre,
   crearExtraDesdePersonal,
@@ -567,8 +570,6 @@ const contextoExtraValido = () =>
   formularioExtra.contexto.fecha === keyDia &&
   formularioExtra.contexto.categoria === tipo &&
   formularioExtra.contexto.calendario === calendario &&
-  formularioExtra.contexto.calendario ===
-    (obtenerCalendarioActual ? obtenerCalendarioActual() : calendario) &&
   !soloLecturaEfectiva;
 
 const confirmarExtra = () => {
@@ -651,16 +652,11 @@ const confirmarExtra = () => {
   }
 
   altaExtraEnCursoRef.current = true;
-  setCalendario((prev) => {
-    if (prev !== formularioExtra.contexto.calendario) return prev;
-    return {
-      ...prev,
-      extras: {
-        ...(prev.extras || {}),
-        [keyDia]: agregarExtraALista(prev.extras?.[keyDia], resultado.extra)
-      }
-    };
-  });
+  setCalendario((prev) => agregarExtraAlCalendario({
+    calendarioCategoria: prev,
+    fecha: keyDia,
+    extra: resultado.extra
+  }));
   setFormularioExtra(null);
 };
 
@@ -885,14 +881,10 @@ if (divisionReanimacionSillones.seDivide) {
     });
   }
 
-  if (!hayHuecosFinal) {
-    destinosDinamicos.sobrantes.forEach((e) => {
-      asignacionParaMostrar.push({
-        nombre: "SIN ASIGNAR",
-        enfermero: e
-      });
-    });
-  }
+  asignacionParaMostrar = incorporarPersonasSinAsignar({
+    asignaciones: asignacionParaMostrar,
+    personas: destinosDinamicos.sobrantes
+  });
 }
 
 if (esDiaParo) {
@@ -1115,7 +1107,6 @@ const confirmarExtraLibre = () => {
     contexto.fecha !== keyDia ||
     contexto.categoria !== tipo ||
     contexto.calendario !== calendario ||
-    contexto.calendario !== (obtenerCalendarioActual ? obtenerCalendarioActual() : calendario) ||
     soloLecturaEfectiva
   ) {
     setFormularioExtraLibre((actual) => actual && ({
@@ -1150,16 +1141,11 @@ const confirmarExtraLibre = () => {
     setFormularioExtraLibre((actual) => ({ ...actual, error: resultado.error }));
     return;
   }
-  setCalendario((prev) => {
-    if (prev !== contexto.calendario) return prev;
-    return {
-      ...prev,
-      extras: {
-        ...(prev.extras || {}),
-        [keyDia]: agregarExtraALista(prev.extras?.[keyDia], resultado.extra)
-      }
-    };
-  });
+  setCalendario((prev) => agregarExtraAlCalendario({
+    calendarioCategoria: prev,
+    fecha: keyDia,
+    extra: resultado.extra
+  }));
   setFormularioExtraLibre(null);
 };
 

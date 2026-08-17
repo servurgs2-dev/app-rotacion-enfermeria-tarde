@@ -143,7 +143,7 @@ probar("16 un funcionario no puede cubrirse dos veces", () => {
   assert.match(segunda.error, /ya está cubierto/);
 });
 probar("17 un extra no puede agregarse dos veces", () =>
-  assert.match(calendarioFuente, /agregarExtraALista/));
+  assert.match(calendarioFuente, /agregarExtraAlCalendario/));
 probar("18 una persona no puede cubrirse a sí misma", () => {
   const resultado = configurarTipoExtra({
     extra: { ...milton },

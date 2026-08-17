@@ -2,6 +2,28 @@ import { resolverPersonaDesdeReferencia } from "./referenciasPersonas.js";
 import { resolverClaveDistribucionParaFila } from "./resolucionIdentidadesPlanilla.js";
 import { normalizar } from "./texto.js";
 import { VACANTE_OPERATIVA } from "./cambiosCalendario.js";
+import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
+
+export const incorporarPersonasSinAsignar = ({
+  asignaciones = [],
+  personas = []
+} = {}) => {
+  const resultado = Array.isArray(asignaciones) ? [...asignaciones] : [];
+  const identidades = new Set(
+    resultado
+      .map((fila) => obtenerClaveIdentidadPersona(fila?.enfermero))
+      .filter(Boolean)
+  );
+
+  (Array.isArray(personas) ? personas : []).forEach((persona) => {
+    const identidad = obtenerClaveIdentidadPersona(persona);
+    if (!identidad || identidades.has(identidad)) return;
+    identidades.add(identidad);
+    resultado.push({ nombre: "SIN ASIGNAR", enfermero: persona, tipo: "sector" });
+  });
+
+  return resultado;
+};
 
 export const construirAsignacionesDiariasCalendario = ({
   filasCalendario,

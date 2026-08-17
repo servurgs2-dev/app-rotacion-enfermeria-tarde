@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   crearNovedadPersonal,
   crearNovedadesLegacy,
+  contarOlvidosTarjetaPendientes,
   ESTADOS_NOVEDAD_PERSONAL,
   filtrarNovedadesPorTurnoActivo,
   obtenerConfiguracionTipoNovedad,
@@ -10,6 +11,8 @@ import {
   OPCIONES_TIPO_NOVEDAD
 } from "../../utils/novedadesPersonal.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
+import FormularioOlvidoTarjeta from "./FormularioOlvidoTarjeta.jsx";
+import ListaParo from "./ListaParo.jsx";
 
 const TURNOS = [
   ["manana", "Mañana"],
@@ -23,7 +26,12 @@ const fechaCorta = (fecha) => {
   return anio && mes && dia ? `${dia}/${mes}/${anio}` : "Sin fecha";
 };
 
-const TIPOS_NO_DISPONIBLES_PARA_ALTA = new Set(["licencia", "certificacion"]);
+const TIPOS_NO_DISPONIBLES_PARA_ALTA = new Set([
+  "licencia",
+  "certificacion",
+  "adhesion_paro",
+  "olvido_tarjeta"
+]);
 const OPCIONES_ALTA_NOVEDAD = OPCIONES_TIPO_NOVEDAD.filter(
   (opcion) => !TIPOS_NO_DISPONIBLES_PARA_ALTA.has(opcion.valor)
 );
@@ -33,19 +41,27 @@ function Novedades({
   licencias = [],
   certificaciones = [],
   turnoActivo,
+  fechaActiva = "",
+  mesActivo = "",
   soloLectura = false,
   novedades = [],
   cargando = false,
   errorCarga = "",
   onRecargar = () => {},
   onRegistrar = async () => null,
-  onCancelar = async () => null
+  onCancelar = async () => null,
+  onGuardarListaParo = async () => null,
+  onRegistrarOlvidoTarjeta = async () => null,
+  onActualizarEstado = async () => null
 }) {
   const [guardando, setGuardando] = useState(false);
   const [cancelandoId, setCancelandoId] = useState("");
+  const [actualizandoId, setActualizandoId] = useState("");
   const [errorAccion, setErrorAccion] = useState("");
   const [errorFormulario, setErrorFormulario] = useState("");
   const [formularioAbierto, setFormularioAbierto] = useState(false);
+  const [listaParoAbierta, setListaParoAbierta] = useState(false);
+  const [olvidoTarjetaAbierto, setOlvidoTarjetaAbierto] = useState(false);
   const [formulario, setFormulario] = useState({
     personaId: "",
     tipo: "suspension",
@@ -83,6 +99,10 @@ function Novedades({
         filtros.funcionario.toLocaleLowerCase("es")
       ))
     .sort((a, b) => b.fechaDesde.localeCompare(a.fechaDesde)), [filtros, legacy, novedades, turnoActivo]);
+  const olvidosPendientes = useMemo(
+    () => contarOlvidosTarjetaPendientes(novedades, turnoActivo),
+    [novedades, turnoActivo]
+  );
 
   const actualizarFormulario = (campo, valor) => {
     setErrorFormulario("");
@@ -153,12 +173,43 @@ function Novedades({
     }
   };
 
+  const cambiarEstado = async (novedad, estado) => {
+    if (soloLectura || actualizandoId || novedad.soloLectura) return;
+    if (estado === ESTADOS_NOVEDAD_PERSONAL.CANCELADA && !window.confirm(`¿Cancelar el Olvido de tarjeta de ${novedad.personaNombre}?`)) return;
+    setActualizandoId(novedad.id);
+    setErrorAccion("");
+    try {
+      await onActualizarEstado(novedad.id, estado);
+    } catch (error) {
+      setErrorAccion(error?.message || "No fue posible actualizar el estado de la novedad.");
+    } finally {
+      setActualizandoId("");
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-600">
           Registro central de novedades administrativas y ausencias.
         </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setListaParoAbierta((actual) => !actual)}
+            className="min-h-11 rounded-lg border border-violet-300 bg-white px-4 py-2 text-sm font-medium text-violet-800"
+          >
+            {listaParoAbierta ? "Cerrar lista de paro" : "Lista de paro"}
+          </button>
+          {!soloLectura && (
+            <button
+              type="button"
+              onClick={() => setOlvidoTarjetaAbierto((actual) => !actual)}
+              className="min-h-11 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800"
+            >
+              {olvidoTarjetaAbierto ? "Cerrar Olvido de tarjeta" : "Olvido de tarjeta"}
+            </button>
+          )}
         {!soloLectura && (
           <button
             type="button"
@@ -168,16 +219,47 @@ function Novedades({
             {formularioAbierto ? "Cancelar" : "Agregar novedad"}
           </button>
         )}
+        </div>
       </div>
 
       <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        Las Suspensiones activas afectan el Calendario durante todo su rango. Las
+        Las Suspensiones y Adhesiones a paro activas afectan el Calendario. Las
         Licencias y Certificaciones continúan gestionándose exclusivamente en sus
         secciones y se muestran aquí sin duplicarlas.
       </p>
       <p className="text-sm font-medium text-slate-700">
         Turno: {TURNOS.find(([valor]) => valor === turnoActivo)?.[1] || turnoActivo}
       </p>
+      <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+        Olvidos de tarjeta pendientes: {olvidosPendientes}
+      </p>
+
+      {listaParoAbierta && (
+        <ListaParo
+          key={`${turnoActivo}:${mesActivo}:${fechaActiva}`}
+          personal={personal}
+          novedades={novedades}
+          licencias={licencias}
+          certificaciones={certificaciones}
+          turnoActivo={turnoActivo}
+          fechaInicial={fechaActiva}
+          mesActivo={mesActivo}
+          soloLectura={soloLectura}
+          onGuardar={onGuardarListaParo}
+        />
+      )}
+
+      {olvidoTarjetaAbierto && !soloLectura && (
+        <FormularioOlvidoTarjeta
+          key={`${turnoActivo}:${mesActivo}:${fechaActiva}`}
+          personal={personal}
+          fechaInicial={fechaActiva}
+          mesActivo={mesActivo}
+          soloLectura={soloLectura}
+          onGuardar={onRegistrarOlvidoTarjeta}
+          onCerrar={() => setOlvidoTarjetaAbierto(false)}
+        />
+      )}
 
       {formularioAbierto && (
         <form onSubmit={guardar} className="grid gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -255,7 +337,7 @@ function Novedades({
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {lista.map((novedad) => (
-            <article key={`${novedad.origen || "central"}:${novedad.id}`} className={`rounded-xl border p-4 shadow-sm ${novedad.estado === "cancelada" ? "border-slate-200 bg-slate-50 opacity-75" : "border-slate-200 bg-white"}`}>
+            <article key={`${novedad.origen || "central"}:${novedad.id}`} className={`rounded-xl border p-4 shadow-sm ${novedad.estado === "cancelada" ? "border-slate-200 bg-slate-50 opacity-75" : novedad.tipo === "olvido_tarjeta" && novedad.estado === "pendiente" ? "border-amber-300 bg-amber-50/40" : "border-slate-200 bg-white"}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h3 className="font-semibold text-slate-900">{novedad.personaNombre}</h3>
@@ -273,6 +355,7 @@ function Novedades({
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
                 {novedad.afectaDisponibilidad && <span className="rounded bg-red-50 px-2 py-1 text-red-700">Afecta disponibilidad</span>}
                 {novedad.requiereSeguimiento && <span className="rounded bg-amber-50 px-2 py-1 text-amber-800">Requiere seguimiento</span>}
+                {novedad.tipo === "olvido_tarjeta" && novedad.estado === "pendiente" && <span className="rounded bg-amber-200 px-2 py-1 font-semibold text-amber-950">Pendiente · Requiere acción</span>}
                 {novedad.soloLectura && <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">Registro histórico vigente</span>}
               </div>
               {!soloLectura && !novedad.soloLectura && novedad.tipo === "suspension" && novedad.estado === "activa" && (
@@ -284,6 +367,21 @@ function Novedades({
                 >
                   {cancelandoId === novedad.id ? "Cancelando…" : "Cancelar suspensión"}
                 </button>
+              )}
+              {!soloLectura && !novedad.soloLectura && novedad.tipo === "olvido_tarjeta" && ["pendiente", "revisada"].includes(novedad.estado) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {novedad.estado === "pendiente" && (
+                    <button type="button" disabled={Boolean(actualizandoId)} onClick={() => cambiarEstado(novedad, ESTADOS_NOVEDAD_PERSONAL.REVISADA)} className="min-h-11 rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 disabled:text-slate-400">
+                      Marcar revisada
+                    </button>
+                  )}
+                  <button type="button" disabled={Boolean(actualizandoId)} onClick={() => cambiarEstado(novedad, ESTADOS_NOVEDAD_PERSONAL.RESUELTA)} className="min-h-11 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 disabled:text-slate-400">
+                    Marcar resuelta
+                  </button>
+                  <button type="button" disabled={Boolean(actualizandoId)} onClick={() => cambiarEstado(novedad, ESTADOS_NOVEDAD_PERSONAL.CANCELADA)} className="min-h-11 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 disabled:text-slate-400">
+                    Cancelar registro
+                  </button>
+                </div>
               )}
             </article>
           ))}

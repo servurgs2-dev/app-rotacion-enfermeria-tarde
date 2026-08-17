@@ -97,7 +97,11 @@ export const crearNovedadPersonal = ({
 } = {}) => {
   const referencia = crearReferenciaPersona(persona);
   const configuracionTipo = obtenerConfiguracionTipoNovedad(tipo);
-  const esSuspension = tipo === TIPOS_NOVEDAD_PERSONAL.SUSPENSION;
+  const esAusenciaOperativaForzada = [
+    TIPOS_NOVEDAD_PERSONAL.SUSPENSION,
+    TIPOS_NOVEDAD_PERSONAL.ADHESION_PARO
+  ].includes(tipo);
+  const esOlvidoTarjeta = tipo === TIPOS_NOVEDAD_PERSONAL.OLVIDO_TARJETA;
   const novedad = {
     personaId: referencia?.personaId || "",
     personaNombre: referencia?.nombre || "",
@@ -107,19 +111,138 @@ export const crearNovedadPersonal = ({
     turno: texto(turno) || null,
     categoria: texto(categoria) || null,
     observacion: texto(observacion),
-    afectaDisponibilidad: esSuspension
+    afectaDisponibilidad: esOlvidoTarjeta
+      ? false
+      : esAusenciaOperativaForzada
       ? true
       : typeof afectaDisponibilidad === "boolean"
       ? afectaDisponibilidad
       : Boolean(configuracionTipo?.afectaDisponibilidad),
-    requiereSeguimiento: esSuspension ? false : Boolean(requiereSeguimiento),
-    estado: esSuspension
+    requiereSeguimiento: esOlvidoTarjeta
+      ? true
+      : esAusenciaOperativaForzada ? false : Boolean(requiereSeguimiento),
+    estado: esOlvidoTarjeta
+      ? ESTADOS_NOVEDAD_PERSONAL.PENDIENTE
+      : esAusenciaOperativaForzada
       ? ESTADOS_NOVEDAD_PERSONAL.ACTIVA
       : estado || configuracionTipo?.estado || ESTADOS_NOVEDAD_PERSONAL.PENDIENTE,
     datos: esObjeto(datos) ? { ...datos } : datos
   };
   const error = validarNovedadPersonal(novedad);
   return error ? { novedad: null, error } : { novedad, error: "" };
+};
+
+export const crearOlvidoTarjetaPersonal = ({
+  persona,
+  fecha,
+  turno,
+  observacion = ""
+} = {}) => crearNovedadPersonal({
+  persona,
+  tipo: TIPOS_NOVEDAD_PERSONAL.OLVIDO_TARJETA,
+  fechaDesde: fecha,
+  fechaHasta: fecha,
+  turno,
+  categoria: persona?.categoria,
+  observacion,
+  afectaDisponibilidad: false,
+  requiereSeguimiento: true,
+  estado: ESTADOS_NOVEDAD_PERSONAL.PENDIENTE
+});
+
+const TRANSICIONES_OLVIDO_TARJETA = Object.freeze({
+  [ESTADOS_NOVEDAD_PERSONAL.PENDIENTE]: new Set([
+    ESTADOS_NOVEDAD_PERSONAL.REVISADA,
+    ESTADOS_NOVEDAD_PERSONAL.RESUELTA,
+    ESTADOS_NOVEDAD_PERSONAL.CANCELADA
+  ]),
+  [ESTADOS_NOVEDAD_PERSONAL.REVISADA]: new Set([
+    ESTADOS_NOVEDAD_PERSONAL.RESUELTA,
+    ESTADOS_NOVEDAD_PERSONAL.CANCELADA
+  ]),
+  [ESTADOS_NOVEDAD_PERSONAL.RESUELTA]: new Set(),
+  [ESTADOS_NOVEDAD_PERSONAL.CANCELADA]: new Set()
+});
+
+export const validarTransicionEstadoNovedad = (novedad, estadoDestino) => {
+  if (!novedad?.id) return "La novedad no es válida.";
+  if (!ESTADOS_VALIDOS.has(estadoDestino)) return "El estado de destino no es válido.";
+  if (novedad.tipo !== TIPOS_NOVEDAD_PERSONAL.OLVIDO_TARJETA) return "";
+  return TRANSICIONES_OLVIDO_TARJETA[novedad.estado]?.has(estadoDestino)
+    ? ""
+    : `No se puede cambiar un Olvido de tarjeta de ${novedad.estado} a ${estadoDestino}.`;
+};
+
+export const contarOlvidosTarjetaPendientes = (novedades = [], turnoActivo = "") =>
+  (Array.isArray(novedades) ? novedades : []).filter((novedad) =>
+    novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.OLVIDO_TARJETA &&
+    novedad?.estado === ESTADOS_NOVEDAD_PERSONAL.PENDIENTE &&
+    Boolean(turnoActivo && novedad?.turno === turnoActivo)
+  ).length;
+
+export const crearAdhesionParoPersonal = ({
+  persona,
+  fecha,
+  turno,
+  observacion = ""
+} = {}) => crearNovedadPersonal({
+  persona,
+  tipo: TIPOS_NOVEDAD_PERSONAL.ADHESION_PARO,
+  fechaDesde: fecha,
+  fechaHasta: fecha,
+  turno,
+  categoria: persona?.categoria,
+  observacion,
+  afectaDisponibilidad: true,
+  requiereSeguimiento: false,
+  estado: ESTADOS_NOVEDAD_PERSONAL.ACTIVA
+});
+
+export const esAdhesionParoActiva = (novedad, { fecha, turno } = {}) =>
+  novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.ADHESION_PARO &&
+  novedad?.estado === ESTADOS_NOVEDAD_PERSONAL.ACTIVA &&
+  novedad?.fechaDesde === fecha &&
+  novedad?.fechaHasta === fecha &&
+  (!turno || novedad?.turno === turno);
+
+export const planificarListaAdhesionParo = ({
+  novedades = [],
+  personasSeleccionadas = [],
+  fecha,
+  turno,
+  observacion = ""
+} = {}) => {
+  const seleccionadas = new Map(
+    (Array.isArray(personasSeleccionadas) ? personasSeleccionadas : [])
+      .filter((persona) => texto(persona?.id))
+      .map((persona) => [texto(persona.id), persona])
+  );
+  const activasPorPersona = new Map();
+  (Array.isArray(novedades) ? novedades : [])
+    .filter((novedad) => esAdhesionParoActiva(novedad, { fecha, turno }))
+    .forEach((novedad) => {
+      const personaId = texto(novedad.personaId);
+      if (!personaId) return;
+      const actuales = activasPorPersona.get(personaId) || [];
+      activasPorPersona.set(personaId, [...actuales, novedad]);
+    });
+
+  const crear = [];
+  const cancelar = [];
+  seleccionadas.forEach((persona, personaId) => {
+    const activas = activasPorPersona.get(personaId) || [];
+    if (activas.length === 0) {
+      const resultado = crearAdhesionParoPersonal({ persona, fecha, turno, observacion });
+      if (resultado.error) throw new Error(resultado.error);
+      crear.push(resultado.novedad);
+    } else if (activas.length > 1) {
+      cancelar.push(...activas.slice(1));
+    }
+    activasPorPersona.delete(personaId);
+  });
+  activasPorPersona.forEach((activas) => cancelar.push(...activas));
+
+  return { crear, cancelar };
 };
 
 export const obtenerEtiquetaTipoNovedad = (tipo) =>

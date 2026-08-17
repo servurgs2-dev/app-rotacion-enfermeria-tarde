@@ -8,8 +8,11 @@ import Certificaciones from "./components/certificaciones/Certificaciones";
 import Novedades from "./components/novedades/Novedades";
 import {
   cancelarNovedadPersonal,
+  actualizarEstadoNovedadPersonal,
   listarNovedadesPersonal,
-  registrarNovedadPersonal
+  registrarNovedadPersonal,
+  registrarOlvidoTarjeta,
+  sincronizarListaParo
 } from "./services/novedadesPersonal.js";
 import { obtenerRangoMesNovedades } from "./utils/novedadesPersonal.js";
 import Estadisticas from "./components/estadisticas/Estadisticas";
@@ -305,6 +308,48 @@ const cancelarNovedad = async (id) => {
     (novedad) => novedad.id === cancelada.id ? cancelada : novedad
   ));
   return cancelada;
+};
+
+const guardarListaParo = async ({ fecha, personasSeleccionadas, observacion }) => {
+  const resultado = await sincronizarListaParo({
+    fecha,
+    turno: turnoActivo,
+    personasSeleccionadas,
+    observacion
+  });
+  setNovedadesPersonal((actuales) => {
+    const canceladasPorId = new Map(
+      resultado.canceladas.map((novedad) => [novedad.id, novedad])
+    );
+    const actualizadas = actuales.map(
+      (novedad) => canceladasPorId.get(novedad.id) || novedad
+    );
+    const idsActuales = new Set(actualizadas.map((novedad) => novedad.id));
+    return [
+      ...resultado.creadas.filter((novedad) => !idsActuales.has(novedad.id)),
+      ...actualizadas
+    ];
+  });
+  return resultado;
+};
+
+const guardarOlvidoTarjeta = async ({ persona, fecha, observacion }) => {
+  const creada = await registrarOlvidoTarjeta({
+    persona,
+    fecha,
+    turno: turnoActivo,
+    observacion
+  });
+  setNovedadesPersonal((actuales) => [creada, ...actuales]);
+  return creada;
+};
+
+const actualizarEstadoNovedad = async (id, estado) => {
+  const actualizada = await actualizarEstadoNovedadPersonal(id, estado);
+  setNovedadesPersonal((actuales) => actuales.map(
+    (novedad) => novedad.id === actualizada.id ? actualizada : novedad
+  ));
+  return actualizada;
 };
 
 const actualizarCertificacionesMes = (actualizacion) => {
@@ -2110,6 +2155,8 @@ return (
           licencias={licenciasMes}
           certificaciones={certificacionesMes}
           turnoActivo={turnoActivo}
+          fechaActiva={keyDiaActual}
+          mesActivo={mesActivo}
           soloLectura={modoSoloLecturaEfectiva}
           novedades={novedadesPersonal}
           cargando={cargandoNovedades}
@@ -2117,6 +2164,9 @@ return (
           onRecargar={cargarNovedades}
           onRegistrar={registrarNovedad}
           onCancelar={cancelarNovedad}
+          onGuardarListaParo={guardarListaParo}
+          onRegistrarOlvidoTarjeta={guardarOlvidoTarjeta}
+          onActualizarEstado={actualizarEstadoNovedad}
         />
       </Seccion>
 

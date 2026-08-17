@@ -8,6 +8,10 @@ import {
   referenciaCorrespondeAPersona,
   resolverPersonaDesdeReferencia
 } from "./referenciasPersonas.js";
+import {
+  novedadAfectaDisponibilidadEnFecha,
+  obtenerEtiquetaTipoNovedad
+} from "./novedadesPersonal.js";
 
 export const MOTIVOS_NO_DISPONIBLE = Object.freeze({
   FALTA_CON_AVISO: "falta_con_aviso",
@@ -188,8 +192,10 @@ const formatearFechaCorta = (fecha) => {
 export const obtenerNoDisponiblesDelDia = ({
   registros,
   certificaciones,
+  novedades = [],
   personal,
   fecha,
+  turno = "",
   categoria,
   obtenerSectorOrigen = () => ""
 }) => {
@@ -241,6 +247,34 @@ export const obtenerNoDisponiblesDelDia = ({
         turnoDestino: ""
       });
     });
+
+  (Array.isArray(novedades) ? novedades : []).forEach((novedad) => {
+    if (turno && novedad?.turno && novedad.turno !== turno) return;
+    const persona = resolverPersonaDesdeReferencia(
+      { personaId: novedad?.personaId, nombre: novedad?.personaNombre },
+      personal
+    );
+    if (!persona || persona.categoria !== categoria) return;
+    if (!novedadAfectaDisponibilidadEnFecha(novedad, persona, fecha)) return;
+    const identidad = obtenerClaveIdentidadPersona(persona);
+    if (!identidad || porIdentidad.has(identidad)) return;
+    porIdentidad.set(identidad, {
+      tipo: "novedad",
+      registro: novedad,
+      persona,
+      nombre: persona.nombre,
+      categoria: persona.categoria,
+      sectorOrigen: obtenerSectorOrigen(persona),
+      motivoEtiqueta: obtenerEtiquetaTipoNovedad(novedad.tipo),
+      motivoBreve: obtenerEtiquetaTipoNovedad(novedad.tipo),
+      detalle: [
+        `${formatearFechaCorta(novedad.fechaDesde)} al ${formatearFechaCorta(novedad.fechaHasta)}`,
+        texto(novedad.observacion)
+      ].filter(Boolean).join(" · "),
+      personaCoberturaNombre: "",
+      turnoDestino: ""
+    });
+  });
 
   return [...porIdentidad.values()];
 };

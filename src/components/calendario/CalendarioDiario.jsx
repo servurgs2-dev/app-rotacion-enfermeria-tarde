@@ -142,6 +142,10 @@ import {
   filtrarPersonasNoCertificadas
 } from "../../utils/disponibilidadCertificacionesCalendario.js";
 import {
+  evaluarDisponibilidadPorNovedades,
+  excluirNoDisponiblesPorNovedadesDeAsignaciones
+} from "../../utils/novedadesPersonal.js";
+import {
   agregarCertificacionPorElDia,
   eliminarCertificacionPorElDia
 } from "../../utils/certificacionesPersonas.js";
@@ -172,6 +176,7 @@ function CalendarioDiario({
   mesActivo = "",
   licencias,
   certificaciones,
+  novedades = [],
   setCertificaciones,
   obtenerCertificacionesActuales,
   calendario,
@@ -400,7 +405,7 @@ const certificados = useMemo(
   [estaCertificadoHoy, personalFiltrado]
 );
 
-  const estaNoDisponible = (e) =>
+  const estaNoDisponibleManual = (e) =>
     e && (noDisponibles[keyDia] || []).some(
       (referencia) => referenciaCorrespondeAPersona(
         referencia,
@@ -408,6 +413,16 @@ const certificados = useMemo(
         personalFiltrado
       )
     );
+
+const estaNoDisponiblePorNovedad = (persona) => persona && !evaluarDisponibilidadPorNovedades({
+  novedades,
+  persona,
+  fecha: keyDia,
+  turno: turnoActivo
+}).disponible;
+
+const estaNoDisponible = (persona) =>
+  estaNoDisponibleManual(persona) || estaNoDisponiblePorNovedad(persona);
 
 const estaAusente = (e) =>
     e &&
@@ -430,6 +445,7 @@ const puedeAplicarseCoberturaDirecta = (persona) => {
   });
   return cambioVinculado &&
     !esLibreReal(persona) &&
+    !estaNoDisponiblePorNovedad(persona) &&
     !estaDeLicenciaHoy(persona) &&
     !estaCertificadoHoy(persona) &&
     obtenerEstadoAsistencia(asistenciaFecha, persona) !== ESTADOS_ASISTENCIA.AUSENTE;
@@ -687,6 +703,12 @@ asignacionCompleta = excluirAusenciasOperativasNoDisponiblesDeAsignaciones({
   asignaciones: asignacionCompleta,
   registros: noDisponibles[keyDia],
   personal: personalFiltrado
+});
+asignacionCompleta = excluirNoDisponiblesPorNovedadesDeAsignaciones({
+  asignaciones: asignacionCompleta,
+  novedades,
+  fecha: keyDia,
+  turno: turnoActivo
 });
 if (distribucionOpcion1Activa) {
   asignacionCompleta = recalcularRedistribucionOpcion1Automatica({
@@ -1168,8 +1190,10 @@ const obtenerSectorOrigenPersona = (persona) => {
 const noDisponiblesPresentacion = obtenerNoDisponiblesDelDia({
   registros: noDisponibles[keyDia],
   certificaciones,
+  novedades,
   personal,
   fecha: keyDia,
+  turno: turnoActivo,
   categoria: tipo,
   obtenerSectorOrigen: obtenerSectorOrigenPersona
 }).sort((a, b) => {

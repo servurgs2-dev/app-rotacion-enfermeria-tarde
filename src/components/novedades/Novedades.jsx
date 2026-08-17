@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   crearNovedadPersonal,
   crearNovedadesLegacy,
@@ -6,13 +6,8 @@ import {
   obtenerConfiguracionTipoNovedad,
   obtenerEtiquetaEstadoNovedad,
   obtenerEtiquetaTipoNovedad,
-  OPCIONES_ESTADO_NOVEDAD,
   OPCIONES_TIPO_NOVEDAD
 } from "../../utils/novedadesPersonal.js";
-import {
-  listarNovedadesPersonal,
-  registrarNovedadPersonal
-} from "../../services/novedadesPersonal.js";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 
 const TURNOS = [
@@ -27,39 +22,38 @@ const fechaCorta = (fecha) => {
   return anio && mes && dia ? `${dia}/${mes}/${anio}` : "Sin fecha";
 };
 
-const rangoMes = (mes) => {
-  const [anio, numeroMes] = String(mes || "").split("-").map(Number);
-  if (!anio || !numeroMes) return { fechaDesde: "", fechaHasta: "" };
-  const ultimoDia = new Date(anio, numeroMes, 0).getDate();
-  return {
-    fechaDesde: `${anio}-${String(numeroMes).padStart(2, "0")}-01`,
-    fechaHasta: `${anio}-${String(numeroMes).padStart(2, "0")}-${String(ultimoDia).padStart(2, "0")}`
-  };
-};
+const TIPOS_NO_DISPONIBLES_PARA_ALTA = new Set(["licencia", "certificacion"]);
+const OPCIONES_ALTA_NOVEDAD = OPCIONES_TIPO_NOVEDAD.filter(
+  (opcion) => !TIPOS_NO_DISPONIBLES_PARA_ALTA.has(opcion.valor)
+);
 
 function Novedades({
   personal = [],
   licencias = [],
   certificaciones = [],
-  mesActivo,
   turnoActivo,
-  soloLectura = false
+  soloLectura = false,
+  novedades = [],
+  cargando = false,
+  errorCarga = "",
+  onRecargar = () => {},
+  onRegistrar = async () => null,
+  onCancelar = async () => null
 }) {
-  const [novedades, setNovedades] = useState([]);
-  const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
-  const [errorCarga, setErrorCarga] = useState("");
+  const [cancelandoId, setCancelandoId] = useState("");
+  const [errorAccion, setErrorAccion] = useState("");
   const [errorFormulario, setErrorFormulario] = useState("");
   const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [formulario, setFormulario] = useState({
     personaId: "",
-    tipo: "otra",
+    tipo: "suspension",
     fechaDesde: "",
     fechaHasta: "",
     observacion: "",
-    afectaDisponibilidad: false,
-    requiereSeguimiento: true,
-    estado: ESTADOS_NOVEDAD_PERSONAL.PENDIENTE
+    afectaDisponibilidad: true,
+    requiereSeguimiento: false,
+    estado: ESTADOS_NOVEDAD_PERSONAL.ACTIVA
   });
   const [filtros, setFiltros] = useState({
     fecha: "",
@@ -68,41 +62,6 @@ function Novedades({
     categoria: "",
     funcionario: ""
   });
-
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    setErrorCarga("");
-    try {
-      const resultado = await listarNovedadesPersonal(rangoMes(mesActivo));
-      setNovedades(resultado);
-    } catch (error) {
-      setNovedades([]);
-      setErrorCarga(error?.message || "No fue posible cargar las novedades.");
-    } finally {
-      setCargando(false);
-    }
-  }, [mesActivo]);
-
-  useEffect(() => {
-    let vigente = true;
-    const ejecutar = async () => {
-      setCargando(true);
-      setErrorCarga("");
-      try {
-        const resultado = await listarNovedadesPersonal(rangoMes(mesActivo));
-        if (vigente) setNovedades(resultado);
-      } catch (error) {
-        if (vigente) {
-          setNovedades([]);
-          setErrorCarga(error?.message || "No fue posible cargar las novedades.");
-        }
-      } finally {
-        if (vigente) setCargando(false);
-      }
-    };
-    ejecutar();
-    return () => { vigente = false; };
-  }, [mesActivo]);
 
   const legacy = useMemo(() => crearNovedadesLegacy({
     licencias,
@@ -144,6 +103,7 @@ function Novedades({
     evento.preventDefault();
     if (soloLectura || guardando) return;
     const persona = personal.find((actual) => actual.id === formulario.personaId);
+    const esSuspension = formulario.tipo === "suspension";
     const resultado = crearNovedadPersonal({
       persona,
       tipo: formulario.tipo,
@@ -151,9 +111,9 @@ function Novedades({
       fechaHasta: formulario.fechaHasta || formulario.fechaDesde,
       turno: turnoActivo,
       observacion: formulario.observacion,
-      afectaDisponibilidad: formulario.afectaDisponibilidad,
-      requiereSeguimiento: formulario.requiereSeguimiento,
-      estado: formulario.estado
+      afectaDisponibilidad: esSuspension ? true : formulario.afectaDisponibilidad,
+      requiereSeguimiento: esSuspension ? false : formulario.requiereSeguimiento,
+      estado: esSuspension ? ESTADOS_NOVEDAD_PERSONAL.ACTIVA : formulario.estado
     });
     if (resultado.error) {
       setErrorFormulario(resultado.error);
@@ -161,8 +121,7 @@ function Novedades({
     }
     setGuardando(true);
     try {
-      const creada = await registrarNovedadPersonal(resultado.novedad);
-      setNovedades((actuales) => [creada, ...actuales]);
+      await onRegistrar(resultado.novedad);
       setFormulario((actual) => ({
         ...actual,
         personaId: "",
@@ -175,6 +134,20 @@ function Novedades({
       setErrorFormulario(error?.message || "No fue posible guardar la novedad.");
     } finally {
       setGuardando(false);
+    }
+  };
+
+  const cancelar = async (novedad) => {
+    if (soloLectura || cancelandoId || novedad.soloLectura) return;
+    if (!window.confirm(`¿Cancelar la suspensión activa de ${novedad.personaNombre}?`)) return;
+    setCancelandoId(novedad.id);
+    setErrorAccion("");
+    try {
+      await onCancelar(novedad.id);
+    } catch (error) {
+      setErrorAccion(error?.message || "No fue posible cancelar la suspensión.");
+    } finally {
+      setCancelandoId("");
     }
   };
 
@@ -196,9 +169,9 @@ function Novedades({
       </div>
 
       <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        En esta primera etapa, las Licencias y Certificaciones existentes siguen
-        gestionándose en sus secciones y son las que afectan el Calendario. Las
-        nuevas novedades quedan registradas para su integración operativa progresiva.
+        Las Suspensiones activas afectan el Calendario durante todo su rango. Las
+        Licencias y Certificaciones continúan gestionándose exclusivamente en sus
+        secciones y se muestran aquí sin duplicarlas.
       </p>
 
       {formularioAbierto && (
@@ -215,13 +188,7 @@ function Novedades({
           <label className="grid gap-1 text-sm font-medium text-slate-700">
             Tipo
             <select value={formulario.tipo} onChange={(e) => cambiarTipo(e.target.value)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3">
-              {OPCIONES_TIPO_NOVEDAD.map((opcion) => <option key={opcion.valor} value={opcion.valor}>{opcion.etiqueta}</option>)}
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Estado
-            <select value={formulario.estado} onChange={(e) => actualizarFormulario("estado", e.target.value)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3">
-              {OPCIONES_ESTADO_NOVEDAD.map((opcion) => <option key={opcion.valor} value={opcion.valor}>{opcion.etiqueta}</option>)}
+              {OPCIONES_ALTA_NOVEDAD.map((opcion) => <option key={opcion.valor} value={opcion.valor}>{opcion.etiqueta}</option>)}
             </select>
           </label>
           <label className="grid gap-1 text-sm font-medium text-slate-700">
@@ -232,14 +199,18 @@ function Novedades({
             Hasta
             <input type="date" value={formulario.fechaHasta} min={formulario.fechaDesde || undefined} onChange={(e) => actualizarFormulario("fechaHasta", e.target.value)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3" />
           </label>
-          <label className="flex min-h-11 items-center gap-2 self-end rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
-            <input type="checkbox" checked={formulario.afectaDisponibilidad} onChange={(e) => actualizarFormulario("afectaDisponibilidad", e.target.checked)} />
-            Afecta disponibilidad
-          </label>
-          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
-            <input type="checkbox" checked={formulario.requiereSeguimiento} onChange={(e) => actualizarFormulario("requiereSeguimiento", e.target.checked)} />
-            Requiere seguimiento
-          </label>
+          {formulario.tipo !== "suspension" && (
+            <>
+              <label className="flex min-h-11 items-center gap-2 self-end rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                <input type="checkbox" checked={formulario.afectaDisponibilidad} onChange={(e) => actualizarFormulario("afectaDisponibilidad", e.target.checked)} />
+                Afecta disponibilidad
+              </label>
+              <label className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                <input type="checkbox" checked={formulario.requiereSeguimiento} onChange={(e) => actualizarFormulario("requiereSeguimiento", e.target.checked)} />
+                Requiere seguimiento
+              </label>
+            </>
+          )}
           <label className="grid gap-1 text-sm font-medium text-slate-700 sm:col-span-2">
             Observación
             <textarea value={formulario.observacion} onChange={(e) => actualizarFormulario("observacion", e.target.value)} rows="2" className="rounded-lg border border-slate-300 bg-white px-3 py-2" />
@@ -272,9 +243,10 @@ function Novedades({
       {errorCarga && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <span>{errorCarga}</span>
-          <button type="button" onClick={cargar} className="font-medium underline">Reintentar</button>
+          <button type="button" onClick={onRecargar} className="font-medium underline">Reintentar</button>
         </div>
       )}
+      {errorAccion && <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{errorAccion}</p>}
       {cargando ? (
         <p className="text-sm text-slate-500">Cargando novedades…</p>
       ) : lista.length === 0 ? (
@@ -282,7 +254,7 @@ function Novedades({
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {lista.map((novedad) => (
-            <article key={`${novedad.origen || "central"}:${novedad.id}`} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <article key={`${novedad.origen || "central"}:${novedad.id}`} className={`rounded-xl border p-4 shadow-sm ${novedad.estado === "cancelada" ? "border-slate-200 bg-slate-50 opacity-75" : "border-slate-200 bg-white"}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h3 className="font-semibold text-slate-900">{novedad.personaNombre}</h3>
@@ -302,6 +274,16 @@ function Novedades({
                 {novedad.requiereSeguimiento && <span className="rounded bg-amber-50 px-2 py-1 text-amber-800">Requiere seguimiento</span>}
                 {novedad.soloLectura && <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">Registro histórico vigente</span>}
               </div>
+              {!soloLectura && !novedad.soloLectura && novedad.tipo === "suspension" && novedad.estado === "activa" && (
+                <button
+                  type="button"
+                  disabled={Boolean(cancelandoId)}
+                  onClick={() => cancelar(novedad)}
+                  className="mt-3 min-h-11 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 disabled:text-slate-400"
+                >
+                  {cancelandoId === novedad.id ? "Cancelando…" : "Cancelar suspensión"}
+                </button>
+              )}
             </article>
           ))}
         </div>

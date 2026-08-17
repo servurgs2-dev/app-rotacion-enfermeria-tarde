@@ -97,6 +97,7 @@ export const crearNovedadPersonal = ({
 } = {}) => {
   const referencia = crearReferenciaPersona(persona);
   const configuracionTipo = obtenerConfiguracionTipoNovedad(tipo);
+  const esSuspension = tipo === TIPOS_NOVEDAD_PERSONAL.SUSPENSION;
   const novedad = {
     personaId: referencia?.personaId || "",
     personaNombre: referencia?.nombre || "",
@@ -106,11 +107,15 @@ export const crearNovedadPersonal = ({
     turno: texto(turno) || null,
     categoria: texto(categoria) || null,
     observacion: texto(observacion),
-    afectaDisponibilidad: typeof afectaDisponibilidad === "boolean"
+    afectaDisponibilidad: esSuspension
+      ? true
+      : typeof afectaDisponibilidad === "boolean"
       ? afectaDisponibilidad
       : Boolean(configuracionTipo?.afectaDisponibilidad),
-    requiereSeguimiento: Boolean(requiereSeguimiento),
-    estado: estado || configuracionTipo?.estado || ESTADOS_NOVEDAD_PERSONAL.PENDIENTE,
+    requiereSeguimiento: esSuspension ? false : Boolean(requiereSeguimiento),
+    estado: esSuspension
+      ? ESTADOS_NOVEDAD_PERSONAL.ACTIVA
+      : estado || configuracionTipo?.estado || ESTADOS_NOVEDAD_PERSONAL.PENDIENTE,
     datos: esObjeto(datos) ? { ...datos } : datos
   };
   const error = validarNovedadPersonal(novedad);
@@ -191,4 +196,39 @@ export const evaluarDisponibilidadPorNovedades = (contexto = {}) => {
     novedadAfectaDisponibilidadEnFecha(novedad, contexto.persona, contexto.fecha)
   );
   return { disponible: bloqueantes.length === 0, novedades, bloqueantes };
+};
+
+export const excluirNoDisponiblesPorNovedadesDeAsignaciones = ({
+  asignaciones = [],
+  novedades = [],
+  fecha,
+  turno = ""
+} = {}) => (Array.isArray(asignaciones) ? asignaciones : []).map((asignacion) => {
+  if (!asignacion?.enfermero) return asignacion;
+  const evaluacion = evaluarDisponibilidadPorNovedades({
+    novedades,
+    persona: asignacion.enfermero,
+    fecha,
+    turno
+  });
+  return evaluacion.disponible
+    ? asignacion
+    : {
+        ...asignacion,
+        enfermero: null,
+        excluidoPorNovedad: true,
+        novedadesBloqueantes: evaluacion.bloqueantes
+      };
+});
+
+export const obtenerRangoMesNovedades = (mes) => {
+  const [anio, numeroMes] = String(mes || "").split("-").map(Number);
+  if (!anio || !numeroMes || numeroMes < 1 || numeroMes > 12) {
+    return { fechaDesde: "", fechaHasta: "" };
+  }
+  const ultimoDia = new Date(anio, numeroMes, 0).getDate();
+  return {
+    fechaDesde: `${anio}-${String(numeroMes).padStart(2, "0")}-01`,
+    fechaHasta: `${anio}-${String(numeroMes).padStart(2, "0")}-${String(ultimoDia).padStart(2, "0")}`
+  };
 };

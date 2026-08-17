@@ -53,6 +53,7 @@
     "test:resumen-cierre-identidades": "node tests/resumen-cierre-identidades.test.mjs",
     "test:destinos-dinamicos-calendario": "node tests/destinos-dinamicos-calendario.test.mjs",
     "test:novedades-personal": "node tests/novedades-personal.test.mjs",
+    "test:suspensiones-novedades": "node tests/suspensiones-novedades.test.mjs",
     "test:alertas-identidades": "node tests/alertas-identidades.test.mjs",
     "preview": "vite preview"
   },

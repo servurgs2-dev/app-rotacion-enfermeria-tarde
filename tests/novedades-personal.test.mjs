@@ -132,9 +132,11 @@ probar("la migración crea constraints, índices y RLS sin tocar tablas legacy",
   assert.doesNotMatch(sql, /alter table public\.(estado_por_turno_mes|estado_por_mes)/i);
 });
 
-probar("Calendario no consume todavía la nueva fuente", () => {
+probar("Calendario consume la fuente mediante el evaluador central", () => {
   const calendario = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
-  assert.doesNotMatch(calendario, /novedadesPersonal|novedades_personal/);
+  assert.match(calendario, /evaluarDisponibilidadPorNovedades/);
+  assert.match(calendario, /excluirNoDisponiblesPorNovedadesDeAsignaciones/);
+  assert.doesNotMatch(calendario, /tipo\s*===\s*["']suspension["']/);
 });
 
 console.log(`\n${total} pruebas del modelo base de Novedades pasaron.`);

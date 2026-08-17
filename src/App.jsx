@@ -6,6 +6,12 @@ import Seccion from "./components/ui/Seccion";
 import Licencias from "./components/licencias/Licencias";
 import Certificaciones from "./components/certificaciones/Certificaciones";
 import Novedades from "./components/novedades/Novedades";
+import {
+  cancelarNovedadPersonal,
+  listarNovedadesPersonal,
+  registrarNovedadPersonal
+} from "./services/novedadesPersonal.js";
+import { obtenerRangoMesNovedades } from "./utils/novedadesPersonal.js";
 import Estadisticas from "./components/estadisticas/Estadisticas";
 import HistorialCambios from "./components/historial/HistorialCambios";
 import PanelConflictoEdicion from "./components/concurrencia/PanelConflictoEdicion";
@@ -171,6 +177,10 @@ const [errorCierreSesion, setErrorCierreSesion] = useState("");
 const [historialAbierto, setHistorialAbierto] = useState(false);
 const [preparacionMes, setPreparacionMes] = useState(null);
 const [reinicioMes, setReinicioMes] = useState(null);
+const [novedadesPersonal, setNovedadesPersonal] = useState([]);
+const [cargandoNovedades, setCargandoNovedades] = useState(false);
+const [errorNovedades, setErrorNovedades] = useState("");
+const contextoNovedadesRef = useRef({ mes: "", solicitud: 0 });
 const [restauracionHistorialEnCurso, setRestauracionHistorialEnCurso] = useState(null);
 const restauracionHistorialEnCursoRef = useRef(null);
 const [clavesBloqueadasTrasRestauracion, setClavesBloqueadasTrasRestauracion] =
@@ -243,6 +253,46 @@ const planillaLicenciados = mesData.planillas.licenciados;
 
 const licenciasMes = mesData.licencias;
 const certificacionesMes = mesData.certificaciones || [];
+
+const cargarNovedades = useCallback(async () => {
+  const solicitud = contextoNovedadesRef.current.solicitud + 1;
+  if (contextoNovedadesRef.current.mes !== mesActivo) {
+    setNovedadesPersonal([]);
+  }
+  contextoNovedadesRef.current = { mes: mesActivo, solicitud };
+  setCargandoNovedades(true);
+  setErrorNovedades("");
+  try {
+    const resultado = await listarNovedadesPersonal(obtenerRangoMesNovedades(mesActivo));
+    if (contextoNovedadesRef.current.mes !== mesActivo || contextoNovedadesRef.current.solicitud !== solicitud) return;
+    setNovedadesPersonal(resultado);
+  } catch (error) {
+    if (contextoNovedadesRef.current.mes !== mesActivo || contextoNovedadesRef.current.solicitud !== solicitud) return;
+    setErrorNovedades(error?.message || "No fue posible cargar las novedades.");
+  } finally {
+    if (contextoNovedadesRef.current.mes === mesActivo && contextoNovedadesRef.current.solicitud === solicitud) {
+      setCargandoNovedades(false);
+    }
+  }
+}, [mesActivo]);
+
+useEffect(() => {
+  cargarNovedades();
+}, [cargarNovedades]);
+
+const registrarNovedad = async (novedad) => {
+  const creada = await registrarNovedadPersonal(novedad);
+  setNovedadesPersonal((actuales) => [creada, ...actuales]);
+  return creada;
+};
+
+const cancelarNovedad = async (id) => {
+  const cancelada = await cancelarNovedadPersonal(id);
+  setNovedadesPersonal((actuales) => actuales.map(
+    (novedad) => novedad.id === cancelada.id ? cancelada : novedad
+  ));
+  return cancelada;
+};
 
 const actualizarCertificacionesMes = (actualizacion) => {
   setEstadoPorTurnoMes((prev) => {
@@ -2046,9 +2096,14 @@ return (
           personal={personal}
           licencias={licenciasMes}
           certificaciones={certificacionesMes}
-          mesActivo={mesActivo}
           turnoActivo={turnoActivo}
           soloLectura={modoSoloLecturaEfectiva}
+          novedades={novedadesPersonal}
+          cargando={cargandoNovedades}
+          errorCarga={errorNovedades}
+          onRecargar={cargarNovedades}
+          onRegistrar={registrarNovedad}
+          onCancelar={cancelarNovedad}
         />
       </Seccion>
 
@@ -2306,6 +2361,7 @@ return (
     mesActivo={mesActivo}
     licencias={licenciasMes}
     certificaciones={certificacionesMes}
+    novedades={novedadesPersonal}
     setCertificaciones={actualizarCertificacionesMes}
     obtenerCertificacionesActuales={obtenerCertificacionesActuales}
     calendario={mesData.calendario.enfermeros}
@@ -2360,6 +2416,7 @@ return (
     mesActivo={mesActivo}
     licencias={licenciasMes}
     certificaciones={certificacionesMes}
+    novedades={novedadesPersonal}
     setCertificaciones={actualizarCertificacionesMes}
     obtenerCertificacionesActuales={obtenerCertificacionesActuales}
     calendario={mesData.calendario.licenciados}

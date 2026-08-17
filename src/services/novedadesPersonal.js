@@ -5,3 +5,4 @@ const repositorio = crearRepositorioNovedadesPersonal(supabase);
 
 export const listarNovedadesPersonal = (filtros) => repositorio.listar(filtros);
 export const registrarNovedadPersonal = (novedad) => repositorio.crear(novedad);
+export const cancelarNovedadPersonal = (id) => repositorio.cancelar(id);

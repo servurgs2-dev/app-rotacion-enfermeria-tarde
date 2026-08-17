@@ -13,6 +13,7 @@ import {
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 import FormularioOlvidoTarjeta from "./FormularioOlvidoTarjeta.jsx";
 import ListaParo from "./ListaParo.jsx";
+import FormularioCambioHorario from "./FormularioCambioHorario.jsx";
 
 const TURNOS = [
   ["manana", "Mañana"],
@@ -30,7 +31,8 @@ const TIPOS_NO_DISPONIBLES_PARA_ALTA = new Set([
   "licencia",
   "certificacion",
   "adhesion_paro",
-  "olvido_tarjeta"
+  "olvido_tarjeta",
+  "cambio_horario"
 ]);
 const OPCIONES_ALTA_NOVEDAD = OPCIONES_TIPO_NOVEDAD.filter(
   (opcion) => !TIPOS_NO_DISPONIBLES_PARA_ALTA.has(opcion.valor)
@@ -52,7 +54,8 @@ function Novedades({
   onCancelar = async () => null,
   onGuardarListaParo = async () => null,
   onRegistrarOlvidoTarjeta = async () => null,
-  onActualizarEstado = async () => null
+  onActualizarEstado = async () => null,
+  onGuardarCambioHorario = async () => null
 }) {
   const [guardando, setGuardando] = useState(false);
   const [cancelandoId, setCancelandoId] = useState("");
@@ -62,6 +65,8 @@ function Novedades({
   const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [listaParoAbierta, setListaParoAbierta] = useState(false);
   const [olvidoTarjetaAbierto, setOlvidoTarjetaAbierto] = useState(false);
+  const [cambioHorarioAbierto, setCambioHorarioAbierto] = useState(false);
+  const [cambioHorarioEditando, setCambioHorarioEditando] = useState(null);
   const [formulario, setFormulario] = useState({
     personaId: "",
     tipo: "suspension",
@@ -161,13 +166,14 @@ function Novedades({
 
   const cancelar = async (novedad) => {
     if (soloLectura || cancelandoId || novedad.soloLectura) return;
-    if (!window.confirm(`¿Cancelar la suspensión activa de ${novedad.personaNombre}?`)) return;
+    const descripcion = novedad.tipo === "cambio_horario" ? "el Cambio de horario" : "la suspensión activa";
+    if (!window.confirm(`¿Cancelar ${descripcion} de ${novedad.personaNombre}?`)) return;
     setCancelandoId(novedad.id);
     setErrorAccion("");
     try {
       await onCancelar(novedad.id);
     } catch (error) {
-      setErrorAccion(error?.message || "No fue posible cancelar la suspensión.");
+      setErrorAccion(error?.message || "No fue posible cancelar la novedad.");
     } finally {
       setCancelandoId("");
     }
@@ -201,6 +207,15 @@ function Novedades({
           >
             {listaParoAbierta ? "Cerrar lista de paro" : "Lista de paro"}
           </button>
+          {!soloLectura && (
+            <button
+              type="button"
+              onClick={() => { setCambioHorarioEditando(null); setCambioHorarioAbierto((actual) => !actual); }}
+              className="min-h-11 rounded-lg border border-cyan-300 bg-white px-4 py-2 text-sm font-medium text-cyan-800"
+            >
+              {cambioHorarioAbierto ? "Cerrar Cambio de horario" : "Cambio de horario"}
+            </button>
+          )}
           {!soloLectura && (
             <button
               type="button"
@@ -258,6 +273,20 @@ function Novedades({
           soloLectura={soloLectura}
           onGuardar={onRegistrarOlvidoTarjeta}
           onCerrar={() => setOlvidoTarjetaAbierto(false)}
+        />
+      )}
+
+      {cambioHorarioAbierto && !soloLectura && (
+        <FormularioCambioHorario
+          key={`${turnoActivo}:${mesActivo}:${fechaActiva}:${cambioHorarioEditando?.id || "nuevo"}`}
+          personal={personal}
+          turnoActivo={turnoActivo}
+          fechaInicial={fechaActiva}
+          mesActivo={mesActivo}
+          soloLectura={soloLectura}
+          novedadInicial={cambioHorarioEditando}
+          onGuardar={onGuardarCambioHorario}
+          onCerrar={() => { setCambioHorarioAbierto(false); setCambioHorarioEditando(null); }}
         />
       )}
 
@@ -352,6 +381,11 @@ function Novedades({
                 {[TURNOS.find(([valor]) => valor === novedad.turno)?.[1], novedad.categoria === "enfermero" ? "Enfermero" : novedad.categoria === "licenciado" ? "Licenciado" : ""].filter(Boolean).join(" · ") || "Sin turno/categoría específica"}
               </p>
               {novedad.observacion && <p className="mt-2 line-clamp-2 text-sm text-slate-600">{novedad.observacion}</p>}
+              {novedad.tipo === "cambio_horario" && (
+                <p className="mt-2 text-sm font-medium text-cyan-800">
+                  Horario excepcional: {novedad.datos?.horaEntrada || "--:--"}–{novedad.datos?.horaSalida || "--:--"}
+                </p>
+              )}
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
                 {novedad.afectaDisponibilidad && <span className="rounded bg-red-50 px-2 py-1 text-red-700">Afecta disponibilidad</span>}
                 {novedad.requiereSeguimiento && <span className="rounded bg-amber-50 px-2 py-1 text-amber-800">Requiere seguimiento</span>}
@@ -381,6 +415,12 @@ function Novedades({
                   <button type="button" disabled={Boolean(actualizandoId)} onClick={() => cambiarEstado(novedad, ESTADOS_NOVEDAD_PERSONAL.CANCELADA)} className="min-h-11 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 disabled:text-slate-400">
                     Cancelar registro
                   </button>
+                </div>
+              )}
+              {!soloLectura && !novedad.soloLectura && novedad.tipo === "cambio_horario" && novedad.estado === "activa" && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => { setCambioHorarioEditando(novedad); setCambioHorarioAbierto(true); }} className="min-h-11 rounded-lg border border-cyan-200 px-3 py-2 text-sm font-medium text-cyan-800">Editar horario</button>
+                  <button type="button" disabled={Boolean(cancelandoId)} onClick={() => cancelar(novedad)} className="min-h-11 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 disabled:text-slate-400">{cancelandoId === novedad.id ? "Cancelando…" : "Cancelar cambio"}</button>
                 </div>
               )}
             </article>

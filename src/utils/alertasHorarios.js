@@ -14,6 +14,7 @@ import {
   resolverIdentidadOperativaAsignacion
 } from "./identidadOperativaAsignaciones.js";
 import { SYNTHETIC_IDS_REANIMACION_SILLONES } from "./reanimacionSillones.js";
+import { obtenerHorarioBaseEfectivoPersonaEnFecha } from "./horarioEfectivoPersonal.js";
 
 const sectores = (...sectorIds) => sectorIds.map(crearIdentidadSector);
 const sinteticos = (...syntheticIds) => syntheticIds.map(crearIdentidadSintetica);
@@ -72,9 +73,15 @@ export const gruposOperativos = [
   }
 ];
 
-export const obtenerHorarioEfectivo = (persona, configTurno = obtenerConfiguracionTurno()) => {
-  const horario = configTurno.horarios[persona?.horario] || configTurno.horarios.normal;
-  const horarioEspecial = persona?.horario === "entraAntes" || persona?.horario === "entraDespues";
+export const obtenerHorarioEfectivo = (
+  persona,
+  configTurno = obtenerConfiguracionTurno(),
+  { fecha = "", turno = "", novedades = [] } = {}
+) => {
+  const horario = obtenerHorarioBaseEfectivoPersonaEnFecha({
+    persona, fecha, turno, novedades, configTurno
+  });
+  const horarioEspecial = horario.esExcepcional || persona?.horario === "entraAntes" || persona?.horario === "entraDespues";
   const maternal = normalizarMaternal(persona?.maternal);
   const { minutosEntrada, minutosSalida } = obtenerAjusteMaternal(maternal);
   const inicioNormal = configTurno.horarios.normal.entrada;
@@ -144,7 +151,7 @@ const listarNombres = (personas, candidatosEtiqueta = personas) => {
   return nombres[0];
 };
 
-const generarAlertaGrupo = (grupo, personas, configTurno) => {
+const generarAlertaGrupo = (grupo, personas, configTurno, contextoHorario) => {
   const horaCierre = configTurno.horarios.normal.salida;
   const inicioNormal = configTurno.horarios.normal.entrada;
   const finCierre = crearIntervaloRelativo(
@@ -152,7 +159,7 @@ const generarAlertaGrupo = (grupo, personas, configTurno) => {
     inicioNormal
   ).finRelativo;
   const salidasAnticipadas = personas
-    .map((persona) => ({ persona, ...obtenerHorarioEfectivo(persona, configTurno) }))
+    .map((persona) => ({ persona, ...obtenerHorarioEfectivo(persona, configTurno, contextoHorario) }))
     .filter(({ finRelativo }) => finRelativo < finCierre);
 
   const salidasPorHora = new Map();
@@ -165,7 +172,7 @@ const generarAlertaGrupo = (grupo, personas, configTurno) => {
   const momentosCriticos = [...salidasPorHora.entries()]
     .map(([finRelativo, { hora, personas: personasQueSalen }]) => {
       const personasRestantes = personas.filter(
-        (persona) => obtenerHorarioEfectivo(persona, configTurno).finRelativo > finRelativo
+        (persona) => obtenerHorarioEfectivo(persona, configTurno, contextoHorario).finRelativo > finRelativo
       ).length;
 
       return { hora, finRelativo, personasQueSalen, personasRestantes };
@@ -200,7 +207,10 @@ export const generarAlertasHorarios = ({
   enfermeros = [],
   licenciados = [],
   personal = [],
-  configTurno = obtenerConfiguracionTurno()
+  configTurno = obtenerConfiguracionTurno(),
+  novedades = [],
+  fecha = "",
+  turno = ""
 }) =>
   gruposOperativos.flatMap((grupo) => {
     const responsablesHabituales = obtenerAsignados(licenciados, grupo.licenciados, personal);
@@ -217,7 +227,9 @@ export const generarAlertasHorarios = ({
         .map((persona) => [obtenerClaveIdentidadPersona(persona), persona])
         .filter(([clave]) => Boolean(clave))
     ).values()];
-    const alerta = generarAlertaGrupo(grupo, personasUnicas, configTurno);
+    const alerta = generarAlertaGrupo(grupo, personasUnicas, configTurno, {
+      novedades, fecha, turno
+    });
 
     return alerta ? [alerta] : [];
   });

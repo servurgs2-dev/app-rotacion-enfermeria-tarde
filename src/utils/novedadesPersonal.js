@@ -3,6 +3,7 @@ import {
   resolverPersonaDeCertificacion
 } from "./certificacionesPersonas.js";
 import { resolverPersonaDeLicencia } from "./licenciasPersonas.js";
+import { horaAMinutos } from "./horarios.js";
 
 export const TIPOS_NOVEDAD_PERSONAL = Object.freeze({
   LICENCIA: "licencia",
@@ -49,6 +50,16 @@ const CATEGORIAS_VALIDAS = new Set(["enfermero", "licenciado"]);
 
 const texto = (valor) => String(valor ?? "").trim();
 const esObjeto = (valor) => Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
+
+export const validarHorarioExcepcional = ({ horaEntrada, horaSalida } = {}) => {
+  try {
+    horaAMinutos(horaEntrada);
+    horaAMinutos(horaSalida);
+  } catch {
+    return "Ingresá horas de entrada y salida válidas.";
+  }
+  return horaEntrada === horaSalida ? "La entrada y la salida no pueden ser iguales." : "";
+};
 
 export const esFechaIsoValida = (fecha) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || "")) return false;
@@ -102,6 +113,7 @@ export const crearNovedadPersonal = ({
     TIPOS_NOVEDAD_PERSONAL.ADHESION_PARO
   ].includes(tipo);
   const esOlvidoTarjeta = tipo === TIPOS_NOVEDAD_PERSONAL.OLVIDO_TARJETA;
+  const esCambioHorario = tipo === TIPOS_NOVEDAD_PERSONAL.CAMBIO_HORARIO;
   const novedad = {
     personaId: referencia?.personaId || "",
     personaNombre: referencia?.nombre || "",
@@ -111,18 +123,18 @@ export const crearNovedadPersonal = ({
     turno: texto(turno) || null,
     categoria: texto(categoria) || null,
     observacion: texto(observacion),
-    afectaDisponibilidad: esOlvidoTarjeta
+    afectaDisponibilidad: esOlvidoTarjeta || esCambioHorario
       ? false
       : esAusenciaOperativaForzada
       ? true
       : typeof afectaDisponibilidad === "boolean"
       ? afectaDisponibilidad
       : Boolean(configuracionTipo?.afectaDisponibilidad),
-    requiereSeguimiento: esOlvidoTarjeta
-      ? true
+    requiereSeguimiento: esOlvidoTarjeta || esCambioHorario
+      ? esOlvidoTarjeta
       : esAusenciaOperativaForzada ? false : Boolean(requiereSeguimiento),
-    estado: esOlvidoTarjeta
-      ? ESTADOS_NOVEDAD_PERSONAL.PENDIENTE
+    estado: esOlvidoTarjeta || esCambioHorario
+      ? esOlvidoTarjeta ? ESTADOS_NOVEDAD_PERSONAL.PENDIENTE : ESTADOS_NOVEDAD_PERSONAL.ACTIVA
       : esAusenciaOperativaForzada
       ? ESTADOS_NOVEDAD_PERSONAL.ACTIVA
       : estado || configuracionTipo?.estado || ESTADOS_NOVEDAD_PERSONAL.PENDIENTE,
@@ -131,6 +143,42 @@ export const crearNovedadPersonal = ({
   const error = validarNovedadPersonal(novedad);
   return error ? { novedad: null, error } : { novedad, error: "" };
 };
+
+export const crearCambioHorarioPersonal = ({
+  persona,
+  fecha,
+  turno,
+  horaEntrada,
+  horaSalida,
+  observacion = ""
+} = {}) => {
+  const errorHorario = validarHorarioExcepcional({ horaEntrada, horaSalida });
+  if (errorHorario) return { novedad: null, error: errorHorario };
+  return crearNovedadPersonal({
+    persona,
+    tipo: TIPOS_NOVEDAD_PERSONAL.CAMBIO_HORARIO,
+    fechaDesde: fecha,
+    fechaHasta: fecha,
+    turno,
+    categoria: persona?.categoria,
+    observacion,
+    afectaDisponibilidad: false,
+    requiereSeguimiento: false,
+    estado: ESTADOS_NOVEDAD_PERSONAL.ACTIVA,
+    datos: { horaEntrada, horaSalida }
+  });
+};
+
+export const obtenerCambioHorarioActivo = ({ novedades = [], persona, fecha, turno = "" } = {}) =>
+  (Array.isArray(novedades) ? novedades : []).find((novedad) =>
+    novedadCorrespondeAPersona(novedad, persona) &&
+    novedad.tipo === TIPOS_NOVEDAD_PERSONAL.CAMBIO_HORARIO &&
+    novedad.estado === ESTADOS_NOVEDAD_PERSONAL.ACTIVA &&
+    novedad.fechaDesde === fecha &&
+    novedad.fechaHasta === fecha &&
+    (!turno || novedad.turno === turno) &&
+    !validarHorarioExcepcional(novedad.datos)
+  ) || null;
 
 export const crearOlvidoTarjetaPersonal = ({
   persona,

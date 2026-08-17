@@ -12,6 +12,7 @@ import {
   listarNovedadesPersonal,
   registrarNovedadPersonal,
   registrarOlvidoTarjeta,
+  guardarCambioHorarioPersonal,
   sincronizarListaParo
 } from "./services/novedadesPersonal.js";
 import { obtenerRangoMesNovedades } from "./utils/novedadesPersonal.js";
@@ -245,9 +246,12 @@ const alertasHorarios = useMemo(() => {
     enfermeros: dataPDFEnf.asignaciones,
     licenciados: dataPDFLic.asignaciones,
     personal,
-    configTurno
+    configTurno,
+    novedades: novedadesPersonal,
+    fecha: keyDiaActual,
+    turno: turnoActivo
   });
-}, [configTurno, dataPDFEnf, dataPDFLic, esDiaParoActual, keyDiaActual, personal]);
+}, [configTurno, dataPDFEnf, dataPDFLic, esDiaParoActual, keyDiaActual, novedadesPersonal, personal, turnoActivo]);
 
 // 🔹 PLANILLAS
 const planillaEnfermeros = mesData.planillas.enfermeros;
@@ -342,6 +346,20 @@ const guardarOlvidoTarjeta = async ({ persona, fecha, observacion }) => {
   });
   setNovedadesPersonal((actuales) => [creada, ...actuales]);
   return creada;
+};
+
+const guardarCambioHorario = async (entrada) => {
+  const guardada = await guardarCambioHorarioPersonal({
+    ...entrada,
+    turno: turnoActivo
+  });
+  setNovedadesPersonal((actuales) => {
+    const existe = actuales.some((novedad) => novedad.id === guardada.id);
+    return existe
+      ? actuales.map((novedad) => novedad.id === guardada.id ? guardada : novedad)
+      : [guardada, ...actuales];
+  });
+  return guardada;
 };
 
 const actualizarEstadoNovedad = async (id, estado) => {
@@ -2167,6 +2185,7 @@ return (
           onGuardarListaParo={guardarListaParo}
           onRegistrarOlvidoTarjeta={guardarOlvidoTarjeta}
           onActualizarEstado={actualizarEstadoNovedad}
+          onGuardarCambioHorario={guardarCambioHorario}
         />
       </Seccion>
 

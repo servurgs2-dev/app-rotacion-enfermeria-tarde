@@ -57,6 +57,7 @@
     "test:suspensiones-novedades": "node tests/suspensiones-novedades.test.mjs",
     "test:lista-paro": "node tests/lista-paro.test.mjs",
     "test:olvido-tarjeta": "node tests/olvido-tarjeta.test.mjs",
+    "test:cambio-horario": "node tests/cambio-horario.test.mjs",
     "test:alertas-identidades": "node tests/alertas-identidades.test.mjs",
     "preview": "vite preview"
   },

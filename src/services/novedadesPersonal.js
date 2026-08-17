@@ -5,6 +5,7 @@ import {
   crearActualizadorEstadoNovedad,
   crearRegistradorOlvidoTarjeta
 } from "./seguimientoNovedadesPersonal.js";
+import { crearGuardadorCambioHorario } from "./cambiosHorarioPersonal.js";
 
 const repositorio = crearRepositorioNovedadesPersonal(supabase);
 
@@ -15,3 +16,4 @@ export const cancelarNovedadPersonal = (id) => repositorio.cancelar(id);
 export const sincronizarListaParo = crearSincronizadorListaParo(repositorio);
 export const registrarOlvidoTarjeta = crearRegistradorOlvidoTarjeta(repositorio);
 export const actualizarEstadoNovedadPersonal = crearActualizadorEstadoNovedad(repositorio);
+export const guardarCambioHorarioPersonal = crearGuardadorCambioHorario(repositorio);

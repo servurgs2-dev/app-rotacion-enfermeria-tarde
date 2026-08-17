@@ -85,6 +85,19 @@ export const crearRepositorioNovedadesPersonal = (cliente) => ({
     return mapearFila(data);
   },
 
+  async actualizarContenido(id, { observacion, datos }) {
+    if (!cliente) throw new Error("Supabase no está configurado.");
+    if (!String(id || "").trim()) throw new Error("La novedad no es válida.");
+    const { data, error } = await cliente
+      .from("novedades_personal")
+      .update({ observacion, datos })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return mapearFila(data);
+  },
+
   async cancelar(id) {
     if (!cliente) throw new Error("Supabase no estÃ¡ configurado.");
     if (!String(id || "").trim()) throw new Error("La novedad no es vÃ¡lida.");

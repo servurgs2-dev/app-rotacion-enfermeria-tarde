@@ -34,7 +34,7 @@ const crearPayload = (novedad) => ({
 });
 
 export const crearRepositorioNovedadesPersonal = (cliente) => ({
-  async listar({ fechaDesde, fechaHasta } = {}) {
+  async listar({ fechaDesde, fechaHasta, turno } = {}) {
     if (!cliente) throw new Error("Supabase no está configurado.");
     let consulta = cliente
       .from("novedades_personal")
@@ -43,6 +43,7 @@ export const crearRepositorioNovedadesPersonal = (cliente) => ({
       .order("created_at", { ascending: false });
     if (fechaHasta) consulta = consulta.lte("fecha_desde", fechaHasta);
     if (fechaDesde) consulta = consulta.gte("fecha_hasta", fechaDesde);
+    if (turno) consulta = consulta.eq("turno", turno);
     const { data, error } = await consulta;
     if (error) throw error;
     return (data || []).map(mapearFila);

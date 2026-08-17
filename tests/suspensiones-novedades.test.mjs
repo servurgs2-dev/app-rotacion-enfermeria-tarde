@@ -124,6 +124,7 @@ await probar("la consulta contempla rangos que cruzan meses", () => {
   const repositorio = fs.readFileSync("src/services/repositorioNovedadesPersonal.js", "utf8");
   assert.match(repositorio, /lte\("fecha_desde", fechaHasta\)/);
   assert.match(repositorio, /gte\("fecha_hasta", fechaDesde\)/);
+  assert.match(repositorio, /eq\("turno", turno\)/);
 });
 
 await probar("cancelar actualiza estado y no borra", async () => {
@@ -142,6 +143,9 @@ await probar("el alta no ofrece Licencias ni Certificaciones", () => {
   assert.match(componente, /OPCIONES_ALTA_NOVEDAD\.map/);
   assert.match(componente, /esSuspension \? true/);
   assert.match(componente, /esSuspension \? ESTADOS_NOVEDAD_PERSONAL\.ACTIVA/);
+  assert.doesNotMatch(componente, /aria-label="Filtrar por turno"/);
+  assert.doesNotMatch(componente, /Todos los turnos/);
+  assert.match(componente, /turno: turnoActivo/);
 });
 
 await probar("App comparte la misma colección con Novedades y ambos Calendarios", () => {
@@ -149,6 +153,7 @@ await probar("App comparte la misma colección con Novedades y ambos Calendarios
   assert.match(app, /const \[novedadesPersonal, setNovedadesPersonal\]/);
   assert.equal((app.match(/novedades=\{novedadesPersonal\}/g) || []).length, 3);
   assert.match(app, /setNovedadesPersonal\(\(actuales\) => actuales\.map/);
+  assert.match(app, /turno: turnoActivo/);
 });
 
 console.log(`\n${total} pruebas de Suspensiones y disponibilidad pasaron.`);

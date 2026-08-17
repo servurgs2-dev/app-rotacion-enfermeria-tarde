@@ -232,3 +232,9 @@ export const obtenerRangoMesNovedades = (mes) => {
     fechaHasta: `${anio}-${String(numeroMes).padStart(2, "0")}-${String(ultimoDia).padStart(2, "0")}`
   };
 };
+
+export const filtrarNovedadesPorTurnoActivo = (novedades = [], turnoActivo = "") =>
+  (Array.isArray(novedades) ? novedades : []).filter((novedad) =>
+    novedad?.soloLectura === true ||
+    Boolean(turnoActivo && novedad?.turno === turnoActivo)
+  );

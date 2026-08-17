@@ -5,6 +5,7 @@ import {
   crearNovedadesLegacy,
   ESTADOS_NOVEDAD_PERSONAL,
   evaluarDisponibilidadPorNovedades,
+  filtrarNovedadesPorTurnoActivo,
   novedadAfectaDisponibilidadEnFecha,
   obtenerNovedadesPersonaEnFecha,
   OPCIONES_TIPO_NOVEDAD,
@@ -110,6 +111,18 @@ probar("la consulta por persona y fecha integra fuentes sin migrarlas", () => {
   });
   assert.equal(resultado.length, 1);
   assert.equal(resultado[0].origen, "licencias_legacy");
+});
+
+probar("el listado operativo queda limitado al turno activo y conserva legacy del estado", () => {
+  const registros = [
+    { id: "tarde", turno: "tarde", soloLectura: false },
+    { id: "manana", turno: "manana", soloLectura: false },
+    { id: "legacy", turno: null, soloLectura: true }
+  ];
+  assert.deepEqual(
+    filtrarNovedadesPorTurnoActivo(registros, "tarde").map((registro) => registro.id),
+    ["tarde", "legacy"]
+  );
 });
 
 probar("valida turno, categoría, estado y JSON adicional", () => {

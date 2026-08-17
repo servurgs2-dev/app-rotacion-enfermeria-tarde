@@ -3,6 +3,7 @@ import {
   crearNovedadPersonal,
   crearNovedadesLegacy,
   ESTADOS_NOVEDAD_PERSONAL,
+  filtrarNovedadesPorTurnoActivo,
   obtenerConfiguracionTipoNovedad,
   obtenerEtiquetaEstadoNovedad,
   obtenerEtiquetaTipoNovedad,
@@ -58,7 +59,6 @@ function Novedades({
   const [filtros, setFiltros] = useState({
     fecha: "",
     tipo: "",
-    turno: "",
     categoria: "",
     funcionario: ""
   });
@@ -69,18 +69,20 @@ function Novedades({
     personal
   }), [certificaciones, licencias, personal]);
 
-  const lista = useMemo(() => [...novedades, ...legacy]
+  const lista = useMemo(() => filtrarNovedadesPorTurnoActivo(
+    [...novedades, ...legacy],
+    turnoActivo
+  )
     .filter((novedad) => !filtros.fecha || (
       novedad.fechaDesde <= filtros.fecha && filtros.fecha <= novedad.fechaHasta
     ))
     .filter((novedad) => !filtros.tipo || novedad.tipo === filtros.tipo)
-    .filter((novedad) => !filtros.turno || novedad.turno === filtros.turno)
     .filter((novedad) => !filtros.categoria || novedad.categoria === filtros.categoria)
     .filter((novedad) => !filtros.funcionario ||
       novedad.personaNombre.toLocaleLowerCase("es").includes(
         filtros.funcionario.toLocaleLowerCase("es")
       ))
-    .sort((a, b) => b.fechaDesde.localeCompare(a.fechaDesde)), [filtros, legacy, novedades]);
+    .sort((a, b) => b.fechaDesde.localeCompare(a.fechaDesde)), [filtros, legacy, novedades, turnoActivo]);
 
   const actualizarFormulario = (campo, valor) => {
     setErrorFormulario("");
@@ -173,6 +175,9 @@ function Novedades({
         Licencias y Certificaciones continúan gestionándose exclusivamente en sus
         secciones y se muestran aquí sin duplicarlas.
       </p>
+      <p className="text-sm font-medium text-slate-700">
+        Turno: {TURNOS.find(([valor]) => valor === turnoActivo)?.[1] || turnoActivo}
+      </p>
 
       {formularioAbierto && (
         <form onSubmit={guardar} className="grid gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -222,15 +227,11 @@ function Novedades({
         </form>
       )}
 
-      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
         <input aria-label="Filtrar por fecha" type="date" value={filtros.fecha} onChange={(e) => setFiltros((actual) => ({ ...actual, fecha: e.target.value }))} className="min-h-11 rounded-lg border border-slate-300 px-3" />
         <select aria-label="Filtrar por tipo" value={filtros.tipo} onChange={(e) => setFiltros((actual) => ({ ...actual, tipo: e.target.value }))} className="min-h-11 rounded-lg border border-slate-300 px-3">
           <option value="">Todos los tipos</option>
           {OPCIONES_TIPO_NOVEDAD.map((opcion) => <option key={opcion.valor} value={opcion.valor}>{opcion.etiqueta}</option>)}
-        </select>
-        <select aria-label="Filtrar por turno" value={filtros.turno} onChange={(e) => setFiltros((actual) => ({ ...actual, turno: e.target.value }))} className="min-h-11 rounded-lg border border-slate-300 px-3">
-          <option value="">Todos los turnos</option>
-          {TURNOS.map(([valor, etiqueta]) => <option key={valor} value={valor}>{etiqueta}</option>)}
         </select>
         <select aria-label="Filtrar por categoría" value={filtros.categoria} onChange={(e) => setFiltros((actual) => ({ ...actual, categoria: e.target.value }))} className="min-h-11 rounded-lg border border-slate-300 px-3">
           <option value="">Todas las categorías</option>

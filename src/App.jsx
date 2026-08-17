@@ -180,7 +180,7 @@ const [reinicioMes, setReinicioMes] = useState(null);
 const [novedadesPersonal, setNovedadesPersonal] = useState([]);
 const [cargandoNovedades, setCargandoNovedades] = useState(false);
 const [errorNovedades, setErrorNovedades] = useState("");
-const contextoNovedadesRef = useRef({ mes: "", solicitud: 0 });
+const contextoNovedadesRef = useRef({ mes: "", turno: "", solicitud: 0 });
 const [restauracionHistorialEnCurso, setRestauracionHistorialEnCurso] = useState(null);
 const restauracionHistorialEnCursoRef = useRef(null);
 const [clavesBloqueadasTrasRestauracion, setClavesBloqueadasTrasRestauracion] =
@@ -256,25 +256,38 @@ const certificacionesMes = mesData.certificaciones || [];
 
 const cargarNovedades = useCallback(async () => {
   const solicitud = contextoNovedadesRef.current.solicitud + 1;
-  if (contextoNovedadesRef.current.mes !== mesActivo) {
+  if (!turnoActivo) {
+    contextoNovedadesRef.current = { mes: mesActivo, turno: "", solicitud };
+    setNovedadesPersonal([]);
+    setCargandoNovedades(false);
+    setErrorNovedades("");
+    return;
+  }
+  if (
+    contextoNovedadesRef.current.mes !== mesActivo ||
+    contextoNovedadesRef.current.turno !== turnoActivo
+  ) {
     setNovedadesPersonal([]);
   }
-  contextoNovedadesRef.current = { mes: mesActivo, solicitud };
+  contextoNovedadesRef.current = { mes: mesActivo, turno: turnoActivo, solicitud };
   setCargandoNovedades(true);
   setErrorNovedades("");
   try {
-    const resultado = await listarNovedadesPersonal(obtenerRangoMesNovedades(mesActivo));
-    if (contextoNovedadesRef.current.mes !== mesActivo || contextoNovedadesRef.current.solicitud !== solicitud) return;
+    const resultado = await listarNovedadesPersonal({
+      ...obtenerRangoMesNovedades(mesActivo),
+      turno: turnoActivo
+    });
+    if (contextoNovedadesRef.current.mes !== mesActivo || contextoNovedadesRef.current.turno !== turnoActivo || contextoNovedadesRef.current.solicitud !== solicitud) return;
     setNovedadesPersonal(resultado);
   } catch (error) {
-    if (contextoNovedadesRef.current.mes !== mesActivo || contextoNovedadesRef.current.solicitud !== solicitud) return;
+    if (contextoNovedadesRef.current.mes !== mesActivo || contextoNovedadesRef.current.turno !== turnoActivo || contextoNovedadesRef.current.solicitud !== solicitud) return;
     setErrorNovedades(error?.message || "No fue posible cargar las novedades.");
   } finally {
-    if (contextoNovedadesRef.current.mes === mesActivo && contextoNovedadesRef.current.solicitud === solicitud) {
+    if (contextoNovedadesRef.current.mes === mesActivo && contextoNovedadesRef.current.turno === turnoActivo && contextoNovedadesRef.current.solicitud === solicitud) {
       setCargandoNovedades(false);
     }
   }
-}, [mesActivo]);
+}, [mesActivo, turnoActivo]);
 
 useEffect(() => {
   cargarNovedades();

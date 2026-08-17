@@ -5,6 +5,7 @@ import CalendarioDiario from "./components/calendario/CalendarioDiario";
 import Seccion from "./components/ui/Seccion";
 import Licencias from "./components/licencias/Licencias";
 import Certificaciones from "./components/certificaciones/Certificaciones";
+import Novedades from "./components/novedades/Novedades";
 import Estadisticas from "./components/estadisticas/Estadisticas";
 import HistorialCambios from "./components/historial/HistorialCambios";
 import PanelConflictoEdicion from "./components/concurrencia/PanelConflictoEdicion";
@@ -2033,6 +2034,21 @@ return (
           personal={personal}
           certificaciones={certificacionesMes}
           setCertificaciones={actualizarCertificacionesMes}
+        />
+      </Seccion>
+
+      <Seccion
+        titulo="📋 Novedades"
+        className="order-4"
+        cuerpoClassName="max-h-[75vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
+      >
+        <Novedades
+          personal={personal}
+          licencias={licenciasMes}
+          certificaciones={certificacionesMes}
+          mesActivo={mesActivo}
+          turnoActivo={turnoActivo}
+          soloLectura={modoSoloLecturaEfectiva}
         />
       </Seccion>
 

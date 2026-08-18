@@ -61,6 +61,7 @@
     "test:novedades-altas-centralizadas": "node tests/novedades-altas-centralizadas.test.mjs",
     "test:reporte-novedades": "node tests/reporte-novedades.test.mjs",
     "test:alertas-identidades": "node tests/alertas-identidades.test.mjs",
+    "test:navegacion-mobile": "node tests/navegacion-mobile.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

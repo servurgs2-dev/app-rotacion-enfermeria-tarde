@@ -31,6 +31,8 @@ import {
   obtenerAdjuntoPlanillaPDF
 } from "./utils/exportPDF";
 import BotonEnviarPDF from "./components/correo/BotonEnviarPDF";
+import NavegacionPrincipal from "./components/layout/NavegacionPrincipal";
+import VistaInicio from "./components/layout/VistaInicio";
 import { crearAsuntoCorreoPDF } from "./utils/correoPDF";
 import {
   keyDiaFromDate,
@@ -149,6 +151,7 @@ function App({ perfil, onSignOut }) {
 
 const [tabPlanilla, setTabPlanilla] = useState("enfermeros");
 const [tabCalendario, setTabCalendario] = useState("enfermeros");
+const [vistaActiva, setVistaActiva] = useState("inicio");
 
 const [fecha, setFecha] = useState(() => parsearFechaLocal(keyDiaFromDate(new Date())));
 const claveActiva = turnoActivo
@@ -1909,7 +1912,7 @@ const actualizarBorradorConfiguracionPlanilla = (categoria, actualizador) => {
 };
 
 return (
-  <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+  <div className="min-h-screen overflow-x-hidden bg-slate-100 px-3 pb-28 pt-3 sm:px-4 md:p-6 md:pb-28">
   <div className="max-w-6xl mx-auto flex flex-col gap-6">
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -2022,9 +2025,17 @@ return (
         />
       )}
 
+      {vistaActiva === "inicio" && (
+        <VistaInicio
+          turno={configTurno.nombre}
+          mes={mesActivo}
+          onNavegar={setVistaActiva}
+        />
+      )}
+
       <Seccion
         titulo="👥 Personal"
-        className="order-3"
+        className={vistaActiva === "mas" ? "" : "hidden"}
         cuerpoClassName="max-h-[70vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
       >
         {modoSoloLectura && (
@@ -2054,7 +2065,7 @@ return (
 
       
 
-<Seccion titulo="📊 Planilla mensual" className="order-2">
+<Seccion titulo="📊 Planilla mensual" className={vistaActiva === "planilla" ? "" : "hidden"} defaultAbierto>
 
 <div className="mb-4 flex flex-wrap gap-2">
 <button
@@ -2176,7 +2187,8 @@ return (
 
       <Seccion
         titulo="📋 Novedades"
-        className="order-4"
+        className={vistaActiva === "novedades" ? "" : "hidden"}
+        defaultAbierto
         cuerpoClassName="max-h-[75vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
       >
         <Novedades
@@ -2207,7 +2219,7 @@ return (
       </Seccion>
 
       {(mesActivo === mesSiguiente || !destinoActivoPreparacion.permitido) && (
-        <div className="order-4 mb-4 rounded-xl border border-purple-200 bg-white p-4 shadow-sm">
+        <div className={`${vistaActiva === "mas" ? "" : "hidden"} mb-4 rounded-xl border border-purple-200 bg-white p-4 shadow-sm`}>
           <h2 className="text-base font-semibold text-slate-900">Gestión del mes</h2>
           {mesActivo === mesSiguiente &&
           destinoActivoPreparacion.permitido &&
@@ -2311,7 +2323,7 @@ return (
         </div>
       )}
 
-      <Seccion titulo="📈 Estadísticas" className="order-5">
+      <Seccion titulo="📈 Estadísticas" className={vistaActiva === "mas" ? "" : "hidden"}>
         <Estadisticas
           calendario={mesData.calendario}
           estadoActivo={mesData}
@@ -2324,7 +2336,7 @@ return (
       {esPerfilSupervision(perfil) && (
         <Seccion
           titulo="🕘 Historial"
-          className="order-6"
+          className={vistaActiva === "mas" ? "" : "hidden"}
           cuerpoClassName="max-h-[75vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
           onCambioAbierto={setHistorialAbierto}
         >
@@ -2344,10 +2356,11 @@ return (
         </Seccion>
       )}
 
-      <div id="calendario-pdf" className="order-1">
+      <div id="calendario-pdf" className={vistaActiva === "calendario" ? "" : "hidden"}>
         
         <Seccion
           titulo="📅 Calendario diario"
+          defaultAbierto
           cuerpoClassName="max-h-[75vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
         >
           
@@ -2559,6 +2572,8 @@ return (
         </Seccion>
         </div>
       </div>
+
+      <NavegacionPrincipal vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} />
 
     
 

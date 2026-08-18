@@ -16,6 +16,7 @@ import FormularioOlvidoTarjeta from "./FormularioOlvidoTarjeta.jsx";
 import ListaParo from "./ListaParo.jsx";
 import FormularioCambioHorario from "./FormularioCambioHorario.jsx";
 import FormularioRangoPersona from "./FormularioRangoPersona.jsx";
+import ReporteNovedades from "./ReporteNovedades.jsx";
 
 const TURNOS = [
   ["manana", "Mañana"],
@@ -61,6 +62,7 @@ function Novedades({
   const [cambioHorarioEditando, setCambioHorarioEditando] = useState(null);
   const [registroLegacyEditando, setRegistroLegacyEditando] = useState(null);
   const [procesandoLegacyId, setProcesandoLegacyId] = useState("");
+  const [reporteAbierto, setReporteAbierto] = useState(false);
   const [filtros, setFiltros] = useState({
     fecha: "",
     tipo: "",
@@ -73,9 +75,10 @@ function Novedades({
     certificaciones,
     personal
   }), [certificaciones, licencias, personal]);
+  const novedadesConsolidadas = useMemo(() => [...novedades, ...legacy], [legacy, novedades]);
 
   const lista = useMemo(() => filtrarNovedadesVisibles(filtrarNovedadesPorTurnoActivo(
-    [...novedades, ...legacy],
+    novedadesConsolidadas,
     turnoActivo
   ))
     .filter((novedad) => !filtros.fecha || (
@@ -87,7 +90,7 @@ function Novedades({
       novedad.personaNombre.toLocaleLowerCase("es").includes(
         filtros.funcionario.toLocaleLowerCase("es")
       ))
-    .sort((a, b) => b.fechaDesde.localeCompare(a.fechaDesde)), [filtros, legacy, novedades, turnoActivo]);
+    .sort((a, b) => b.fechaDesde.localeCompare(a.fechaDesde)), [filtros, novedadesConsolidadas, turnoActivo]);
   const olvidosPendientes = useMemo(
     () => contarOlvidosTarjetaPendientes(novedades, turnoActivo),
     [novedades, turnoActivo]
@@ -188,6 +191,22 @@ function Novedades({
       <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
         Olvidos de tarjeta pendientes: {olvidosPendientes}
       </p>
+
+      <div className="flex justify-end">
+        <button type="button" onClick={() => setReporteAbierto((abierto) => !abierto)} className="min-h-11 rounded-lg border border-indigo-300 bg-white px-4 py-2 text-sm font-medium text-indigo-800">
+          {reporteAbierto ? "Cerrar reporte" : "Reporte"}
+        </button>
+      </div>
+
+      {reporteAbierto && (
+        <ReporteNovedades
+          key={`${turnoActivo}:${mesActivo}`}
+          novedades={novedadesConsolidadas}
+          personal={personal}
+          turnoActivo={turnoActivo}
+          mesActivo={mesActivo}
+        />
+      )}
 
       {accionAbierta === "licencia" && !soloLectura && (
         <FormularioRangoPersona

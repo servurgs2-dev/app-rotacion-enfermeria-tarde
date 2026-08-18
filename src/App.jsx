@@ -14,10 +14,13 @@ import {
   sincronizarListaParo
 } from "./services/novedadesPersonal.js";
 import {
+  crearNovedadesLegacy,
   eliminarRegistroLegacyProyectado,
   obtenerRangoMesNovedades,
   reemplazarRegistroLegacyProyectado
 } from "./utils/novedadesPersonal.js";
+import { crearResumenInicioTurno } from "./utils/resumenInicioTurno.js";
+import { fechaPerteneceAlMes } from "./utils/navegacionFechaResumen.js";
 import Estadisticas from "./components/estadisticas/Estadisticas";
 import HistorialCambios from "./components/historial/HistorialCambios";
 import PanelConflictoEdicion from "./components/concurrencia/PanelConflictoEdicion";
@@ -265,6 +268,33 @@ const planillaLicenciados = mesData.planillas.licenciados;
 
 const licenciasMes = mesData.licencias;
 const certificacionesMes = mesData.certificaciones || [];
+const resumenInicio = useMemo(() => crearResumenInicioTurno({
+  enfermeros: dataPDFEnf.keyDia === keyDiaActual
+    ? dataPDFEnf.resumenInicio
+    : {},
+  licenciados: dataPDFLic.keyDia === keyDiaActual
+    ? dataPDFLic.resumenInicio
+    : {},
+  novedades: [
+    ...crearNovedadesLegacy({
+      licencias: licenciasMes,
+      certificaciones: mesData.certificaciones || [],
+      personal
+    }),
+    ...novedadesPersonal
+  ],
+  fecha: keyDiaActual,
+  turnoActivo
+}), [
+  dataPDFEnf,
+  dataPDFLic,
+  keyDiaActual,
+  licenciasMes,
+  mesData.certificaciones,
+  novedadesPersonal,
+  personal,
+  turnoActivo
+]);
 
 const cargarNovedades = useCallback(async () => {
   const solicitud = contextoNovedadesRef.current.solicitud + 1;
@@ -2029,6 +2059,13 @@ return (
         <VistaInicio
           turno={configTurno.nombre}
           mes={mesActivo}
+          fecha={keyDiaActual}
+          modoHistorico={mesActivo < mesActual}
+          resumen={resumenInicio}
+          onCambiarFecha={(nuevaFecha) => {
+            if (!fechaPerteneceAlMes(nuevaFecha, mesActivo)) return;
+            setFecha(parsearFechaLocal(nuevaFecha));
+          }}
           onNavegar={setVistaActiva}
         />
       )}

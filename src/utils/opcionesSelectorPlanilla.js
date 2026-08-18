@@ -38,6 +38,31 @@ const fechaCorta = (valor) => {
   return dia && mes ? `${dia}/${mes}` : valor || "";
 };
 
+const sumarDias = (fecha, cantidad) => {
+  const resultado = new Date(fecha);
+  resultado.setDate(resultado.getDate() + cantidad);
+  return resultado;
+};
+
+export const personaTieneAlMenosUnDiaDisponibleEnPeriodo = ({
+  persona,
+  licencias = [],
+  personal = [],
+  periodo
+} = {}) => {
+  const { desde, hasta } = obtenerLimitesPeriodo(periodo);
+  if (
+    !(desde instanceof Date) || Number.isNaN(desde.getTime()) ||
+    !(hasta instanceof Date) || Number.isNaN(hasta.getTime()) ||
+    desde > hasta
+  ) return false;
+
+  for (let fecha = new Date(desde); fecha <= hasta; fecha = sumarDias(fecha, 1)) {
+    if (!estaDeLicencia(licencias, persona, fecha, personal)) return true;
+  }
+  return false;
+};
+
 export const obtenerOpcionesSelectorPlanilla = ({
   personalCategoria = [],
   personal = [],
@@ -48,20 +73,19 @@ export const obtenerOpcionesSelectorPlanilla = ({
   periodo
 } = {}) => {
   const personaActual = resolverPersonaDesdeReferencia(referenciaActual, personal);
-  const limites = obtenerLimitesPeriodo(periodo);
   const opcionesNormales = personalCategoria.filter((persona) => {
     const disponible = !Object.entries(distribucion).some(
       ([otroSector, referencia]) =>
         otroSector !== sector &&
         referenciaCorrespondeAPersona(referencia, persona, personal)
     );
-    const noLicenciaAlInicio = !estaDeLicencia(
-      licencias,
+    const tieneDiaDisponible = personaTieneAlMenosUnDiaDisponibleEnPeriodo({
       persona,
-      limites.desde,
-      personal
-    );
-    return disponible && noLicenciaAlInicio;
+      licencias,
+      personal,
+      periodo
+    });
+    return disponible && tieneDiaDisponible;
   });
   const actualIncluida = personaActual && opcionesNormales.some(
     (persona) => String(persona.id) === String(personaActual.id)
@@ -91,9 +115,16 @@ export const obtenerOpcionesSelectorPlanilla = ({
       ...opcionesNormales.map((persona) => ({
         persona,
         esActualReincorporada: false,
-        etiquetaEstado: ""
+        etiquetaEstado: (() => {
+          const licencia = obtenerLicenciaSuperpuesta({
+            persona,
+            licencias,
+            personal,
+            periodo
+          });
+          return licencia ? `licencia hasta ${fechaCorta(licencia.hasta)}` : "";
+        })()
       }))
     ]
   };
 };
-

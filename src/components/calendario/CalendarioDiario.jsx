@@ -1530,6 +1530,22 @@ useEffect(() => {
   const datosParaPDF = {
     asignaciones: asignacionesParaPDF,
     libres: libresParaPDF,
+    resumenInicio: {
+      asignaciones: asignacionOrdenada,
+      libres: libresParaPDF,
+      ausentes: [
+        ...ausentesDelDia.map((registro) => registro.persona).filter(Boolean),
+        ...personalFiltrado.filter(estaDeLicenciaHoy),
+        ...certificados,
+        ...noDisponiblesPresentacion.map((registro) => registro.persona).filter(Boolean)
+      ],
+      extras: Array.isArray(extras[keyDia]) ? extras[keyDia].filter(Boolean) : [],
+      sectoresCriticosSinCobertura: obtenerSectoresCriticosSinCobertura({
+        asignaciones: asignacionOrdenada,
+        sectoresCriticosIds: esDiaParo ? [] : sectoresCriticosIds,
+        sectoresCriticosLegacy: esDiaParo ? sectoresCriticos : []
+      })
+    },
     keyDia
   };
   const dataString = JSON.stringify(datosParaPDF);
@@ -1544,14 +1560,19 @@ useEffect(() => {
 }, [
   asignacionOrdenada,
   ausentesDelDia,
+  certificados,
+  esDiaParo,
   estaCertificadoHoy,
   estaDeLicenciaHoy,
+  extras,
   keyDia,
   libres,
   noDisponibles,
   noDisponiblesPresentacion,
   onDataReady,
-  personalFiltrado
+  personalFiltrado,
+  sectoresCriticos,
+  sectoresCriticosIds
 ]);
 
   const personasPrevistas = obtenerPersonasPrevistas(asignacionOrdenada);

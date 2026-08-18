@@ -8,6 +8,7 @@ import {
   filtrarNovedadesPorTurnoActivo,
   filtrarNovedadesVisibles,
   novedadAfectaDisponibilidadEnFecha,
+  obtenerClaveRenderNovedad,
   obtenerNovedadesPersonaEnFecha,
   OPCIONES_TIPO_NOVEDAD,
   TIPOS_NOVEDAD_PERSONAL,
@@ -151,6 +152,47 @@ probar("el listado operativo oculta canceladas y conserva estados administrativo
     "olvido-revisado",
     "olvido-resuelto"
   ]);
+});
+
+probar("las identidades React legacy son únicas y no duplican el prefijo de origen", () => {
+  const certificaciones = [
+    {
+      id: "certificaciones_legacy:persona-1:2026-08-17:2026-08-20",
+      personaId: persona.id,
+      desde: "2026-08-17",
+      hasta: "2026-08-20"
+    },
+    {
+      id: "certificacion-real-2",
+      personaId: persona.id,
+      desde: "2026-08-17",
+      hasta: "2026-08-20"
+    }
+  ];
+  const licencias = [
+    { id: "licencia-real-1", personaId: persona.id, desde: "2026-08-17", hasta: "2026-08-20" },
+    { id: "licencia-real-2", personaId: persona.id, desde: "2026-08-17", hasta: "2026-08-20" }
+  ];
+  const proyectadas = crearNovedadesLegacy({ licencias, certificaciones, personal: [persona] });
+  const claves = proyectadas.map(obtenerClaveRenderNovedad);
+  assert.equal(new Set(claves).size, proyectadas.length);
+  assert.equal(
+    claves[2],
+    "certificaciones_legacy:persona-1:2026-08-17:2026-08-20"
+  );
+  assert.doesNotMatch(claves.join("|"), /certificaciones_legacy:certificaciones_legacy:/);
+  assert.match(claves[3], /^certificaciones_legacy:certificacion-real-2$/);
+});
+
+probar("registros legacy sin id conservan identidades determinísticas distintas", () => {
+  const registros = [
+    { personaId: persona.id, desde: "2026-08-17", hasta: "2026-08-20" },
+    { personaId: persona.id, desde: "2026-08-17", hasta: "2026-08-20" }
+  ];
+  const claves = crearNovedadesLegacy({ certificaciones: registros, personal: [persona] })
+    .map(obtenerClaveRenderNovedad);
+  assert.equal(new Set(claves).size, 2);
+  assert.ok(claves.every((clave) => /:registro-\d+$/.test(clave)));
 });
 
 probar("la migración crea constraints, índices y RLS sin tocar tablas legacy", () => {

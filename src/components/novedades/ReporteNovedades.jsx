@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  obtenerClaveRenderNovedad,
   obtenerEtiquetaTipoNovedad,
   obtenerRangoMesNovedades
 } from "../../utils/novedadesPersonal.js";
@@ -149,7 +150,7 @@ function ReporteNovedades({ novedades = [], personal = [], turnoActivo = "", mes
             const detalle = obtenerDetalleReporteNovedad(novedad);
             const estado = presentarEstadoReporteNovedad(novedad);
             return (
-              <article key={`${novedad.origen || "central"}:${novedad.id}`} className="rounded-lg border border-slate-200 bg-white p-3">
+              <article key={obtenerClaveRenderNovedad(novedad)} className="rounded-lg border border-slate-200 bg-white p-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold text-slate-900">{novedad.personaNombre}</p>

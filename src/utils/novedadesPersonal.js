@@ -300,8 +300,18 @@ export const obtenerEtiquetaTipoNovedad = (tipo) =>
 export const obtenerEtiquetaEstadoNovedad = (estado) =>
   OPCIONES_ESTADO_NOVEDAD.find((opcion) => opcion.valor === estado)?.etiqueta || estado || "";
 
+export const obtenerIdentidadNovedadLegacy = ({ registro, persona, indice, origen }) => {
+  const idOrigen = texto(registro?.id);
+  if (idOrigen) {
+    return idOrigen.startsWith(`${origen}:`) ? idOrigen : `${origen}:${idOrigen}`;
+  }
+  return `${origen}:${registro?.personaId || persona?.id || "sin-persona"}:${registro?.desde || ""}:${registro?.hasta || ""}:registro-${indice}`;
+};
+
+export const obtenerClaveRenderNovedad = (novedad) => texto(novedad?.id);
+
 const crearLegacy = ({ registro, persona, tipo, indice, origen }) => ({
-  id: `${origen}:${registro?.personaId || persona?.id || indice}:${registro?.desde || ""}:${registro?.hasta || ""}`,
+  id: obtenerIdentidadNovedadLegacy({ registro, persona, indice, origen }),
   registroOrigenId: texto(registro?.id) || null,
   registroOrigenIndice: indice,
   personaId: registro?.personaId || persona?.id || "",

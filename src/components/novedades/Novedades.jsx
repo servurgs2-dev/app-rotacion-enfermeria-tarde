@@ -8,6 +8,7 @@ import {
   filtrarNovedadesVisibles,
   obtenerEtiquetaEstadoNovedad,
   obtenerEtiquetaTipoNovedad,
+  obtenerClaveRenderNovedad,
   OPCIONES_TIPO_NOVEDAD,
   TIPOS_NOVEDAD_PERSONAL
 } from "../../utils/novedadesPersonal.js";
@@ -351,7 +352,7 @@ function Novedades({
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {lista.map((novedad) => (
-            <article key={`${novedad.origen || "central"}:${novedad.id}`} className={`rounded-xl border p-4 shadow-sm ${novedad.tipo === "olvido_tarjeta" && novedad.estado === "pendiente" ? "border-amber-300 bg-amber-50/40" : "border-slate-200 bg-white"}`}>
+            <article key={obtenerClaveRenderNovedad(novedad)} className={`rounded-xl border p-4 shadow-sm ${novedad.tipo === "olvido_tarjeta" && novedad.estado === "pendiente" ? "border-amber-300 bg-amber-50/40" : "border-slate-200 bg-white"}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h3 className="font-semibold text-slate-900">{novedad.personaNombre}</h3>

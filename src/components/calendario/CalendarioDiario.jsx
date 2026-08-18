@@ -134,6 +134,7 @@ import {
   obtenerIdentidadesTurnantes,
   obtenerNombreConMarcaTurnante
 } from "../../utils/etiquetaTurnante.js";
+import VistaDistribucionMobile from "./mobile/VistaDistribucionMobile.jsx";
 import {
   detectarDisponiblesPorReintegro,
   evaluarAsignacionesParcialesDia,
@@ -1640,12 +1641,68 @@ useEffect(() => {
   const alertaSectoresCriticos = formatearAlertaSectoresCriticos(
     sectoresCriticosSinCobertura
   );
+  const nombresCriticosSinCobertura = new Set(
+    sectoresCriticosSinCobertura.map((sector) => normalizar(sector))
+  );
   const resumenMostrado = bloqueadoPorCierre && snapshotCierre
     ? snapshotCierre.resumen
     : resumenTurno;
   const asistenciaMostrada = bloqueadoPorCierre && snapshotCierre
     ? snapshotCierre.asistencia
     : asistenciaFecha;
+  const asignacionesPresentacionMobile = asignacionesMostradas.map((item, indice) => {
+    if (item.tipo === "divider") {
+      return { tipo: "divider", clave: `divider-${indice}` };
+    }
+    const sectorLiberadoPorAusencia = !item.enfermero && ausentesDelDia.some(
+      (ausente) => normalizar(ausente.sectorOrigen) === normalizar(item.nombre)
+    );
+    const noDisponibleDelSector = !item.enfermero
+      ? noDisponiblesPresentacion.find(
+          (registro) => normalizar(registro.sectorOrigen) === normalizar(item.nombre)
+        )
+      : null;
+    const textoPersona = item.enfermero
+      ? obtenerNombreConMarcaTurnante(item.enfermero)
+      : sectorLiberadoPorAusencia
+        ? "Sin asignar — ausencia"
+        : noDisponibleDelSector
+          ? `Sin cobertura — ${noDisponibleDelSector.motivoBreve}${
+              noDisponibleDelSector.turnoDestino
+                ? `: turno ${obtenerEtiquetaTurnoDestino(
+                    noDisponibleDelSector.turnoDestino
+                  ).toLowerCase()}`
+                : ""
+            }`
+          : "Sin cobertura";
+    const estadoVisual = bloqueadoPorCierre
+      ? item.sacrificado ? "sacrificada" : "normal"
+      : seleccionado?.nombre === item.nombre
+        ? "seleccionada"
+        : item.sacrificado
+          ? "sacrificada"
+          : estaNoDisponible(item.enfermero)
+            ? "no_disponible"
+            : estaLibre(item.enfermero)
+              ? "libre"
+              : "normal";
+    return {
+      clave: item.syntheticId || item.sectorId || item.filaId || `${item.nombre}-${indice}`,
+      original: item,
+      nombre: item.nombre,
+      sectorId: item.sectorId,
+      syntheticId: item.syntheticId,
+      persona: item.enfermero || null,
+      textoPersona,
+      estadoVisual,
+      estadoAsistencia: item.enfermero
+        ? obtenerEstadoAsistencia(asistenciaMostrada, item.enfermero)
+        : ESTADOS_ASISTENCIA.PENDIENTE,
+      criticoSinCobertura: !item.enfermero && nombresCriticosSinCobertura.has(
+        normalizar(item.etiqueta || item.nombre)
+      )
+    };
+  });
 
   const cerrarTurno = () => {
     if (soloLecturaEfectiva || !usuarioActual) return;
@@ -2198,7 +2255,14 @@ useEffect(() => {
         </p>
       )}
 
-<div className="rounded-2xl border border-slate-100 bg-white">
+<VistaDistribucionMobile
+  asignaciones={asignacionesPresentacionMobile}
+  soloLectura={soloLecturaEfectiva}
+  onSeleccionar={handleClick}
+  onCambiarAsistencia={cambiarAsistencia}
+/>
+
+<div className="hidden rounded-2xl border border-slate-100 bg-white md:block">
   {asignacionesMostradas.map((item, i) => {
 
     if (item.tipo === "divider") {

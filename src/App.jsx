@@ -2163,7 +2163,30 @@ return (
 />
 </div>
   {/* TABS */}
-  <div className="flex gap-2 mb-4">
+  <div className="mb-4 grid grid-cols-2 rounded-xl bg-slate-100 p-1 md:hidden" aria-label="Categoría del Calendario">
+    <button
+      type="button"
+      aria-pressed={tabCalendario === "enfermeros"}
+      onClick={() => setTabCalendario("enfermeros")}
+      className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition ${
+        tabCalendario === "enfermeros" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"
+      }`}
+    >
+      Enfermeros
+    </button>
+    <button
+      type="button"
+      aria-pressed={tabCalendario === "licenciados"}
+      onClick={() => setTabCalendario("licenciados")}
+      className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition ${
+        tabCalendario === "licenciados" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"
+      }`}
+    >
+      Licenciados
+    </button>
+  </div>
+
+  <div className="mb-4 hidden gap-2 md:flex">
     
     <button
       onClick={() => setTabPlanilla("enfermeros")}

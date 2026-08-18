@@ -143,11 +143,11 @@ await probar("No disponibles muestra Adhesión a paro una sola vez frente a otra
   assert.equal(soloParo[0].motivoEtiqueta, "Adhesión a paro");
 });
 
-await probar("la vía genérica excluye Adhesión a paro y la lista respeta turno e histórico", () => {
+await probar("Lista de paro tiene acción específica y respeta turno e histórico", () => {
   const novedadesFuente = fs.readFileSync("src/components/novedades/Novedades.jsx", "utf8");
   const listaFuente = fs.readFileSync("src/components/novedades/ListaParo.jsx", "utf8");
-  assert.match(novedadesFuente, /"adhesion_paro"/);
-  assert.match(novedadesFuente, /OPCIONES_ALTA_NOVEDAD\.map/);
+  assert.match(novedadesFuente, /\["paro", "Lista de paro"/);
+  assert.doesNotMatch(novedadesFuente, /OPCIONES_ALTA_NOVEDAD/);
   assert.match(listaFuente, /turnoActivo/);
   assert.match(listaFuente, /soloLectura/);
   assert.match(listaFuente, /Confirmar lista de paro/);

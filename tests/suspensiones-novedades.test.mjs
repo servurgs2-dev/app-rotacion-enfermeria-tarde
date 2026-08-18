@@ -137,12 +137,12 @@ await probar("cancelar actualiza estado y no borra", async () => {
   assert.deepEqual(llamadas.slice(0, 3), [["from", "novedades_personal"], ["update", { estado: "cancelada" }], ["eq", "id", "nov-1"]]);
 });
 
-await probar("el alta no ofrece Licencias ni Certificaciones", () => {
+await probar("Suspensión tiene alta específica y no existe formulario genérico", () => {
   const componente = fs.readFileSync("src/components/novedades/Novedades.jsx", "utf8");
-  assert.match(componente, /TIPOS_NO_DISPONIBLES_PARA_ALTA/);
-  assert.match(componente, /OPCIONES_ALTA_NOVEDAD\.map/);
-  assert.match(componente, /esSuspension \? true/);
-  assert.match(componente, /esSuspension \? ESTADOS_NOVEDAD_PERSONAL\.ACTIVA/);
+  assert.match(componente, /\["suspension", "Suspensión"/);
+  assert.match(componente, /accionAbierta === "suspension"/);
+  assert.match(componente, /tipo: "suspension"/);
+  assert.doesNotMatch(componente, /OPCIONES_ALTA_NOVEDAD|formularioAbierto/);
   assert.doesNotMatch(componente, /aria-label="Filtrar por turno"/);
   assert.doesNotMatch(componente, /Todos los turnos/);
   assert.match(componente, /turno: turnoActivo/);

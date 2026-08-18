@@ -15,7 +15,11 @@ import {
   guardarCambioHorarioPersonal,
   sincronizarListaParo
 } from "./services/novedadesPersonal.js";
-import { obtenerRangoMesNovedades } from "./utils/novedadesPersonal.js";
+import {
+  eliminarRegistroLegacyProyectado,
+  obtenerRangoMesNovedades,
+  reemplazarRegistroLegacyProyectado
+} from "./utils/novedadesPersonal.js";
 import Estadisticas from "./components/estadisticas/Estadisticas";
 import HistorialCambios from "./components/historial/HistorialCambios";
 import PanelConflictoEdicion from "./components/concurrencia/PanelConflictoEdicion";
@@ -381,6 +385,39 @@ const actualizarCertificacionesMes = (actualizacion) => {
     if (nuevas === certificacionesActuales) return prev;
     return { ...prev, [claveActiva]: { ...actual, certificaciones: nuevas } };
   });
+};
+
+const actualizarLicenciasMes = (actualizacion) => {
+  setEstadoPorTurnoMes((prev) => {
+    if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
+    const actual = prev[claveActiva] || crearEstadoMensualVacio();
+    const licenciasActuales = actual.licencias || [];
+    const nuevas = typeof actualizacion === "function"
+      ? actualizacion(licenciasActuales)
+      : actualizacion;
+    if (nuevas === licenciasActuales) return prev;
+    return { ...prev, [claveActiva]: { ...actual, licencias: nuevas } };
+  });
+};
+
+const editarRegistroLegacyMes = (campo, novedad, actualizacion) => {
+  const estadoActual = estadoPorTurnoMesRef.current[claveActiva] || crearEstadoMensualVacio();
+  const registros = Array.isArray(estadoActual[campo]) ? estadoActual[campo] : [];
+  const resultado = reemplazarRegistroLegacyProyectado({ registros, novedad, actualizacion });
+  if (resultado.error) throw new Error(resultado.error);
+  const actualizar = campo === "licencias" ? actualizarLicenciasMes : actualizarCertificacionesMes;
+  actualizar(resultado.registros);
+  return resultado.registros;
+};
+
+const eliminarRegistroLegacyMes = (campo, novedad) => {
+  const estadoActual = estadoPorTurnoMesRef.current[claveActiva] || crearEstadoMensualVacio();
+  const registros = Array.isArray(estadoActual[campo]) ? estadoActual[campo] : [];
+  const resultado = eliminarRegistroLegacyProyectado({ registros, novedad });
+  if (resultado.error) throw new Error(resultado.error);
+  const actualizar = campo === "licencias" ? actualizarLicenciasMes : actualizarCertificacionesMes;
+  actualizar(resultado.registros);
+  return resultado.registros;
 };
 
 const obtenerCertificacionesActuales = () =>
@@ -2144,13 +2181,7 @@ return (
           soloLectura={modoSoloLecturaEfectiva}
           personal={personal}
           licencias={licenciasMes}
-          setLicencias={(nueva) => {
-            setEstadoPorTurnoMes(prev => {
-              if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
-              const actual = prev[claveActiva] || crearEstadoMensualVacio();
-              return { ...prev, [claveActiva]: { ...actual, licencias: nueva } };
-            });
-          }}
+          setLicencias={actualizarLicenciasMes}
         />
       </Seccion>
 
@@ -2186,6 +2217,12 @@ return (
           onRegistrarOlvidoTarjeta={guardarOlvidoTarjeta}
           onActualizarEstado={actualizarEstadoNovedad}
           onGuardarCambioHorario={guardarCambioHorario}
+          onGuardarLicencia={(licencia) => actualizarLicenciasMes((actuales) => [...actuales, licencia])}
+          onGuardarCertificacion={(certificacion) => actualizarCertificacionesMes((actuales) => [...actuales, certificacion])}
+          onEditarLicencia={(novedad, licencia) => editarRegistroLegacyMes("licencias", novedad, licencia)}
+          onEliminarLicencia={(novedad) => eliminarRegistroLegacyMes("licencias", novedad)}
+          onEditarCertificacion={(novedad, certificacion) => editarRegistroLegacyMes("certificaciones", novedad, certificacion)}
+          onEliminarCertificacion={(novedad) => eliminarRegistroLegacyMes("certificaciones", novedad)}
         />
       </Seccion>
 

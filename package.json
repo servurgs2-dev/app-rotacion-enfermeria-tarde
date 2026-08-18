@@ -58,6 +58,7 @@
     "test:lista-paro": "node tests/lista-paro.test.mjs",
     "test:olvido-tarjeta": "node tests/olvido-tarjeta.test.mjs",
     "test:cambio-horario": "node tests/cambio-horario.test.mjs",
+    "test:novedades-altas-centralizadas": "node tests/novedades-altas-centralizadas.test.mjs",
     "test:alertas-identidades": "node tests/alertas-identidades.test.mjs",
     "preview": "vite preview"
   },

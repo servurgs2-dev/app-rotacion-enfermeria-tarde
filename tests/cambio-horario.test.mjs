@@ -105,14 +105,15 @@ await probar("alertas consumen la salida excepcional sin cambiar su regla", () =
   assert.match(alertas[0], /Dos/);
 });
 
-await probar("UI específica, histórico y alta genérica quedan acotados", () => {
+await probar("UI específica e histórico quedan acotados sin alta genérica", () => {
   const novedades = fs.readFileSync("src/components/novedades/Novedades.jsx", "utf8");
   const formulario = fs.readFileSync("src/components/novedades/FormularioCambioHorario.jsx", "utf8");
   assert.match(novedades, /Cambio de horario/);
   assert.match(novedades, /cambio_horario/);
   assert.match(formulario, /soloLectura/);
   assert.match(formulario, /Horario habitual/);
-  assert.match(novedades, /TIPOS_NO_DISPONIBLES_PARA_ALTA[\s\S]*cambio_horario/);
+  assert.match(novedades, /\["cambio_horario", "Cambio de horario"/);
+  assert.doesNotMatch(novedades, /OPCIONES_ALTA_NOVEDAD|formularioAbierto/);
 });
 
 console.log(`\n${aprobadas} pruebas de Cambio excepcional de horario aprobadas.`);

@@ -6,6 +6,7 @@ import {
   ESTADOS_NOVEDAD_PERSONAL,
   evaluarDisponibilidadPorNovedades,
   filtrarNovedadesPorTurnoActivo,
+  filtrarNovedadesVisibles,
   novedadAfectaDisponibilidadEnFecha,
   obtenerNovedadesPersonaEnFecha,
   OPCIONES_TIPO_NOVEDAD,
@@ -132,6 +133,24 @@ probar("valida turno, categoría, estado y JSON adicional", () => {
   assert.match(validarNovedadPersonal({ ...valida, categoria: "otra" }), /categoría/i);
   assert.match(validarNovedadPersonal({ ...valida, estado: "otro" }), /estado/i);
   assert.match(validarNovedadPersonal({ ...valida, datos: [] }), /adicionales/i);
+});
+
+probar("el listado operativo oculta canceladas y conserva estados administrativos visibles", () => {
+  const tiposEliminables = ["suspension", "adhesion_paro", "cambio_horario", "olvido_tarjeta"];
+  const activas = tiposEliminables.map((tipo, indice) => ({
+    id: `activa-${indice}`,
+    tipo,
+    estado: "activa"
+  }));
+  const canceladas = activas.map((novedad, indice) => ({ ...novedad, id: `cancelada-${indice}`, estado: "cancelada" }));
+  const revisada = { ...activas[3], id: "olvido-revisado", estado: "revisada" };
+  const resuelta = { ...activas[3], id: "olvido-resuelto", estado: "resuelta" };
+  const visibles = filtrarNovedadesVisibles([...activas, ...canceladas, revisada, resuelta]);
+  assert.deepEqual(visibles.map((novedad) => novedad.id), [
+    ...activas.map((novedad) => novedad.id),
+    "olvido-revisado",
+    "olvido-resuelto"
+  ]);
 });
 
 probar("la migración crea constraints, índices y RLS sin tocar tablas legacy", () => {

@@ -301,6 +301,8 @@ export const obtenerEtiquetaEstadoNovedad = (estado) =>
 
 const crearLegacy = ({ registro, persona, tipo, indice, origen }) => ({
   id: `${origen}:${registro?.personaId || persona?.id || indice}:${registro?.desde || ""}:${registro?.hasta || ""}`,
+  registroOrigenId: texto(registro?.id) || null,
+  registroOrigenIndice: indice,
   personaId: registro?.personaId || persona?.id || "",
   personaNombre: persona?.nombre || registro?.nombre || "Persona no disponible",
   tipo,
@@ -316,6 +318,49 @@ const crearLegacy = ({ registro, persona, tipo, indice, origen }) => ({
   origen,
   soloLectura: true
 });
+
+const registroCoincideConProyeccionLegacy = (registro, novedad) => {
+  if (!registro || !novedad) return false;
+  if (novedad.registroOrigenId) return texto(registro.id) === texto(novedad.registroOrigenId);
+  const personaId = texto(registro.personaId);
+  const nombre = texto(registro.nombre);
+  return (personaId ? personaId === texto(novedad.personaId) : nombre === texto(novedad.personaNombre)) &&
+    texto(registro.desde) === texto(novedad.fechaDesde) &&
+    texto(registro.hasta) === texto(novedad.fechaHasta);
+};
+
+export const obtenerIndiceRegistroLegacyProyectado = (registros = [], novedad) => {
+  const lista = Array.isArray(registros) ? registros : [];
+  if (novedad?.registroOrigenId) {
+    return lista.findIndex((registro) => registroCoincideConProyeccionLegacy(registro, novedad));
+  }
+  const indice = Number(novedad?.registroOrigenIndice);
+  if (Number.isInteger(indice) && indice >= 0 && indice < lista.length &&
+      registroCoincideConProyeccionLegacy(lista[indice], novedad)) {
+    return indice;
+  }
+  return lista.findIndex((registro) => registroCoincideConProyeccionLegacy(registro, novedad));
+};
+
+export const reemplazarRegistroLegacyProyectado = ({ registros = [], novedad, actualizacion } = {}) => {
+  const lista = Array.isArray(registros) ? registros : [];
+  const indice = obtenerIndiceRegistroLegacyProyectado(lista, novedad);
+  if (indice < 0) return { registros: lista, error: "El registro original ya no está disponible." };
+  return {
+    registros: lista.map((registro, posicion) => posicion === indice
+      ? { ...registro, ...(actualizacion || {}) }
+      : registro),
+    error: ""
+  };
+};
+
+export const eliminarRegistroLegacyProyectado = ({ registros = [], novedad } = {}) => {
+  const lista = Array.isArray(registros) ? registros : [];
+  const indice = obtenerIndiceRegistroLegacyProyectado(lista, novedad);
+  return indice < 0
+    ? { registros: lista, error: "El registro original ya no está disponible." }
+    : { registros: lista.filter((_, posicion) => posicion !== indice), error: "" };
+};
 
 export const crearNovedadesLegacy = ({ licencias = [], certificaciones = [], personal = [] } = {}) => [
   ...(Array.isArray(licencias) ? licencias : []).map((registro, indice) => crearLegacy({
@@ -408,4 +453,9 @@ export const filtrarNovedadesPorTurnoActivo = (novedades = [], turnoActivo = "")
   (Array.isArray(novedades) ? novedades : []).filter((novedad) =>
     novedad?.soloLectura === true ||
     Boolean(turnoActivo && novedad?.turno === turnoActivo)
+  );
+
+export const filtrarNovedadesVisibles = (novedades = []) =>
+  (Array.isArray(novedades) ? novedades : []).filter((novedad) =>
+    novedad?.origen?.endsWith("_legacy") || novedad?.estado !== ESTADOS_NOVEDAD_PERSONAL.CANCELADA
   );

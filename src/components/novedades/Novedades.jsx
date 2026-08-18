@@ -5,15 +5,17 @@ import {
   contarOlvidosTarjetaPendientes,
   ESTADOS_NOVEDAD_PERSONAL,
   filtrarNovedadesPorTurnoActivo,
-  obtenerConfiguracionTipoNovedad,
+  filtrarNovedadesVisibles,
   obtenerEtiquetaEstadoNovedad,
   obtenerEtiquetaTipoNovedad,
   OPCIONES_TIPO_NOVEDAD
 } from "../../utils/novedadesPersonal.js";
-import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
+import { crearLicenciaPersona } from "../../utils/licenciasPersonas.js";
+import { crearCertificacionPersona } from "../../utils/certificacionesPersonas.js";
 import FormularioOlvidoTarjeta from "./FormularioOlvidoTarjeta.jsx";
 import ListaParo from "./ListaParo.jsx";
 import FormularioCambioHorario from "./FormularioCambioHorario.jsx";
+import FormularioRangoPersona from "./FormularioRangoPersona.jsx";
 
 const TURNOS = [
   ["manana", "Mañana"],
@@ -26,17 +28,6 @@ const fechaCorta = (fecha) => {
   const [anio, mes, dia] = String(fecha || "").split("-");
   return anio && mes && dia ? `${dia}/${mes}/${anio}` : "Sin fecha";
 };
-
-const TIPOS_NO_DISPONIBLES_PARA_ALTA = new Set([
-  "licencia",
-  "certificacion",
-  "adhesion_paro",
-  "olvido_tarjeta",
-  "cambio_horario"
-]);
-const OPCIONES_ALTA_NOVEDAD = OPCIONES_TIPO_NOVEDAD.filter(
-  (opcion) => !TIPOS_NO_DISPONIBLES_PARA_ALTA.has(opcion.valor)
-);
 
 function Novedades({
   personal = [],
@@ -55,28 +46,21 @@ function Novedades({
   onGuardarListaParo = async () => null,
   onRegistrarOlvidoTarjeta = async () => null,
   onActualizarEstado = async () => null,
-  onGuardarCambioHorario = async () => null
+  onGuardarCambioHorario = async () => null,
+  onGuardarLicencia = async () => null,
+  onGuardarCertificacion = async () => null,
+  onEditarLicencia = async () => null,
+  onEliminarLicencia = async () => null,
+  onEditarCertificacion = async () => null,
+  onEliminarCertificacion = async () => null
 }) {
-  const [guardando, setGuardando] = useState(false);
   const [cancelandoId, setCancelandoId] = useState("");
   const [actualizandoId, setActualizandoId] = useState("");
   const [errorAccion, setErrorAccion] = useState("");
-  const [errorFormulario, setErrorFormulario] = useState("");
-  const [formularioAbierto, setFormularioAbierto] = useState(false);
-  const [listaParoAbierta, setListaParoAbierta] = useState(false);
-  const [olvidoTarjetaAbierto, setOlvidoTarjetaAbierto] = useState(false);
-  const [cambioHorarioAbierto, setCambioHorarioAbierto] = useState(false);
+  const [accionAbierta, setAccionAbierta] = useState("");
   const [cambioHorarioEditando, setCambioHorarioEditando] = useState(null);
-  const [formulario, setFormulario] = useState({
-    personaId: "",
-    tipo: "suspension",
-    fechaDesde: "",
-    fechaHasta: "",
-    observacion: "",
-    afectaDisponibilidad: true,
-    requiereSeguimiento: false,
-    estado: ESTADOS_NOVEDAD_PERSONAL.ACTIVA
-  });
+  const [registroLegacyEditando, setRegistroLegacyEditando] = useState(null);
+  const [procesandoLegacyId, setProcesandoLegacyId] = useState("");
   const [filtros, setFiltros] = useState({
     fecha: "",
     tipo: "",
@@ -90,10 +74,10 @@ function Novedades({
     personal
   }), [certificaciones, licencias, personal]);
 
-  const lista = useMemo(() => filtrarNovedadesPorTurnoActivo(
+  const lista = useMemo(() => filtrarNovedadesVisibles(filtrarNovedadesPorTurnoActivo(
     [...novedades, ...legacy],
     turnoActivo
-  )
+  ))
     .filter((novedad) => !filtros.fecha || (
       novedad.fechaDesde <= filtros.fecha && filtros.fecha <= novedad.fechaHasta
     ))
@@ -109,65 +93,42 @@ function Novedades({
     [novedades, turnoActivo]
   );
 
-  const actualizarFormulario = (campo, valor) => {
-    setErrorFormulario("");
-    setFormulario((actual) => ({ ...actual, [campo]: valor }));
+  const abrirAccion = (accion) => {
+    setCambioHorarioEditando(null);
+    setRegistroLegacyEditando(null);
+    setAccionAbierta((actual) => actual === accion ? "" : accion);
   };
 
-  const cambiarTipo = (tipo) => {
-    const configuracion = obtenerConfiguracionTipoNovedad(tipo);
-    setErrorFormulario("");
-    setFormulario((actual) => ({
-      ...actual,
-      tipo,
-      afectaDisponibilidad: Boolean(configuracion?.afectaDisponibilidad),
-      estado: configuracion?.estado || ESTADOS_NOVEDAD_PERSONAL.PENDIENTE,
-      requiereSeguimiento: tipo === "olvido_tarjeta" || tipo === "otra"
-    }));
+  const editarLegacy = (novedad) => {
+    if (soloLectura) return;
+    setCambioHorarioEditando(null);
+    setRegistroLegacyEditando(novedad);
+    setAccionAbierta(novedad.tipo);
   };
 
-  const guardar = async (evento) => {
-    evento.preventDefault();
-    if (soloLectura || guardando) return;
-    const persona = personal.find((actual) => actual.id === formulario.personaId);
-    const esSuspension = formulario.tipo === "suspension";
-    const resultado = crearNovedadPersonal({
-      persona,
-      tipo: formulario.tipo,
-      fechaDesde: formulario.fechaDesde,
-      fechaHasta: formulario.fechaHasta || formulario.fechaDesde,
-      turno: turnoActivo,
-      observacion: formulario.observacion,
-      afectaDisponibilidad: esSuspension ? true : formulario.afectaDisponibilidad,
-      requiereSeguimiento: esSuspension ? false : formulario.requiereSeguimiento,
-      estado: esSuspension ? ESTADOS_NOVEDAD_PERSONAL.ACTIVA : formulario.estado
-    });
-    if (resultado.error) {
-      setErrorFormulario(resultado.error);
-      return;
-    }
-    setGuardando(true);
+  const eliminarLegacy = async (novedad) => {
+    if (soloLectura || procesandoLegacyId) return;
+    const etiqueta = novedad.tipo === "licencia" ? "licencia" : "certificación";
+    if (!window.confirm(`¿Eliminar la ${etiqueta} de ${novedad.personaNombre}?`)) return;
+    setProcesandoLegacyId(novedad.id);
+    setErrorAccion("");
     try {
-      await onRegistrar(resultado.novedad);
-      setFormulario((actual) => ({
-        ...actual,
-        personaId: "",
-        fechaDesde: "",
-        fechaHasta: "",
-        observacion: ""
-      }));
-      setFormularioAbierto(false);
+      await (novedad.tipo === "licencia" ? onEliminarLicencia : onEliminarCertificacion)(novedad);
+      if (registroLegacyEditando?.id === novedad.id) {
+        setRegistroLegacyEditando(null);
+        setAccionAbierta("");
+      }
     } catch (error) {
-      setErrorFormulario(error?.message || "No fue posible guardar la novedad.");
+      setErrorAccion(error?.message || `No fue posible eliminar la ${etiqueta}.`);
     } finally {
-      setGuardando(false);
+      setProcesandoLegacyId("");
     }
   };
 
   const cancelar = async (novedad) => {
     if (soloLectura || cancelandoId || novedad.soloLectura) return;
-    const descripcion = novedad.tipo === "cambio_horario" ? "el Cambio de horario" : "la suspensión activa";
-    if (!window.confirm(`¿Cancelar ${descripcion} de ${novedad.personaNombre}?`)) return;
+    const descripcion = novedad.tipo === "cambio_horario" ? "el Cambio de horario" : "la suspensión";
+    if (!window.confirm(`¿Eliminar ${descripcion} de ${novedad.personaNombre}?`)) return;
     setCancelandoId(novedad.id);
     setErrorAccion("");
     try {
@@ -181,7 +142,7 @@ function Novedades({
 
   const cambiarEstado = async (novedad, estado) => {
     if (soloLectura || actualizandoId || novedad.soloLectura) return;
-    if (estado === ESTADOS_NOVEDAD_PERSONAL.CANCELADA && !window.confirm(`¿Cancelar el Olvido de tarjeta de ${novedad.personaNombre}?`)) return;
+    if (estado === ESTADOS_NOVEDAD_PERSONAL.CANCELADA && !window.confirm(`¿Eliminar el Olvido de tarjeta de ${novedad.personaNombre}?`)) return;
     setActualizandoId(novedad.id);
     setErrorAccion("");
     try {
@@ -199,48 +160,27 @@ function Novedades({
         <p className="text-sm text-slate-600">
           Registro central de novedades administrativas y ausencias.
         </p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setListaParoAbierta((actual) => !actual)}
-            className="min-h-11 rounded-lg border border-violet-300 bg-white px-4 py-2 text-sm font-medium text-violet-800"
-          >
-            {listaParoAbierta ? "Cerrar lista de paro" : "Lista de paro"}
-          </button>
-          {!soloLectura && (
-            <button
-              type="button"
-              onClick={() => { setCambioHorarioEditando(null); setCambioHorarioAbierto((actual) => !actual); }}
-              className="min-h-11 rounded-lg border border-cyan-300 bg-white px-4 py-2 text-sm font-medium text-cyan-800"
-            >
-              {cambioHorarioAbierto ? "Cerrar Cambio de horario" : "Cambio de horario"}
-            </button>
-          )}
-          {!soloLectura && (
-            <button
-              type="button"
-              onClick={() => setOlvidoTarjetaAbierto((actual) => !actual)}
-              className="min-h-11 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800"
-            >
-              {olvidoTarjetaAbierto ? "Cerrar Olvido de tarjeta" : "Olvido de tarjeta"}
-            </button>
-          )}
         {!soloLectura && (
-          <button
-            type="button"
-            onClick={() => setFormularioAbierto((actual) => !actual)}
-            className="min-h-11 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
-          >
-            {formularioAbierto ? "Cancelar" : "Agregar novedad"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {[
+              ["licencia", "Licencia", "border-blue-300 text-blue-800"],
+              ["certificacion", "Certificación", "border-emerald-300 text-emerald-800"],
+              ["suspension", "Suspensión", "border-red-300 text-red-800"],
+              ["paro", "Lista de paro", "border-violet-300 text-violet-800"],
+              ["cambio_horario", "Cambio de horario", "border-cyan-300 text-cyan-800"],
+              ["olvido_tarjeta", "Olvido de tarjeta", "border-amber-300 text-amber-800"]
+            ].map(([accion, etiqueta, color]) => (
+              <button key={accion} type="button" onClick={() => abrirAccion(accion)} className={`min-h-11 rounded-lg border bg-white px-4 py-2 text-sm font-medium ${color}`}>
+                {accionAbierta === accion ? "Cerrar" : etiqueta}
+              </button>
+            ))}
+          </div>
         )}
-        </div>
       </div>
 
       <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        Las Suspensiones y Adhesiones a paro activas afectan el Calendario. Las
-        Licencias y Certificaciones continúan gestionándose exclusivamente en sus
-        secciones y se muestran aquí sin duplicarlas.
+        Licencias, Certificaciones, Suspensiones y Adhesiones a paro pueden afectar
+        el Calendario. Olvido de tarjeta y Cambio de horario no bloquean disponibilidad.
       </p>
       <p className="text-sm font-medium text-slate-700">
         Turno: {TURNOS.find(([valor]) => valor === turnoActivo)?.[1] || turnoActivo}
@@ -249,7 +189,72 @@ function Novedades({
         Olvidos de tarjeta pendientes: {olvidosPendientes}
       </p>
 
-      {listaParoAbierta && (
+      {accionAbierta === "licencia" && !soloLectura && (
+        <FormularioRangoPersona
+          key={`licencia:${turnoActivo}:${fechaActiva}:${registroLegacyEditando?.id || "nueva"}`}
+          titulo={registroLegacyEditando ? "Editar licencia" : "Agregar licencia"}
+          personal={personal}
+          fechaInicial={fechaActiva}
+          registroInicial={registroLegacyEditando}
+          soloLectura={soloLectura}
+          crearRegistro={({ persona, desde, hasta }) => ({
+            registro: crearLicenciaPersona(persona, desde, hasta),
+            error: "No se pudo identificar a la persona seleccionada."
+          })}
+          onGuardar={(registro) => registroLegacyEditando
+            ? onEditarLicencia(registroLegacyEditando, registro)
+            : onGuardarLicencia(registro)}
+          onCerrar={() => { setAccionAbierta(""); setRegistroLegacyEditando(null); }}
+        />
+      )}
+
+      {accionAbierta === "certificacion" && !soloLectura && (
+        <FormularioRangoPersona
+          key={`certificacion:${turnoActivo}:${fechaActiva}:${registroLegacyEditando?.id || "nueva"}`}
+          titulo={registroLegacyEditando ? "Editar certificación médica" : "Agregar certificación médica"}
+          personal={personal}
+          fechaInicial={fechaActiva}
+          registroInicial={registroLegacyEditando}
+          soloLectura={soloLectura}
+          crearRegistro={({ persona, desde, hasta }) => ({
+            registro: crearCertificacionPersona(persona, { desde, hasta }),
+            error: "No se pudo identificar a la persona seleccionada."
+          })}
+          onGuardar={(registro) => registroLegacyEditando
+            ? onEditarCertificacion(registroLegacyEditando, registro)
+            : onGuardarCertificacion(registro)}
+          onCerrar={() => { setAccionAbierta(""); setRegistroLegacyEditando(null); }}
+        />
+      )}
+
+      {accionAbierta === "suspension" && !soloLectura && (
+        <FormularioRangoPersona
+          key={`suspension:${turnoActivo}:${fechaActiva}`}
+          titulo="Agregar suspensión"
+          personal={personal}
+          fechaInicial={fechaActiva}
+          soloLectura={soloLectura}
+          permiteObservacion
+          crearRegistro={({ persona, desde, hasta, observacion }) => {
+            const resultado = crearNovedadPersonal({
+              persona,
+              tipo: "suspension",
+              fechaDesde: desde,
+              fechaHasta: hasta,
+              turno: turnoActivo,
+              observacion,
+              afectaDisponibilidad: true,
+              requiereSeguimiento: false,
+              estado: ESTADOS_NOVEDAD_PERSONAL.ACTIVA
+            });
+            return { registro: resultado.novedad, error: resultado.error };
+          }}
+          onGuardar={onRegistrar}
+          onCerrar={() => setAccionAbierta("")}
+        />
+      )}
+
+      {accionAbierta === "paro" && (
         <ListaParo
           key={`${turnoActivo}:${mesActivo}:${fechaActiva}`}
           personal={personal}
@@ -264,7 +269,7 @@ function Novedades({
         />
       )}
 
-      {olvidoTarjetaAbierto && !soloLectura && (
+      {accionAbierta === "olvido_tarjeta" && !soloLectura && (
         <FormularioOlvidoTarjeta
           key={`${turnoActivo}:${mesActivo}:${fechaActiva}`}
           personal={personal}
@@ -272,11 +277,11 @@ function Novedades({
           mesActivo={mesActivo}
           soloLectura={soloLectura}
           onGuardar={onRegistrarOlvidoTarjeta}
-          onCerrar={() => setOlvidoTarjetaAbierto(false)}
+          onCerrar={() => setAccionAbierta("")}
         />
       )}
 
-      {cambioHorarioAbierto && !soloLectura && (
+      {accionAbierta === "cambio_horario" && !soloLectura && (
         <FormularioCambioHorario
           key={`${turnoActivo}:${mesActivo}:${fechaActiva}:${cambioHorarioEditando?.id || "nuevo"}`}
           personal={personal}
@@ -286,56 +291,8 @@ function Novedades({
           soloLectura={soloLectura}
           novedadInicial={cambioHorarioEditando}
           onGuardar={onGuardarCambioHorario}
-          onCerrar={() => { setCambioHorarioAbierto(false); setCambioHorarioEditando(null); }}
+          onCerrar={() => { setAccionAbierta(""); setCambioHorarioEditando(null); }}
         />
-      )}
-
-      {formularioAbierto && (
-        <form onSubmit={guardar} className="grid gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Funcionario
-            <select value={formulario.personaId} onChange={(e) => actualizarFormulario("personaId", e.target.value)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3">
-              <option value="">Seleccionar…</option>
-              {personal.map((persona) => (
-                <option key={persona.id} value={persona.id}>{obtenerEtiquetaPersona(persona)}</option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Tipo
-            <select value={formulario.tipo} onChange={(e) => cambiarTipo(e.target.value)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3">
-              {OPCIONES_ALTA_NOVEDAD.map((opcion) => <option key={opcion.valor} value={opcion.valor}>{opcion.etiqueta}</option>)}
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Desde
-            <input type="date" value={formulario.fechaDesde} onChange={(e) => actualizarFormulario("fechaDesde", e.target.value)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3" />
-          </label>
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Hasta
-            <input type="date" value={formulario.fechaHasta} min={formulario.fechaDesde || undefined} onChange={(e) => actualizarFormulario("fechaHasta", e.target.value)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3" />
-          </label>
-          {formulario.tipo !== "suspension" && (
-            <>
-              <label className="flex min-h-11 items-center gap-2 self-end rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
-                <input type="checkbox" checked={formulario.afectaDisponibilidad} onChange={(e) => actualizarFormulario("afectaDisponibilidad", e.target.checked)} />
-                Afecta disponibilidad
-              </label>
-              <label className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
-                <input type="checkbox" checked={formulario.requiereSeguimiento} onChange={(e) => actualizarFormulario("requiereSeguimiento", e.target.checked)} />
-                Requiere seguimiento
-              </label>
-            </>
-          )}
-          <label className="grid gap-1 text-sm font-medium text-slate-700 sm:col-span-2">
-            Observación
-            <textarea value={formulario.observacion} onChange={(e) => actualizarFormulario("observacion", e.target.value)} rows="2" className="rounded-lg border border-slate-300 bg-white px-3 py-2" />
-          </label>
-          {errorFormulario && <p role="alert" className="text-sm text-red-700 sm:col-span-2 lg:col-span-3">{errorFormulario}</p>}
-          <button type="submit" disabled={guardando} className="min-h-11 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:bg-slate-300">
-            {guardando ? "Guardando…" : "Guardar novedad"}
-          </button>
-        </form>
       )}
 
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -366,7 +323,7 @@ function Novedades({
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {lista.map((novedad) => (
-            <article key={`${novedad.origen || "central"}:${novedad.id}`} className={`rounded-xl border p-4 shadow-sm ${novedad.estado === "cancelada" ? "border-slate-200 bg-slate-50 opacity-75" : novedad.tipo === "olvido_tarjeta" && novedad.estado === "pendiente" ? "border-amber-300 bg-amber-50/40" : "border-slate-200 bg-white"}`}>
+            <article key={`${novedad.origen || "central"}:${novedad.id}`} className={`rounded-xl border p-4 shadow-sm ${novedad.tipo === "olvido_tarjeta" && novedad.estado === "pendiente" ? "border-amber-300 bg-amber-50/40" : "border-slate-200 bg-white"}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h3 className="font-semibold text-slate-900">{novedad.personaNombre}</h3>
@@ -392,6 +349,16 @@ function Novedades({
                 {novedad.tipo === "olvido_tarjeta" && novedad.estado === "pendiente" && <span className="rounded bg-amber-200 px-2 py-1 font-semibold text-amber-950">Pendiente · Requiere acción</span>}
                 {novedad.soloLectura && <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">Registro histórico vigente</span>}
               </div>
+              {!soloLectura && ["licencia", "certificacion"].includes(novedad.tipo) && ["licencias_legacy", "certificaciones_legacy"].includes(novedad.origen) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => editarLegacy(novedad)} className="min-h-11 rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700">
+                    Editar {novedad.tipo === "licencia" ? "licencia" : "certificación"}
+                  </button>
+                  <button type="button" disabled={Boolean(procesandoLegacyId)} onClick={() => eliminarLegacy(novedad)} className="min-h-11 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 disabled:text-slate-400">
+                    {procesandoLegacyId === novedad.id ? "Eliminando…" : `Eliminar ${novedad.tipo === "licencia" ? "licencia" : "certificación"}`}
+                  </button>
+                </div>
+              )}
               {!soloLectura && !novedad.soloLectura && novedad.tipo === "suspension" && novedad.estado === "activa" && (
                 <button
                   type="button"
@@ -399,7 +366,7 @@ function Novedades({
                   onClick={() => cancelar(novedad)}
                   className="mt-3 min-h-11 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 disabled:text-slate-400"
                 >
-                  {cancelandoId === novedad.id ? "Cancelando…" : "Cancelar suspensión"}
+                  {cancelandoId === novedad.id ? "Eliminando…" : "Eliminar suspensión"}
                 </button>
               )}
               {!soloLectura && !novedad.soloLectura && novedad.tipo === "olvido_tarjeta" && ["pendiente", "revisada"].includes(novedad.estado) && (
@@ -413,14 +380,14 @@ function Novedades({
                     Marcar resuelta
                   </button>
                   <button type="button" disabled={Boolean(actualizandoId)} onClick={() => cambiarEstado(novedad, ESTADOS_NOVEDAD_PERSONAL.CANCELADA)} className="min-h-11 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 disabled:text-slate-400">
-                    Cancelar registro
+                    Eliminar olvido
                   </button>
                 </div>
               )}
               {!soloLectura && !novedad.soloLectura && novedad.tipo === "cambio_horario" && novedad.estado === "activa" && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => { setCambioHorarioEditando(novedad); setCambioHorarioAbierto(true); }} className="min-h-11 rounded-lg border border-cyan-200 px-3 py-2 text-sm font-medium text-cyan-800">Editar horario</button>
-                  <button type="button" disabled={Boolean(cancelandoId)} onClick={() => cancelar(novedad)} className="min-h-11 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 disabled:text-slate-400">{cancelandoId === novedad.id ? "Cancelando…" : "Cancelar cambio"}</button>
+                  <button type="button" onClick={() => { setCambioHorarioEditando(novedad); setAccionAbierta("cambio_horario"); }} className="min-h-11 rounded-lg border border-cyan-200 px-3 py-2 text-sm font-medium text-cyan-800">Editar horario</button>
+                  <button type="button" disabled={Boolean(cancelandoId)} onClick={() => cancelar(novedad)} className="min-h-11 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 disabled:text-slate-400">{cancelandoId === novedad.id ? "Eliminando…" : "Eliminar cambio"}</button>
                 </div>
               )}
             </article>

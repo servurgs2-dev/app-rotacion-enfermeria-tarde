@@ -35,6 +35,9 @@ probar("Otra y Excedente permanecen sólo en catálogo, no como acciones", () =>
   assert.match(modelo, /OTRA: "otra"/);
   assert.match(modelo, /EXCEDENTE: "excedente"/);
   assert.doesNotMatch(fuente, /\["otra",|\["excedente",/);
+  assert.match(fuente, /TIPOS_OCULTOS_EN_UI = new Set\(\[\s*TIPOS_NOVEDAD_PERSONAL\.OTRA,\s*TIPOS_NOVEDAD_PERSONAL\.EXCEDENTE/s);
+  assert.match(fuente, /OPCIONES_TIPO_NOVEDAD_OPERATIVAS\.map/);
+  assert.doesNotMatch(fuente, /\{OPCIONES_TIPO_NOVEDAD\.map/);
 });
 
 probar("Licencia usa el constructor legacy y una sola proyección", () => {
@@ -131,6 +134,7 @@ probar("App actualiza estructuras mensuales sin registrar copias centrales", () 
   assert.match(app, /licencias: nuevas/);
   assert.match(app, /certificaciones: nuevas/);
   assert.doesNotMatch(app, /registrarNovedadPersonal\(licencia\)|registrarNovedadPersonal\(certificacion\)/);
+  assert.doesNotMatch(app, /components\/licencias\/Licencias|components\/certificaciones\/Certificaciones|<Licencias|<Certificaciones/);
 });
 
 probar("un solo flujo de alta se muestra a la vez y solo lectura oculta acciones", () => {

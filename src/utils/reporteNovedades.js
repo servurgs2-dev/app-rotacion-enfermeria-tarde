@@ -47,6 +47,9 @@ export const obtenerDetalleReporteNovedad = (novedad) => {
   if (novedad?.tipo === "cambio_horario") {
     return `Horario: ${novedad.datos?.horaEntrada || "--:--"} – ${novedad.datos?.horaSalida || "--:--"}`;
   }
+  if (novedad?.tipo === "certificacion" && novedad.datos?.creadaDesdeNoDisponibles) {
+    return "Creada desde No disponibles";
+  }
   return novedad?.observacion || "";
 };
 

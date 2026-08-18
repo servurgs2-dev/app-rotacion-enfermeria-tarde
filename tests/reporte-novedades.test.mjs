@@ -95,6 +95,15 @@ probar("presenta horario excepcional y estados administrativos vigentes", () => 
   assert.equal(presentarEstadoReporteNovedad({ ...central[2], estado: "resuelta" }), "Resuelta");
 });
 
+probar("conserva el origen visible de una Certificación creada desde No disponibles", () => {
+  const certificacionDia = crearNovedadesLegacy({
+    certificaciones: [{ id: "cert-dia-1", origen: "no_disponibles_dia", personaId: "ana", nombre: "Ana", desde: "2026-08-20", hasta: "2026-08-20" }],
+    personal
+  })[0];
+  assert.equal(certificacionDia.datos.creadaDesdeNoDisponibles, true);
+  assert.equal(obtenerDetalleReporteNovedad(certificacionDia), "Creada desde No disponibles");
+});
+
 probar("la UI limita el rango al mes, no ofrece turno y funciona en histórico", () => {
   const fuente = fs.readFileSync("src/components/novedades/ReporteNovedades.jsx", "utf8");
   const contenedor = fs.readFileSync("src/components/novedades/Novedades.jsx", "utf8");

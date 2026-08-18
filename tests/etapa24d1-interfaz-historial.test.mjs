@@ -66,8 +66,8 @@ prueba("sección inicia cerrada", () => {
 });
 prueba("usa componente Seccion actual", () =>
   assert.match(app, /<Seccion[\s\S]*titulo="🕘 Historial"/));
-prueba("no altera títulos de secciones existentes", () => {
-  for (const titulo of ["Personal", "Planilla mensual", "Licencias", "Certificaciones médicas", "Estadísticas", "Calendario diario"]) {
+prueba("conserva los títulos vigentes de las secciones", () => {
+  for (const titulo of ["Personal", "Planilla mensual", "Novedades", "Estadísticas", "Calendario diario"]) {
     assert.ok(app.includes(titulo));
   }
 });

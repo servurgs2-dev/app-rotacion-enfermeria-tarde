@@ -49,10 +49,10 @@ probar("1 no existe una navegación principal agregada", () => {
 });
 probar("2 Gestión del mes no está duplicada", () => {
   assert.equal((app.match(/>Gestión del mes</g) || []).length, 1);
-  const certificaciones = app.indexOf('<Seccion titulo="🩺 Certificaciones médicas"');
+  const novedades = app.indexOf('titulo="📋 Novedades"');
   const gestion = app.indexOf("Gestión del mes");
   const estadisticas = app.indexOf('<Seccion titulo="📈 Estadísticas"');
-  assert.ok(certificaciones < gestion);
+  assert.ok(novedades < gestion);
   assert.ok(gestion < estadisticas);
 });
 probar("3 Preparar mes siguiente permanece", () => assert.match(app, />\s*Preparar mes siguiente\s*</));
@@ -221,8 +221,8 @@ probar("35 el modo opción 2 se reconoce por sus claves", () => {
     SECTORES_REDISTRIBUCION_BOXES
   );
 });
-probar("36 Gestión del mes sigue después de Certificaciones", () => {
-  assert.ok(app.indexOf("Certificaciones médicas") < app.indexOf("Gestión del mes"));
+probar("36 Gestión del mes sigue después de Novedades", () => {
+  assert.ok(app.indexOf('titulo="📋 Novedades"') < app.indexOf("Gestión del mes"));
   assert.ok(app.indexOf("Gestión del mes") < app.indexOf("Estadísticas"));
 });
 probar("37 los modales usan los títulos y descripciones nuevas", () => {

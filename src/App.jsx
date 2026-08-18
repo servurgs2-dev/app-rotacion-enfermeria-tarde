@@ -3,8 +3,6 @@ import ListaPersonal from "./components/personal/ListaPersonal";
 import PlanillaMensual from "./components/planilla/PlanillaMensual";
 import CalendarioDiario from "./components/calendario/CalendarioDiario";
 import Seccion from "./components/ui/Seccion";
-import Licencias from "./components/licencias/Licencias";
-import Certificaciones from "./components/certificaciones/Certificaciones";
 import Novedades from "./components/novedades/Novedades";
 import {
   cancelarNovedadPersonal,
@@ -2174,24 +2172,6 @@ return (
 
 
 
-      </Seccion>
-
-      <Seccion titulo="🏖 Licencias" className="order-4">
-        <Licencias
-          soloLectura={modoSoloLecturaEfectiva}
-          personal={personal}
-          licencias={licenciasMes}
-          setLicencias={actualizarLicenciasMes}
-        />
-      </Seccion>
-
-      <Seccion titulo="🩺 Certificaciones médicas" className="order-4">
-        <Certificaciones
-          soloLectura={modoSoloLecturaEfectiva}
-          personal={personal}
-          certificaciones={certificacionesMes}
-          setCertificaciones={actualizarCertificacionesMes}
-        />
       </Seccion>
 
       <Seccion

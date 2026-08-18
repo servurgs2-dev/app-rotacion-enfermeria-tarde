@@ -40,7 +40,7 @@ const probar = (nombre, fn) => {
 const leer = (ruta) => fs.readFileSync(ruta, "utf8");
 const panelFuente = leer("src/components/calendario/PanelNoDisponible.jsx");
 const calendarioFuente = leer("src/components/calendario/CalendarioDiario.jsx");
-const certificacionesFuente = leer("src/components/certificaciones/Certificaciones.jsx");
+const novedadesFuente = leer("src/components/novedades/Novedades.jsx");
 const appFuente = leer("src/App.jsx");
 
 const fecha = "2026-08-12";
@@ -111,9 +111,9 @@ probar("13 al día siguiente vuelve normalmente", () => {
 });
 probar("14 inicio y fin del rango son inclusivos", () => assert.equal(detector(milton), true));
 probar("15 aparece en la pestaña Certificaciones", () => {
-  assert.match(certificacionesFuente, /Creada desde No disponibles/);
-  assert.match(certificacionesFuente, /certificacion\.desde/);
-  assert.match(certificacionesFuente, /certificacion\.hasta/);
+  assert.match(novedadesFuente, /Creada desde No disponibles/);
+  assert.match(novedadesFuente, /novedad\.fechaDesde/);
+  assert.match(novedadesFuente, /novedad\.fechaHasta/);
 });
 const presentacion = () => obtenerNoDisponiblesDelDia({
   registros: [], certificaciones: alta.certificaciones, personal, fecha,

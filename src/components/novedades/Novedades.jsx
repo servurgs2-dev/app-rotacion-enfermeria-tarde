@@ -8,7 +8,8 @@ import {
   filtrarNovedadesVisibles,
   obtenerEtiquetaEstadoNovedad,
   obtenerEtiquetaTipoNovedad,
-  OPCIONES_TIPO_NOVEDAD
+  OPCIONES_TIPO_NOVEDAD,
+  TIPOS_NOVEDAD_PERSONAL
 } from "../../utils/novedadesPersonal.js";
 import { crearLicenciaPersona } from "../../utils/licenciasPersonas.js";
 import { crearCertificacionPersona } from "../../utils/certificacionesPersonas.js";
@@ -24,6 +25,14 @@ const TURNOS = [
   ["vespertino", "Vespertino"],
   ["noche", "Noche"]
 ];
+
+const TIPOS_OCULTOS_EN_UI = new Set([
+  TIPOS_NOVEDAD_PERSONAL.OTRA,
+  TIPOS_NOVEDAD_PERSONAL.EXCEDENTE
+]);
+const OPCIONES_TIPO_NOVEDAD_OPERATIVAS = OPCIONES_TIPO_NOVEDAD.filter(
+  (opcion) => !TIPOS_OCULTOS_EN_UI.has(opcion.valor)
+);
 
 const fechaCorta = (fecha) => {
   const [anio, mes, dia] = String(fecha || "").split("-");
@@ -318,7 +327,7 @@ function Novedades({
         <input aria-label="Filtrar por fecha" type="date" value={filtros.fecha} onChange={(e) => setFiltros((actual) => ({ ...actual, fecha: e.target.value }))} className="min-h-11 rounded-lg border border-slate-300 px-3" />
         <select aria-label="Filtrar por tipo" value={filtros.tipo} onChange={(e) => setFiltros((actual) => ({ ...actual, tipo: e.target.value }))} className="min-h-11 rounded-lg border border-slate-300 px-3">
           <option value="">Todos los tipos</option>
-          {OPCIONES_TIPO_NOVEDAD.map((opcion) => <option key={opcion.valor} value={opcion.valor}>{opcion.etiqueta}</option>)}
+          {OPCIONES_TIPO_NOVEDAD_OPERATIVAS.map((opcion) => <option key={opcion.valor} value={opcion.valor}>{opcion.etiqueta}</option>)}
         </select>
         <select aria-label="Filtrar por categoría" value={filtros.categoria} onChange={(e) => setFiltros((actual) => ({ ...actual, categoria: e.target.value }))} className="min-h-11 rounded-lg border border-slate-300 px-3">
           <option value="">Todas las categorías</option>
@@ -357,6 +366,9 @@ function Novedades({
                 {[TURNOS.find(([valor]) => valor === novedad.turno)?.[1], novedad.categoria === "enfermero" ? "Enfermero" : novedad.categoria === "licenciado" ? "Licenciado" : ""].filter(Boolean).join(" · ") || "Sin turno/categoría específica"}
               </p>
               {novedad.observacion && <p className="mt-2 line-clamp-2 text-sm text-slate-600">{novedad.observacion}</p>}
+              {novedad.tipo === "certificacion" && novedad.datos?.creadaDesdeNoDisponibles && (
+                <p className="mt-2 text-xs font-medium text-blue-700">Creada desde No disponibles</p>
+              )}
               {novedad.tipo === "cambio_horario" && (
                 <p className="mt-2 text-sm font-medium text-cyan-800">
                   Horario excepcional: {novedad.datos?.horaEntrada || "--:--"}–{novedad.datos?.horaSalida || "--:--"}

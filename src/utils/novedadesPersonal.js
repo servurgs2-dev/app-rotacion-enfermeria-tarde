@@ -1,5 +1,6 @@
 import { crearReferenciaPersona } from "./referenciasPersonas.js";
 import {
+  esCertificacionPorElDia,
   resolverPersonaDeCertificacion
 } from "./certificacionesPersonas.js";
 import { resolverPersonaDeLicencia } from "./licenciasPersonas.js";
@@ -314,7 +315,9 @@ const crearLegacy = ({ registro, persona, tipo, indice, origen }) => ({
   afectaDisponibilidad: true,
   requiereSeguimiento: false,
   estado: ESTADOS_NOVEDAD_PERSONAL.ACTIVA,
-  datos: {},
+  datos: tipo === TIPOS_NOVEDAD_PERSONAL.CERTIFICACION && esCertificacionPorElDia(registro)
+    ? { creadaDesdeNoDisponibles: true }
+    : {},
   origen,
   soloLectura: true
 });

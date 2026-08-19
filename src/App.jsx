@@ -2417,13 +2417,7 @@ return (
       )}
 
       <div id="calendario-pdf" className={vistaActiva === "calendario" ? "" : "hidden"}>
-        
-        <Seccion
-          titulo="📅 Calendario diario"
-          defaultAbierto
-          cuerpoClassName="max-h-[75vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
-        >
-          
+        <h2 className="mb-4 text-xl font-semibold text-slate-800">📅 Calendario diario</h2>
 
   <div className="mb-4 flex flex-wrap gap-2">
   <button
@@ -2629,7 +2623,6 @@ return (
   />
 </div>
 
-        </Seccion>
         </div>
       </div>
 

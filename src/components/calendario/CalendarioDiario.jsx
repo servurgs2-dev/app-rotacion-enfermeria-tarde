@@ -135,6 +135,7 @@ import {
   obtenerNombreConMarcaTurnante
 } from "../../utils/etiquetaTurnante.js";
 import VistaDistribucionMobile from "./mobile/VistaDistribucionMobile.jsx";
+import BloquesOperativosMobile from "./mobile/BloquesOperativosMobile.jsx";
 import {
   detectarDisponiblesPorReintegro,
   evaluarAsignacionesParcialesDia,
@@ -2106,6 +2107,81 @@ useEffect(() => {
     setConfirmacionRedistribucion(null);
   };
 
+  const ausentesPresentacionMobile = ausentesDelDia.map((ausente) => {
+    const horario = configTurnoCalendario.horarios[ausente.horario] ||
+      configTurnoCalendario.horarios.normal;
+    return {
+      clave: ausente.clave,
+      persona: ausente.persona,
+      nombre: obtenerNombreConMarcaTurnante(
+        ausente.persona,
+        ausente.nombre,
+        identidadesTurnantes
+      ),
+      detalle: `${ausente.sectorOrigen || "Sector no registrado"} · ${horario?.textoVisible || "Horario no disponible"}`
+    };
+  });
+  const noDisponiblesOperativosMobile = [
+    ...noDisponiblesPresentacion.map((registro) => ({
+      clave: registro.registro?.id || `${obtenerClaveIdentidadPersona(registro.persona) || registro.nombre}:${registro.tipo}:${registro.motivo || "sin-motivo"}`,
+      persona: registro.persona,
+      registro: registro.registro,
+      nombre: registro.persona
+        ? obtenerNombreConMarcaTurnante(registro.persona, registro.nombre, identidadesTurnantes)
+        : registro.nombre,
+      detalle: `${registro.sectorOrigen || "Sector no registrado"} · ${registro.motivoEtiqueta}`,
+      detalleAdicional: registro.personaCoberturaNombre
+        ? `Cubierto por: ${registro.personaCoberturaNombre} (E)`
+        : registro.turnoDestino
+          ? `Turno destino: ${obtenerEtiquetaTurnoDestino(registro.turnoDestino)}`
+          : registro.detalle || "",
+      accion: registro.tipo === "manual" && registro.persona
+        ? "editar"
+        : registro.tipo === "certificacion_rapida"
+          ? "quitar_certificacion"
+          : ""
+    })),
+    ...coberturasExtrasPresentacion.map((cobertura) => ({
+      clave: cobertura.id,
+      nombre: cobertura.nombre,
+      detalle: `${cobertura.sector || "Sector no registrado"} · Cubierto por: ${cobertura.extraNombre} (E)`,
+      detalleAdicional: "Motivo: Cobertura de compañero",
+      accion: ""
+    }))
+  ];
+  const extrasPresentacionMobile = extrasDia.map((extra) => ({
+    clave: extra.id,
+    extra,
+    nombre: obtenerNombreConMarcaTurnante(extra, "", identidadesTurnantes),
+    detalle: obtenerDescripcionExtra(
+      extra,
+      (turno) => obtenerConfiguracionTurno(turno).nombre
+    )
+  }));
+  const libresPresentacionMobile = libres.map((persona) => ({
+    clave: obtenerClaveIdentidadPersona(persona),
+    persona,
+    nombre: obtenerNombreConMarcaTurnante(persona, "", identidadesTurnantes),
+    yaEsExtra: extrasDia.some((extra) => personasCompartenIdentidad(extra, persona))
+  }));
+  const certificadosPresentacionMobile = certificados.map((persona) => ({
+    clave: obtenerClaveIdentidadPersona(persona),
+    nombre: obtenerEtiquetaPersona(persona, personal)
+  }));
+  const candidatosNoDisponiblesMobile = personalFiltrado.map((persona) => {
+    const registro = (noDisponibles[keyDia] || []).find((referencia) =>
+      referenciaCorrespondeAPersona(referencia, persona, personalFiltrado)
+    );
+    return {
+      clave: obtenerClaveIdentidadPersona(persona),
+      persona,
+      registro: registro || null,
+      nombre: obtenerEtiquetaPersona(persona, personal),
+      activo: Boolean(registro),
+      certificado: estaCertificadoHoy(persona)
+    };
+  });
+
   return (
     <div className="min-h-fit">
       <h2 className="text-xl font-semibold text-slate-800">
@@ -2348,6 +2424,24 @@ useEffect(() => {
   })}
 </div>
 
+<BloquesOperativosMobile
+  ausentes={ausentesPresentacionMobile}
+  noDisponibles={noDisponiblesOperativosMobile}
+  extras={extrasPresentacionMobile}
+  libres={libresPresentacionMobile}
+  certificados={certificadosPresentacionMobile}
+  candidatosNoDisponibles={candidatosNoDisponiblesMobile}
+  soloLectura={soloLecturaEfectiva}
+  onCambiarAsistencia={cambiarAsistencia}
+  onEditarNoDisponible={(item) => abrirFormularioNoDisponible(item.persona, item.registro)}
+  onQuitarCertificacionRapida={(item) => quitarCertificacionRapida(item.registro)}
+  onGestionarNoDisponible={(item) => abrirFormularioNoDisponible(item.persona, item.registro)}
+  onAgregarExtra={abrirFormularioExtra}
+  onQuitarExtra={(item) => borrarExtra(item.extra)}
+  onAgregarExtraLibre={(item) => abrirFormularioExtraLibre(item.persona)}
+/>
+
+<div className="hidden md:block">
 {(noDisponiblesPresentacion.length > 0 || coberturasExtrasPresentacion.length > 0) && (
   <section className="mt-5" aria-labelledby={`no-disponibles-${tipo}-${keyDia}`}>
     <h4
@@ -2609,6 +2703,7 @@ useEffect(() => {
     );
   })}
 </div>
+      </div>
       <div className="my-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm font-medium text-slate-700">

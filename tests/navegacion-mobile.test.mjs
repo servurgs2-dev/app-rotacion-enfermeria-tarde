@@ -5,6 +5,7 @@ const leer = (ruta) => fs.readFileSync(ruta, "utf8");
 const app = leer("src/App.jsx");
 const navegacion = leer("src/components/layout/NavegacionPrincipal.jsx");
 const inicio = leer("src/components/layout/VistaInicio.jsx");
+const hubMas = leer("src/components/layout/HubMas.jsx");
 
 let aprobadas = 0;
 const probar = (nombre, fn) => {
@@ -51,9 +52,10 @@ probar("Calendario, Planilla y Novedades tienen vistas exclusivas", () => {
 });
 
 probar("Más conserva Personal, Gestión del mes, Estadísticas e Historial", () => {
-  assert.match(app, /vistaActiva === "mas" \? "" : "hidden"/);
+  assert.match(app, /vistaActiva === "mas" && subvistaMas === null/);
+  assert.match(app, /<HubMas/);
   assert.match(app, /<ListaPersonal/);
-  assert.match(app, /Gestión del mes/);
+  assert.match(hubMas, /Gestión del mes/);
   assert.match(app, /<Estadisticas/);
   assert.match(app, /<HistorialCambios/);
 });

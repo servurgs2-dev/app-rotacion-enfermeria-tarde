@@ -586,24 +586,24 @@ await probar("95 panel posterga el selector de exclusiones", () => {
 await probar("96 gestión del mes aparece entre Novedades y Estadísticas", () => {
   const novedades = app.indexOf('titulo="📋 Novedades"');
   const gestion = app.indexOf("Gestión del mes");
-  const estadisticas = app.indexOf('<Seccion titulo="📈 Estadísticas"');
+  const estadisticas = app.indexOf('>📈 Estadísticas</h2>');
   assert.ok(novedades >= 0);
   assert.ok(novedades < gestion);
   assert.ok(gestion < estadisticas);
 });
 await probar("97 preparación no está dentro de Planilla mensual", () => {
-  const inicioPlanilla = app.indexOf('<Seccion titulo="📊 Planilla mensual"');
-  const finPlanilla = app.indexOf("</Seccion>", inicioPlanilla);
+  const inicioPlanilla = app.indexOf('<div id="planilla-principal"');
+  const finPlanilla = app.indexOf('titulo="📋 Novedades"', inicioPlanilla);
   const bloquePlanilla = app.slice(inicioPlanilla, finPlanilla);
   assert.doesNotMatch(bloquePlanilla, /Preparar mes siguiente|PanelPrepararMes|Preparando vista previa/);
 });
 await probar("98 condiciones de visibilidad permanecen agrupadas", () => {
   const inicioGestion = app.indexOf("Gestión del mes");
-  const inicioTarjeta = app.lastIndexOf(
+  const inicioTarjeta = app.indexOf(
     "{(mesActivo === mesSiguiente || !destinoActivoPreparacion.permitido)",
     inicioGestion
   );
-  const finGestion = app.indexOf("<Seccion", inicioGestion);
+  const finGestion = app.indexOf('subvistaMas === "estadisticas"', inicioGestion);
   const bloqueGestion = app.slice(inicioTarjeta, finGestion);
   for (const condicion of [
     "mesActivo === mesSiguiente",
@@ -639,7 +639,7 @@ await probar("102 destino bloqueado muestra contenido detectado", () => {
 });
 await probar("103 destino no permitido no renderiza el botón activo", () => {
   const inicioGestion = app.indexOf("Gestión del mes");
-  const finGestion = app.indexOf("<Seccion", inicioGestion);
+  const finGestion = app.indexOf('subvistaMas === "estadisticas"', inicioGestion);
   const bloqueGestion = app.slice(inicioGestion, finGestion);
   const indiceBoton = bloqueGestion.indexOf("onClick={iniciarPreparacionMes}");
   const condicionPermitida = bloqueGestion.lastIndexOf(

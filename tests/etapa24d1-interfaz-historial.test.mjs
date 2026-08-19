@@ -53,30 +53,34 @@ const perfilEnfermeria = {
 };
 
 prueba("Historial aparece condicionado por Supervisión", () =>
-  assert.match(app, /\{esPerfilSupervision\(perfil\) && \([\s\S]*titulo="🕘 Historial"/));
+  assert.match(app, /\{esPerfilSupervision\(perfil\) && \([\s\S]*>🕘 Historial<\/h2>/));
 prueba("perfil Supervisión obtiene acceso", () =>
   assert.equal(esPerfilSupervision(perfilSupervision), true));
 prueba("Licenciado no obtiene acceso", () =>
   assert.equal(esPerfilSupervision(perfilLicenciado), false));
 prueba("Enfermería no obtiene acceso", () =>
   assert.equal(esPerfilSupervision(perfilEnfermeria), false));
-prueba("sección inicia cerrada", () => {
-  const bloque = app.slice(app.indexOf('titulo="🕘 Historial"'));
-  assert.doesNotMatch(bloque.slice(0, 300), /defaultAbierto/);
+prueba("subvista inicia oculta fuera de Más", () =>
+  assert.match(app, /vistaActiva === "mas" && subvistaMas === "historial" \? "" : "hidden"/));
+prueba("usa pantalla completa sin Seccion", () => {
+  const inicioHistorial = app.indexOf('subvistaMas === "historial"');
+  const bloque = app.slice(inicioHistorial, app.indexOf('<div id="calendario-pdf"', inicioHistorial));
+  assert.doesNotMatch(bloque, /<Seccion/);
 });
-prueba("usa componente Seccion actual", () =>
-  assert.match(app, /<Seccion[\s\S]*titulo="🕘 Historial"/));
 prueba("conserva los títulos vigentes de las secciones", () => {
   for (const titulo of ["Personal", "Planilla mensual", "Novedades", "Estadísticas", "Calendario diario"]) {
     assert.ok(app.includes(titulo));
   }
 });
 prueba("Historial queda junto a Estadísticas", () =>
-  assert.ok(app.indexOf('titulo="🕘 Historial"') > app.indexOf('titulo="📈 Estadísticas"')));
-prueba("usa scroll interno", () =>
-  assert.match(app, /titulo="🕘 Historial"[\s\S]{0,200}max-h-\[75vh\][\s\S]{0,100}overflow-y-auto/));
-prueba("mantiene patrón montado del acordeón", () =>
-  assert.match(leer("src/components/ui/Seccion.jsx"), /abierto \? "block" : "hidden"/));
+  assert.ok(app.indexOf('>🕘 Historial</h2>') > app.indexOf('>📈 Estadísticas</h2>')));
+prueba("usa scroll natural", () => {
+  const inicioHistorial = app.indexOf('subvistaMas === "historial"');
+  const bloque = app.slice(inicioHistorial, app.indexOf('<div id="calendario-pdf"', inicioHistorial));
+  assert.doesNotMatch(bloque, /max-h-\[75vh\]|overflow-y-auto|overscroll-contain/);
+});
+prueba("mantiene montaje y comunica visibilidad real", () =>
+  assert.match(app, /seccionVisible=\{vistaActiva === "mas" && subvistaMas === "historial"\}/));
 
 for (const filtro of ["Turno", "Mes", "Acción", "Cuenta", "Desde", "Hasta"]) {
   prueba(`incluye filtro ${filtro}`, () => assert.ok(historial.includes(filtro)));

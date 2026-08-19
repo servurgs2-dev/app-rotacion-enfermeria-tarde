@@ -196,7 +196,8 @@ prueba("cambio de filtros invalida restauración", () => assert.match(historial,
 prueba("cambio de turno invalida restauración", () => assert.match(historial, /mesActivo, seccionVisible, sesionId, turnoActivo/));
 prueba("cambio de mes invalida restauración", () => assert.match(historial, /invalidarRestauracion[\s\S]*mesActivo/));
 prueba("cerrar detalle invalida preflight", () => assert.match(historial, /const cerrarDetalle[\s\S]*invalidarRestauracion/));
-prueba("cerrar sección informa visibilidad", () => assert.match(app, /onCambioAbierto=\{setHistorialAbierto\}/));
+prueba("la subvista informa visibilidad real", () =>
+  assert.match(app, /seccionVisible=\{vistaActiva === "mas" && subvistaMas === "historial"\}/));
 prueba("desmontar invalida respuestas", () => assert.match(historial, /montadoRef\.current = false[\s\S]*solicitudRestauracionRef\.current \+= 1/));
 prueba("cambiar sesión invalida restauración visual", () => assert.match(historial, /sesionId/));
 prueba("respuesta tardía se valida por secuencia", () => assert.match(historial, /solicitud !== solicitudRestauracionRef\.current/));

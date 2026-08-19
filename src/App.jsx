@@ -36,6 +36,7 @@ import {
 import BotonEnviarPDF from "./components/correo/BotonEnviarPDF";
 import NavegacionPrincipal from "./components/layout/NavegacionPrincipal";
 import VistaInicio from "./components/layout/VistaInicio";
+import HubMas, { BotonVolverMas } from "./components/layout/HubMas";
 import { crearAsuntoCorreoPDF } from "./utils/correoPDF";
 import {
   keyDiaFromDate,
@@ -155,6 +156,7 @@ function App({ perfil, onSignOut }) {
 const [tabPlanilla, setTabPlanilla] = useState("enfermeros");
 const [tabCalendario, setTabCalendario] = useState("enfermeros");
 const [vistaActiva, setVistaActiva] = useState("inicio");
+const [subvistaMas, setSubvistaMas] = useState(null);
 
 const [fecha, setFecha] = useState(() => parsearFechaLocal(keyDiaFromDate(new Date())));
 const claveActiva = turnoActivo
@@ -186,7 +188,6 @@ const erroresCargaRef = useRef(new Set());
 const [intentoCarga, setIntentoCarga] = useState(0);
 const [cerrandoSesion, setCerrandoSesion] = useState(false);
 const [errorCierreSesion, setErrorCierreSesion] = useState("");
-const [historialAbierto, setHistorialAbierto] = useState(false);
 const [preparacionMes, setPreparacionMes] = useState(null);
 const [reinicioMes, setReinicioMes] = useState(null);
 const [novedadesPersonal, setNovedadesPersonal] = useState([]);
@@ -1941,6 +1942,11 @@ const actualizarBorradorConfiguracionPlanilla = (categoria, actualizador) => {
   });
 };
 
+const cambiarVistaPrincipal = (nuevaVista) => {
+  if (nuevaVista === "mas") setSubvistaMas(null);
+  setVistaActiva(nuevaVista);
+};
+
 return (
   <div className="min-h-screen overflow-x-hidden bg-slate-100 px-3 pb-28 pt-3 sm:px-4 md:p-6 md:pb-28">
   <div className="max-w-6xl mx-auto flex flex-col gap-6">
@@ -2066,15 +2072,20 @@ return (
             if (!fechaPerteneceAlMes(nuevaFecha, mesActivo)) return;
             setFecha(parsearFechaLocal(nuevaFecha));
           }}
-          onNavegar={setVistaActiva}
+          onNavegar={cambiarVistaPrincipal}
         />
       )}
 
-      <Seccion
-        titulo="👥 Personal"
-        className={vistaActiva === "mas" ? "" : "hidden"}
-        cuerpoClassName="max-h-[70vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
-      >
+      {vistaActiva === "mas" && subvistaMas === null && (
+        <HubMas
+          esSupervision={esPerfilSupervision(perfil)}
+          onAbrir={setSubvistaMas}
+        />
+      )}
+
+      <div className={vistaActiva === "mas" && subvistaMas === "personal" ? "" : "hidden"}>
+        <BotonVolverMas onVolver={() => setSubvistaMas(null)} />
+        <h2 className="mb-4 text-xl font-semibold text-slate-800">👥 Personal</h2>
         {modoSoloLectura && (
           <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
             {obtenerMensajeSoloLectura(perfil)}
@@ -2098,7 +2109,7 @@ return (
             });
           }}
         />
-      </Seccion>
+      </div>
 
       
 
@@ -2279,9 +2290,11 @@ return (
         />
       </Seccion>
 
-      {(mesActivo === mesSiguiente || !destinoActivoPreparacion.permitido) && (
-        <div className={`${vistaActiva === "mas" ? "" : "hidden"} mb-4 rounded-xl border border-purple-200 bg-white p-4 shadow-sm`}>
-          <h2 className="text-base font-semibold text-slate-900">Gestión del mes</h2>
+      <div className={vistaActiva === "mas" && subvistaMas === "gestionMes" ? "" : "hidden"}>
+        <BotonVolverMas onVolver={() => setSubvistaMas(null)} />
+        <h2 className="mb-4 text-xl font-semibold text-slate-800">🗓️ Gestión del mes</h2>
+        {(mesActivo === mesSiguiente || !destinoActivoPreparacion.permitido) && (
+        <div className="mb-4 rounded-xl border border-purple-200 bg-white p-4 shadow-sm">
           {mesActivo === mesSiguiente &&
           destinoActivoPreparacion.permitido &&
           puedeEditarActivo &&
@@ -2382,9 +2395,17 @@ return (
               />
             )}
         </div>
-      )}
+        )}
+        {mesActivo !== mesSiguiente && destinoActivoPreparacion.permitido && (
+          <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
+            No hay acciones de gestión disponibles para el mes seleccionado.
+          </div>
+        )}
+      </div>
 
-      <Seccion titulo="📈 Estadísticas" className={vistaActiva === "mas" ? "" : "hidden"}>
+      <div className={vistaActiva === "mas" && subvistaMas === "estadisticas" ? "" : "hidden"}>
+        <BotonVolverMas onVolver={() => setSubvistaMas(null)} />
+        <h2 className="mb-4 text-xl font-semibold text-slate-800">📈 Estadísticas</h2>
         <Estadisticas
           calendario={mesData.calendario}
           estadoActivo={mesData}
@@ -2392,29 +2413,26 @@ return (
           nombreTurno={configTurno.nombre}
           turnoActivo={turnoActivo}
         />
-      </Seccion>
+      </div>
 
       {esPerfilSupervision(perfil) && (
-        <Seccion
-          titulo="🕘 Historial"
-          className={vistaActiva === "mas" ? "" : "hidden"}
-          cuerpoClassName="max-h-[75vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
-          onCambioAbierto={setHistorialAbierto}
-        >
+        <div className={vistaActiva === "mas" && subvistaMas === "historial" ? "" : "hidden"}>
+          <BotonVolverMas onVolver={() => setSubvistaMas(null)} />
+          <h2 className="mb-4 text-xl font-semibold text-slate-800">🕘 Historial</h2>
           <HistorialCambios
             turnoInicial={turnoActivo}
             mesInicial={mesActivo}
             turnoActivo={turnoActivo}
             mesActivo={mesActivo}
             sesionId={perfil?.usuario || ""}
-            seccionVisible={historialAbierto}
+            seccionVisible={vistaActiva === "mas" && subvistaMas === "historial"}
             obtenerDisponibilidadRestauracion={obtenerDisponibilidadRestauracion}
             cargarEstadoOperativo={cargarEstadoOperativoHistorial}
             iniciarRestauracion={iniciarRestauracionHistorial}
             adoptarRestauracion={adoptarRestauracionHistorial}
             finalizarRestauracion={finalizarRestauracionHistorial}
           />
-        </Seccion>
+        </div>
       )}
 
       <div id="calendario-pdf" className={vistaActiva === "calendario" ? "" : "hidden"}>
@@ -2627,7 +2645,7 @@ return (
         </div>
       </div>
 
-      <NavegacionPrincipal vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} />
+      <NavegacionPrincipal vistaActiva={vistaActiva} onCambiarVista={cambiarVistaPrincipal} />
 
     
 

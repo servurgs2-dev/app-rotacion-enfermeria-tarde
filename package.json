@@ -63,6 +63,7 @@
     "test:reporte-novedades": "node tests/reporte-novedades.test.mjs",
     "test:alertas-identidades": "node tests/alertas-identidades.test.mjs",
     "test:navegacion-mobile": "node tests/navegacion-mobile.test.mjs",
+    "test:mas-mobile": "node tests/mas-mobile.test.mjs",
     "test:inicio-resumen-turno": "node tests/inicio-resumen-turno.test.mjs",
     "test:licenciados-inicio-no-regresion": "node tests/licenciados-inicio-no-regresion.test.mjs",
     "test:reintegro-semana-parcial": "node tests/reintegro-semana-parcial.test.mjs",

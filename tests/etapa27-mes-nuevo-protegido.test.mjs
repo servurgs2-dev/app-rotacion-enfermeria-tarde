@@ -583,17 +583,15 @@ await probar("95 panel posterga el selector de exclusiones", () => {
   assert.doesNotMatch(panel, /type="checkbox"|posicionesSeleccionadas/);
   assert.match(panel, /generes la rotación/);
 });
-await probar("96 gestión del mes aparece entre Novedades y Estadísticas", () => {
-  const novedades = app.indexOf('titulo="📋 Novedades"');
-  const gestion = app.indexOf("Gestión del mes");
-  const estadisticas = app.indexOf('>📈 Estadísticas</h2>');
-  assert.ok(novedades >= 0);
-  assert.ok(novedades < gestion);
-  assert.ok(gestion < estadisticas);
+await probar("96 gestión del mes conserva su destino dentro del Hub Más", () => {
+  assert.match(app, /id="novedades-principal"/);
+  assert.match(app, /subvistaMas === "gestionMes"/);
+  assert.match(app, /subvistaMas === "estadisticas"/);
 });
 await probar("97 preparación no está dentro de Planilla mensual", () => {
   const inicioPlanilla = app.indexOf('<div id="planilla-principal"');
-  const finPlanilla = app.indexOf('titulo="📋 Novedades"', inicioPlanilla);
+  const finPlanilla = app.indexOf('<div id="novedades-principal"', inicioPlanilla);
+  assert.ok(inicioPlanilla >= 0 && finPlanilla > inicioPlanilla);
   const bloquePlanilla = app.slice(inicioPlanilla, finPlanilla);
   assert.doesNotMatch(bloquePlanilla, /Preparar mes siguiente|PanelPrepararMes|Preparando vista previa/);
 });
@@ -695,8 +693,9 @@ await probar("107 propiedad desconocida usa etiqueta segura", () => {
   );
 });
 await probar("108 interfaz no imprime claves técnicas directamente", () => {
-  const inicioGestion = app.indexOf("Gestión del mes");
-  const finGestion = app.indexOf("<Seccion", inicioGestion);
+  const inicioGestion = app.indexOf('subvistaMas === "gestionMes"');
+  const finGestion = app.indexOf('subvistaMas === "estadisticas"', inicioGestion);
+  assert.ok(inicioGestion >= 0 && finGestion > inicioGestion);
   const bloqueGestion = app.slice(inicioGestion, finGestion);
   assert.doesNotMatch(bloqueGestion, /contenido\.join|enfermeros\.semana1/);
   assert.match(bloqueGestion, /contenidoDestinoPresentable\.map/);

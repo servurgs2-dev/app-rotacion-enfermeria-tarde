@@ -47,13 +47,10 @@ probar("1 no existe una navegación principal agregada", () => {
   assert.doesNotMatch(app, /aria-label="Secciones principales"/);
   assert.doesNotMatch(app, /href="#seccion-(?:planilla|personal|licencias|certificaciones|estadisticas|historial)"/);
 });
-probar("2 Gestión del mes no está duplicada", () => {
-  assert.equal((app.match(/>Gestión del mes</g) || []).length, 1);
-  const novedades = app.indexOf('titulo="📋 Novedades"');
-  const gestion = app.indexOf("Gestión del mes");
-  const estadisticas = app.indexOf('<Seccion titulo="📈 Estadísticas"');
-  assert.ok(novedades < gestion);
-  assert.ok(gestion < estadisticas);
+probar("2 Gestión del mes conserva una única subvista dentro de Más", () => {
+  assert.equal((app.match(/subvistaMas === "gestionMes"/g) || []).length, 1);
+  assert.match(app, /subvistaMas === "gestionMes"[\s\S]*<h2[^>]*>[^<]*Gestión del mes<\/h2>/);
+  assert.match(app, /subvistaMas === "estadisticas"/);
 });
 probar("3 Preparar mes siguiente permanece", () => assert.match(app, />\s*Preparar mes siguiente\s*</));
 probar("4 Reiniciar mes completo permanece", () => assert.match(app, />\s*Reiniciar mes completo\s*</));
@@ -221,9 +218,10 @@ probar("35 el modo opción 2 se reconoce por sus claves", () => {
     SECTORES_REDISTRIBUCION_BOXES
   );
 });
-probar("36 Gestión del mes sigue después de Novedades", () => {
-  assert.ok(app.indexOf('titulo="📋 Novedades"') < app.indexOf("Gestión del mes"));
-  assert.ok(app.indexOf("Gestión del mes") < app.indexOf("Estadísticas"));
+probar("36 Novedades y las herramientas de Más conservan destinos independientes", () => {
+  assert.match(app, /id="novedades-principal"/);
+  assert.match(app, /subvistaMas === "gestionMes"/);
+  assert.match(app, /subvistaMas === "estadisticas"/);
 });
 probar("37 los modales usan los títulos y descripciones nuevas", () => {
   assert.match(panel, /¿Aplicar Redistribución opción 1\?/);

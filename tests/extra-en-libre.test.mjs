@@ -300,8 +300,10 @@ probar("27 refuerzos e históricos no generan tarjeta", () => {
 
 probar("28 la tarjeta no ofrece edición ni eliminación propias", () => {
   const fuente = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
-  const inicio = fuente.indexOf("coberturasExtrasPresentacion.map");
-  const bloque = fuente.slice(inicio, fuente.indexOf("</article>", inicio));
+  const inicio = fuente.lastIndexOf("{coberturasExtrasPresentacion.map");
+  const fin = fuente.indexOf("{ausentesDelDia.length > 0", inicio);
+  assert.ok(inicio >= 0 && fin > inicio);
+  const bloque = fuente.slice(inicio, fin);
   assert.match(bloque, /Cobertura registrada/);
   assert.doesNotMatch(bloque, /Editar motivo|Eliminar|onClick/);
 });

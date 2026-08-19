@@ -10,17 +10,22 @@ export const obtenerFilasActivasPorSectorIds = (filas, sectorIds) => {
 export const aplicarPrioridadGeneralPorSectorId = ({
   asignaciones,
   prioridadSectorIds,
+  donanteSectorIds,
   esPersonaDisponible = () => true
 } = {}) => {
   const resultado = lista(asignaciones).map((fila) => ({ ...fila }));
   const porId = new Map(resultado.flatMap((fila) => fila?.sectorId ? [[fila.sectorId, fila]] : []));
   const prioridad = lista(prioridadSectorIds).filter((id) => porId.has(id));
+  const donantes = Array.isArray(donanteSectorIds) && donanteSectorIds.length
+    ? new Set(donanteSectorIds)
+    : null;
   prioridad.forEach((sectorId, indice) => {
     const destino = porId.get(sectorId);
     if (destino.enfermero || destino.vacioManual) return;
     for (let donante = prioridad.length - 1; donante > indice; donante--) {
       const origen = porId.get(prioridad[donante]);
       if (
+        (!donantes || donantes.has(origen?.sectorId)) &&
         origen?.enfermero &&
         !origen.origenLogicoPareja &&
         !origen.cambioManualProtegido &&

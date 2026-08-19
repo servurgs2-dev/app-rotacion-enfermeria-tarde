@@ -338,16 +338,19 @@ PAREJAS_COBERTURA_ENFERMEROS.forEach(({ destinoSectorId, origenSectorId }, indic
   });
 });
 
-probar("58 parejas preceden a Turnantes y coberturas directas quedan al final", () => {
+probar("58 parejas preceden a cobertura directa; donantes se resuelven antes del pool restante", () => {
   const helper = fs.readFileSync(new URL("../src/utils/distribucionTurnantesCoberturas.js", import.meta.url), "utf8");
   const llamadaParejas = helper.indexOf("sectores = ajustarSectores(sectores)");
   const buscarTurnante = helper.indexOf("fila.enfermero = tomarTurnante()", llamadaParejas);
   const buscarExtra = helper.indexOf("fila.enfermero = tomarExtra()", llamadaParejas);
-  const coberturaDirecta = helper.indexOf("const conCoberturas = aplicarCoberturasDirectasExtras", llamadaParejas);
+  const prioridadGeneral = helper.indexOf("sectores = aplicarPrioridadGeneralPorSectorId({", buscarExtra);
+  const coberturaDirecta = helper.indexOf("const conCoberturas = aplicarCoberturasDirectasExtras", prioridadGeneral);
   assert.ok(llamadaParejas > 0);
   assert.ok(llamadaParejas < buscarTurnante);
   assert.ok(llamadaParejas < buscarExtra);
-  assert.ok(buscarTurnante < coberturaDirecta);
+  assert.ok(buscarTurnante < prioridadGeneral);
+  assert.ok(buscarExtra < prioridadGeneral);
+  assert.ok(prioridadGeneral < coberturaDirecta);
 });
 probar("59 la prioridad por parejas ocurre antes de sacrificar sectores", () => {
   assert.ok(

@@ -36,6 +36,7 @@
     "test:alerta-sectores-criticos": "node tests/alerta-sectores-criticos.test.mjs",
     "test:reintegros-planilla": "node tests/reintegros-asignaciones-parciales.test.mjs",
     "test:turnante-mensual": "node tests/turnante-mensual.test.mjs",
+    "test:turnantes-cobertura-vacantes": "node tests/turnantes-cobertura-vacantes.test.mjs",
     "test:correo-pdf": "node tests/correo-pdf.test.mjs",
     "test:configuracion-planilla": "node tests/configuracion-planilla.test.mjs",
     "test:snapshot-configuracion-planilla": "node tests/snapshot-configuracion-planilla.test.mjs",

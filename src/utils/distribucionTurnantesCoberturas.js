@@ -3,6 +3,7 @@ import {
   esExtraCobertura
 } from "./extrasPersonas.js";
 import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
+import { aplicarPrioridadGeneralPorSectorId } from "./prioridadesSectores.js";
 
 const lista = (valor) => Array.isArray(valor) ? valor : [];
 
@@ -12,7 +13,9 @@ export const resolverTurnantesYCoberturasOperativas = ({
   personal,
   esPersonaDisponible,
   esPersonaDisponibleParaCobertura = esPersonaDisponible,
-  ajustarSectores = (sectores) => sectores
+  ajustarSectores = (sectores) => sectores,
+  prioridadSectorIds = [],
+  sectorIdsDonantes = []
 } = {}) => {
   const disponibles = typeof esPersonaDisponible === "function"
     ? esPersonaDisponible
@@ -49,15 +52,9 @@ export const resolverTurnantesYCoberturasOperativas = ({
         return { ...fila, enfermero: null, reemplazo: true };
       }
       return { ...fila, enfermero: usar(fila.enfermero), reemplazo: false };
-    });
-
-  sectores = ajustarSectores(sectores);
-  sectores.forEach((fila) => {
-    if (!fila.enfermero && fila.reemplazo && !fila.vacioManual) {
-      fila.enfermero = tomarTurnante();
-    }
   });
 
+  sectores = ajustarSectores(sectores);
   const refuerzos = lista(extras).filter(
     (extra) => extra && !esExtraCobertura(extra) && disponibles(extra)
   );
@@ -69,10 +66,42 @@ export const resolverTurnantesYCoberturasOperativas = ({
     }
     return null;
   };
-  sectores.forEach((fila) => {
+
+  const idsDonantes = new Set(lista(sectorIdsDonantes));
+  const ordenarPorPrioridad = (filas) => {
+    const porId = new Map(filas.flatMap((fila) => fila?.sectorId ? [[fila.sectorId, fila]] : []));
+    const ordenadas = lista(prioridadSectorIds).flatMap((sectorId) =>
+      porId.has(sectorId) ? [porId.get(sectorId)] : []
+    );
+    const incluidas = new Set(ordenadas);
+    return [...ordenadas, ...filas.filter((fila) => !incluidas.has(fila))];
+  };
+  const sectoresPrioritariosDirectos = ordenarPorPrioridad(sectores)
+    .filter((fila) => !idsDonantes.has(fila.sectorId));
+  sectoresPrioritariosDirectos.forEach((fila) => {
+    if (!fila.enfermero && fila.reemplazo && !fila.vacioManual) {
+      fila.enfermero = tomarTurnante();
+    }
+  });
+  sectoresPrioritariosDirectos.forEach((fila) => {
     if (!fila.enfermero && !fila.vacioManual) fila.enfermero = tomarExtra();
   });
-  sectores.forEach((fila) => {
+  sectoresPrioritariosDirectos.forEach((fila) => {
+    if (!fila.enfermero && !fila.vacioManual) fila.enfermero = tomarTurnante();
+  });
+
+  sectores = aplicarPrioridadGeneralPorSectorId({
+    asignaciones: sectores,
+    prioridadSectorIds,
+    donanteSectorIds: sectorIdsDonantes,
+    esPersonaDisponible: disponiblesParaCobertura
+  });
+
+  const sectoresRestantes = ordenarPorPrioridad(sectores);
+  sectoresRestantes.forEach((fila) => {
+    if (!fila.enfermero && !fila.vacioManual) fila.enfermero = tomarExtra();
+  });
+  sectoresRestantes.forEach((fila) => {
     if (!fila.enfermero && !fila.vacioManual) fila.enfermero = tomarTurnante();
   });
 

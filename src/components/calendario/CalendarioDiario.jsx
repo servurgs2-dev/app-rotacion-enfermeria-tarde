@@ -237,6 +237,7 @@ const {
     prioridadSectores = [],
     sectoresCriticosIds = [],
     prioridadSectoresIds = [],
+    sectoresDonantesIds = [],
     sectoresParo = [],
     prioridadesParo = {},
     ordenVisual = []
@@ -778,6 +779,12 @@ const resolucionOperativa = resolverTurnantesYCoberturasOperativas({
   personal,
   esPersonaDisponible: (persona) => !estaAusente(persona),
   esPersonaDisponibleParaCobertura: puedeAplicarseCoberturaDirecta,
+  prioridadSectorIds: tipo === "enfermero" && !esDiaParo
+    ? prioridadSectoresIds
+    : [],
+  sectorIdsDonantes: tipo === "enfermero" && !esDiaParo
+    ? sectoresDonantesIds
+    : [],
   ajustarSectores: (sectores) =>
     tipo === "enfermero" && !esDiaParo
       ? aplicarPrioridadCoberturaParejas({
@@ -813,7 +820,7 @@ let asignacionBase = resolucionOperativa.asignaciones;
         }
       }
     });
-  } else {
+  } else if (tipo !== "enfermero") {
     asignacionBase = aplicarPrioridadGeneralPorSectorId({
       asignaciones: asignacionBase,
       prioridadSectorIds: prioridadSectoresIds,

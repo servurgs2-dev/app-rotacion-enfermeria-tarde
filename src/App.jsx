@@ -2102,7 +2102,8 @@ return (
 
       
 
-<Seccion titulo="📊 Planilla mensual" className={vistaActiva === "planilla" ? "" : "hidden"} defaultAbierto>
+<div id="planilla-principal" className={vistaActiva === "planilla" ? "" : "hidden"}>
+<h2 className="mb-4 text-xl font-semibold text-slate-800">📊 Planilla mensual</h2>
 
 <div className="mb-4 flex flex-wrap gap-2">
 <button
@@ -2163,23 +2164,23 @@ return (
 />
 </div>
   {/* TABS */}
-  <div className="mb-4 grid grid-cols-2 rounded-xl bg-slate-100 p-1 md:hidden" aria-label="Categoría del Calendario">
+  <div className="mb-4 grid grid-cols-2 rounded-xl bg-slate-100 p-1 md:hidden" aria-label="Categoría de la Planilla">
     <button
       type="button"
-      aria-pressed={tabCalendario === "enfermeros"}
-      onClick={() => setTabCalendario("enfermeros")}
+      aria-pressed={tabPlanilla === "enfermeros"}
+      onClick={() => setTabPlanilla("enfermeros")}
       className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition ${
-        tabCalendario === "enfermeros" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"
+        tabPlanilla === "enfermeros" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"
       }`}
     >
       Enfermeros
     </button>
     <button
       type="button"
-      aria-pressed={tabCalendario === "licenciados"}
-      onClick={() => setTabCalendario("licenciados")}
+      aria-pressed={tabPlanilla === "licenciados"}
+      onClick={() => setTabPlanilla("licenciados")}
       className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition ${
-        tabCalendario === "licenciados" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"
+        tabPlanilla === "licenciados" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"
       }`}
     >
       Licenciados
@@ -2243,7 +2244,7 @@ return (
 
 
 
-      </Seccion>
+      </div>
 
       <Seccion
         titulo="📋 Novedades"

@@ -962,11 +962,13 @@ function PlanillaMensual({
         </section>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="min-w-[900px] border border-slate-200 rounded-xl overflow-hidden text-sm table-auto">
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <table className="min-w-[900px] table-auto border-separate border-spacing-0 text-sm">
           <thead className="bg-slate-100 text-slate-700">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold">Sector</th>
+              <th className="sticky left-0 z-20 w-[140px] min-w-[140px] max-w-[140px] border-r border-slate-200 bg-slate-100 px-3 py-3 text-left font-semibold shadow-[2px_0_4px_-3px_rgba(15,23,42,0.35)] md:w-[180px] md:min-w-[180px] md:max-w-[180px] md:px-4">
+                Sector
+              </th>
               {periodos.map((periodo) => (
                 <th
                   key={periodo.clave}
@@ -981,7 +983,7 @@ function PlanillaMensual({
           <tbody className="divide-y divide-slate-100">
             {filas.map((sector) => (
               <tr key={sector} className="hover:bg-slate-50 transition">
-                <td className="px-4 py-3 font-medium text-slate-700 bg-slate-50 min-w-[180px] whitespace-nowrap">
+                <td className="sticky left-0 z-10 w-[140px] min-w-[140px] max-w-[140px] whitespace-normal border-r border-slate-200 bg-slate-50 px-3 py-3 font-medium text-slate-700 shadow-[2px_0_4px_-3px_rgba(15,23,42,0.35)] md:w-[180px] md:min-w-[180px] md:max-w-[180px] md:whitespace-nowrap md:px-4">
                   {sector}
                 </td>
 
@@ -1041,7 +1043,7 @@ function PlanillaMensual({
               </tr>
             ))}
             <tr className="border-t-2 border-blue-100 bg-blue-50/60">
-              <td className="px-4 py-3 font-semibold text-blue-900 min-w-[180px] whitespace-nowrap">
+              <td className="sticky left-0 z-10 w-[140px] min-w-[140px] max-w-[140px] whitespace-normal border-r border-blue-200 bg-blue-50 px-3 py-3 font-semibold text-blue-900 shadow-[2px_0_4px_-3px_rgba(15,23,42,0.35)] md:w-[180px] md:min-w-[180px] md:max-w-[180px] md:whitespace-nowrap md:px-4">
                 {tipo === "enfermero"
                   ? "Cubre libre de SM"
                   : "Cubre libre de Salud Mental"}

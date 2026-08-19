@@ -41,6 +41,7 @@
     "test:snapshot-configuracion-planilla": "node tests/snapshot-configuracion-planilla.test.mjs",
     "test:preparacion-snapshot-configuracion-planilla": "node tests/preparacion-snapshot-configuracion-planilla.test.mjs",
     "test:planilla-configuracion-efectiva": "node tests/planilla-configuracion-efectiva.test.mjs",
+    "test:planilla-mobile": "node tests/planilla-mobile.test.mjs",
     "test:calendario-configuracion-efectiva": "node tests/calendario-configuracion-efectiva.test.mjs",
     "test:pdf-configuracion-efectiva": "node tests/pdf-configuracion-efectiva.test.mjs",
     "test:editor-configuracion-planilla": "node tests/editor-configuracion-planilla.test.mjs",

@@ -29,11 +29,16 @@ probar("desktop conserva la distribución actual desde md", () => {
   assert.match(calendario, /asignacionesMostradas\.map/);
 });
 
-probar("selector mobile mantiene Enfermeros y Licenciados montados", () => {
-  assert.match(app, /Categoría del Calendario/);
-  assert.match(app, /grid grid-cols-2[^"]*md:hidden/);
-  assert.match(app, /aria-pressed=\{tabCalendario === "enfermeros"\}/);
-  assert.match(app, /aria-pressed=\{tabCalendario === "licenciados"\}/);
+probar("el selector real de Calendario mantiene Enfermeros y Licenciados montados", () => {
+  const inicioVista = app.indexOf('<div id="calendario-pdf"');
+  const finVista = app.indexOf("<NavegacionPrincipal", inicioVista);
+  const vistaCalendario = app.slice(inicioVista, finVista);
+
+  assert.ok(inicioVista >= 0 && finVista > inicioVista);
+  assert.match(vistaCalendario, /setTabCalendario\("enfermeros"\)/);
+  assert.match(vistaCalendario, /setTabCalendario\("licenciados"\)/);
+  assert.match(vistaCalendario, /tabCalendario === "enfermeros"/);
+  assert.match(vistaCalendario, /tabCalendario === "licenciados"/);
   assert.equal((app.match(/<CalendarioDiario/g) || []).length, 2);
 });
 

@@ -11,7 +11,7 @@ const probar = (nombre, fn) => {
 const app = fs.readFileSync("src/App.jsx", "utf8");
 const planilla = fs.readFileSync("src/components/planilla/PlanillaMensual.jsx", "utf8");
 const inicio = app.indexOf('<div id="planilla-principal"');
-const fin = app.indexOf('<Seccion\n        titulo="📋 Novedades"', inicio);
+const fin = app.indexOf('<div id="novedades-principal"', inicio);
 const vistaPlanilla = app.slice(inicio, fin);
 
 probar("Planilla es una vista principal y ya no depende de Seccion", () => {

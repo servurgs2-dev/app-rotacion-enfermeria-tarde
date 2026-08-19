@@ -2257,12 +2257,8 @@ return (
 
       </div>
 
-      <Seccion
-        titulo="📋 Novedades"
-        className={vistaActiva === "novedades" ? "" : "hidden"}
-        defaultAbierto
-        cuerpoClassName="max-h-[75vh] overflow-y-auto overscroll-contain pr-1 sm:pr-2"
-      >
+      <div id="novedades-principal" className={vistaActiva === "novedades" ? "" : "hidden"}>
+        <h2 className="mb-4 text-xl font-semibold text-slate-800">📋 Novedades</h2>
         <Novedades
           personal={personal}
           licencias={licenciasMes}
@@ -2288,7 +2284,7 @@ return (
           onEditarCertificacion={(novedad, certificacion) => editarRegistroLegacyMes("certificaciones", novedad, certificacion)}
           onEliminarCertificacion={(novedad) => eliminarRegistroLegacyMes("certificaciones", novedad)}
         />
-      </Seccion>
+      </div>
 
       <div className={vistaActiva === "mas" && subvistaMas === "gestionMes" ? "" : "hidden"}>
         <BotonVolverMas onVolver={() => setSubvistaMas(null)} />

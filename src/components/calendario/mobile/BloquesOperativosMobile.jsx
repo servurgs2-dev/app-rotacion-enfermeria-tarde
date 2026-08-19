@@ -31,12 +31,11 @@ function BloquesOperativosMobile({
   extras = [],
   libres = [],
   certificados = [],
-  candidatosNoDisponibles = [],
   soloLectura = false,
   onCambiarAsistencia,
   onEditarNoDisponible,
+  onQuitarNoDisponible,
   onQuitarCertificacionRapida,
-  onGestionarNoDisponible,
   onAgregarExtra,
   onQuitarExtra,
   onAgregarExtraLibre
@@ -52,7 +51,10 @@ function BloquesOperativosMobile({
                 <p className="text-xs text-slate-600">{item.detalle}</p>
                 {item.detalleAdicional && <p className="text-xs text-slate-600">{item.detalleAdicional}</p>}
                 {!soloLectura && item.accion === "editar" && (
-                  <button type="button" onClick={() => onEditarNoDisponible(item)} className="mt-2 min-h-11 rounded-lg border border-orange-300 bg-white px-3 text-xs font-semibold text-orange-900">Editar motivo</button>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => onEditarNoDisponible(item)} className="min-h-11 rounded-lg border border-orange-300 bg-white px-3 text-xs font-semibold text-orange-900">Editar motivo</button>
+                    <button type="button" onClick={() => onQuitarNoDisponible(item)} className="min-h-11 rounded-lg border border-red-300 bg-white px-3 text-xs font-semibold text-red-700">Quitar</button>
+                  </div>
                 )}
                 {!soloLectura && item.accion === "quitar_certificacion" && (
                   <button type="button" onClick={() => onQuitarCertificacionRapida(item)} className="mt-2 min-h-11 rounded-lg border border-blue-300 bg-white px-3 text-xs font-semibold text-blue-900">Eliminar certificación del día</button>
@@ -61,20 +63,6 @@ function BloquesOperativosMobile({
             ))}
           </div>
         )}
-        <p className="mt-2 text-xs font-semibold text-slate-600">Gestionar personal</p>
-        <div className="mt-1 grid grid-cols-1 gap-1.5">
-          {candidatosNoDisponibles.map((item) => (
-            <button
-              key={item.clave}
-              type="button"
-              disabled={soloLectura || item.certificado}
-              onClick={() => onGestionarNoDisponible(item)}
-              className={`min-h-11 rounded-lg px-3 text-left text-sm ${item.activo ? "bg-red-500 text-white" : "bg-slate-200 text-slate-800"} disabled:opacity-50`}
-            >
-              {item.nombre}{item.certificado ? " · Certificación médica" : ""}
-            </button>
-          ))}
-        </div>
       </BloqueOperativoMobile>
 
       <BloqueOperativoMobile titulo="Extras" cantidad={extras.length} tono="blue">

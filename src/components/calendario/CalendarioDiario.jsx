@@ -1447,6 +1447,34 @@ const confirmarNoDisponible = () => {
   setFormularioNoDisponible(null);
 };
 
+const aplicarQuitarNoDisponible = ({ persona, registro, accionExtra = "", calendarioEsperado }) => {
+  setCalendario((prev) => {
+    if (prev !== calendarioEsperado) return prev;
+    const tieneExtraVinculado = Boolean(registro?.personaCoberturaId);
+    if (tieneExtraVinculado) {
+      return eliminarNoDisponibleVinculado({
+        calendarioCategoria: prev,
+        fecha: keyDia,
+        titular: persona,
+        accionExtra,
+        personal: personalFiltrado
+      });
+    }
+    const lista = prev.noDisponibles?.[keyDia] || [];
+    return {
+      ...prev,
+      noDisponibles: {
+        ...(prev.noDisponibles || {}),
+        [keyDia]: quitarPersonaDeListaReferencias(
+          lista,
+          persona,
+          personalFiltrado
+        )
+      }
+    };
+  });
+};
+
 const quitarNoDisponible = (accionExtra = "") => {
   if (!contextoNoDisponibleValido()) {
     setFormularioNoDisponible((actual) => ({
@@ -1464,31 +1492,26 @@ const quitarNoDisponible = (accionExtra = "") => {
     }));
     return;
   }
-  setCalendario((prev) => {
-    if (prev !== formularioNoDisponible.contexto.calendario) return prev;
-    if (tieneExtraVinculado) {
-      return eliminarNoDisponibleVinculado({
-        calendarioCategoria: prev,
-        fecha: keyDia,
-        titular: formularioNoDisponible.persona,
-        accionExtra,
-        personal: personalFiltrado
-      });
-    }
-    const lista = prev.noDisponibles?.[keyDia] || [];
-    return {
-      ...prev,
-      noDisponibles: {
-        ...(prev.noDisponibles || {}),
-        [keyDia]: quitarPersonaDeListaReferencias(
-          lista,
-          formularioNoDisponible.persona,
-          personalFiltrado
-        )
-      }
-    };
+  aplicarQuitarNoDisponible({
+    persona: formularioNoDisponible.persona,
+    registro: formularioNoDisponible.registro,
+    accionExtra,
+    calendarioEsperado: formularioNoDisponible.contexto.calendario
   });
   setFormularioNoDisponible(null);
+};
+
+const quitarNoDisponibleDesdeBloque = (item) => {
+  if (soloLecturaEfectiva || !item?.persona || !item?.registro) return;
+  if (item.registro.personaCoberturaId) {
+    abrirFormularioNoDisponible(item.persona, item.registro);
+    return;
+  }
+  aplicarQuitarNoDisponible({
+    persona: item.persona,
+    registro: item.registro,
+    calendarioEsperado: calendario
+  });
 };
 
 const quitarCertificacionRapida = (certificacion) => {
@@ -1687,6 +1710,21 @@ useEffect(() => {
             : estaLibre(item.enfermero)
               ? "libre"
               : "normal";
+    const personaPersonal = item.enfermero
+      ? personalFiltrado.find((persona) => personasCompartenIdentidad(persona, item.enfermero))
+      : null;
+    const esExtraDelDia = item.enfermero && extrasDia.some((extra) =>
+      personasCompartenIdentidad(extra, item.enfermero)
+    );
+    const registroNoDisponible = personaPersonal
+      ? (noDisponibles[keyDia] || []).find((referencia) =>
+          referenciaCorrespondeAPersona(referencia, personaPersonal, personalFiltrado)
+        ) || null
+      : null;
+    const puedeMarcarNoDisponible = !soloLecturaEfectiva &&
+      personaPersonal &&
+      !esExtraDelDia &&
+      !estaCertificadoHoy(personaPersonal);
     return {
       clave: item.syntheticId || item.sectorId || item.filaId || `${item.nombre}-${indice}`,
       original: item,
@@ -1695,6 +1733,9 @@ useEffect(() => {
       syntheticId: item.syntheticId,
       persona: item.enfermero || null,
       textoPersona,
+      puedeMarcarNoDisponible: Boolean(puedeMarcarNoDisponible),
+      personaGestionNoDisponible: personaPersonal,
+      registroNoDisponible,
       estadoVisual,
       estadoAsistencia: item.enfermero
         ? obtenerEstadoAsistencia(asistenciaMostrada, item.enfermero)
@@ -2168,20 +2209,6 @@ useEffect(() => {
     clave: obtenerClaveIdentidadPersona(persona),
     nombre: obtenerEtiquetaPersona(persona, personal)
   }));
-  const candidatosNoDisponiblesMobile = personalFiltrado.map((persona) => {
-    const registro = (noDisponibles[keyDia] || []).find((referencia) =>
-      referenciaCorrespondeAPersona(referencia, persona, personalFiltrado)
-    );
-    return {
-      clave: obtenerClaveIdentidadPersona(persona),
-      persona,
-      registro: registro || null,
-      nombre: obtenerEtiquetaPersona(persona, personal),
-      activo: Boolean(registro),
-      certificado: estaCertificadoHoy(persona)
-    };
-  });
-
   return (
     <div className="min-h-fit">
       <h2 className="text-xl font-semibold text-slate-800">
@@ -2336,6 +2363,7 @@ useEffect(() => {
   soloLectura={soloLecturaEfectiva}
   onSeleccionar={handleClick}
   onCambiarAsistencia={cambiarAsistencia}
+  onGestionarNoDisponible={abrirFormularioNoDisponible}
 />
 
 <div className="hidden rounded-2xl border border-slate-100 bg-white md:block">
@@ -2430,12 +2458,11 @@ useEffect(() => {
   extras={extrasPresentacionMobile}
   libres={libresPresentacionMobile}
   certificados={certificadosPresentacionMobile}
-  candidatosNoDisponibles={candidatosNoDisponiblesMobile}
   soloLectura={soloLecturaEfectiva}
   onCambiarAsistencia={cambiarAsistencia}
   onEditarNoDisponible={(item) => abrirFormularioNoDisponible(item.persona, item.registro)}
+  onQuitarNoDisponible={quitarNoDisponibleDesdeBloque}
   onQuitarCertificacionRapida={(item) => quitarCertificacionRapida(item.registro)}
-  onGestionarNoDisponible={(item) => abrirFormularioNoDisponible(item.persona, item.registro)}
   onAgregarExtra={abrirFormularioExtra}
   onQuitarExtra={(item) => borrarExtra(item.extra)}
   onAgregarExtraLibre={(item) => abrirFormularioExtraLibre(item.persona)}

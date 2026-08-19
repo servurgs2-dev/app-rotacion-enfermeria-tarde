@@ -66,6 +66,7 @@
     "test:licenciados-inicio-no-regresion": "node tests/licenciados-inicio-no-regresion.test.mjs",
     "test:reintegro-semana-parcial": "node tests/reintegro-semana-parcial.test.mjs",
     "test:calendario-mobile": "node tests/calendario-mobile.test.mjs",
+    "test:calendario-acciones-mobile": "node tests/calendario-acciones-mobile.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

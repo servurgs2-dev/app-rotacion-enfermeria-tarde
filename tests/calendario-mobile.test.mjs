@@ -123,6 +123,7 @@ probar("reutiliza callbacks operativos y permisos históricos", () => {
   assert.match(calendario, /borrarExtra/);
   assert.match(calendario, /abrirFormularioExtraLibre/);
   assert.match(bloques, /disabled=\{soloLectura/);
+  assert.doesNotMatch(bloques, /Gestionar personal|candidatosNoDisponibles/);
 });
 
 probar("no duplica formularios ni crea estado o lógica operativa mobile", () => {

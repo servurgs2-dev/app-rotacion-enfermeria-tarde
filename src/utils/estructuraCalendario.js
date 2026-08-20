@@ -1,4 +1,33 @@
-import { obtenerFilasActivas } from "./configuracionPlanilla.js";
+import {
+  obtenerFilasActivas,
+  obtenerSectorIdPorNombreHistorico
+} from "./configuracionPlanilla.js";
+
+const MARCADORES_ORDEN = new Set(["DIVIDER", "SIN ASIGNAR"]);
+
+const resolverOrdenOperativo = ({ sectores, ordenVisualLegacy }) => {
+  const sectoresPorId = new Map(sectores.map((fila) => [fila.sectorId, fila]));
+  const incluidos = new Set();
+  const orden = [];
+
+  ordenVisualLegacy.forEach((item) => {
+    if (MARCADORES_ORDEN.has(item)) {
+      orden.push(item);
+      return;
+    }
+    const sectorId = obtenerSectorIdPorNombreHistorico(item);
+    const fila = sectoresPorId.get(sectorId);
+    if (!fila || incluidos.has(sectorId)) return;
+    orden.push(fila.etiqueta);
+    incluidos.add(sectorId);
+  });
+
+  const faltantes = sectores.filter((fila) => !incluidos.has(fila.sectorId));
+  const indiceSinAsignar = orden.lastIndexOf("SIN ASIGNAR");
+  orden.splice(indiceSinAsignar < 0 ? orden.length : indiceSinAsignar, 0,
+    ...faltantes.map((fila) => fila.etiqueta));
+  return orden;
+};
 
 export const resolverEstructuraCalendario = ({
   configuracionEfectiva,
@@ -11,15 +40,14 @@ export const resolverEstructuraCalendario = ({
     .filter((fila) => fila.tipo === "turnante")
     .map((fila) => fila.etiqueta);
   const sectores = filasConfiguracion
-    .filter((fila) => fila.tipo === "sector")
-    .map((fila) => fila.etiqueta);
+    .filter((fila) => fila.tipo === "sector");
   return {
     filasConfiguracion,
     filas,
     turnantes,
-    sectores,
+    sectores: sectores.map((fila) => fila.etiqueta),
     ordenVisual: configuracionEfectiva?.schemaVersion === null
       ? ordenVisualLegacy
-      : [...sectores, "DIVIDER", "SIN ASIGNAR"]
+      : resolverOrdenOperativo({ sectores, ordenVisualLegacy })
   };
 };

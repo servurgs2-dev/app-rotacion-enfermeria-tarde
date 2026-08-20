@@ -273,6 +273,93 @@ for (const pareja of PAREJAS_COBERTURA_ENFERMEROS) {
   });
 }
 
+const donanteCruzadoPara = (origenSectorId) =>
+  [...donantesEnfermeros].reverse().find((sectorId) =>
+    sectorId !== origenSectorId &&
+    prioridadEnfermeros.indexOf(sectorId) > prioridadEnfermeros.indexOf(origenSectorId)
+  ) || donantesEnfermeros.find((sectorId) => sectorId !== origenSectorId);
+
+for (const pareja of PAREJAS_COBERTURA_ENFERMEROS) {
+  probar(`Turnante repone ${pareja.origenSectorId} sin cascada tras promoverlo`, () => {
+    const promovido = persona(`promovido-${pareja.origenSectorId}`);
+    const turnante = persona(`turnante-${pareja.origenSectorId}`);
+    const donanteSectorId = donanteCruzadoPara(pareja.origenSectorId);
+    const titularDonante = persona(`titular-${donanteSectorId}`);
+    const resultado = resolverTurnantesYCoberturasOperativas({
+      asignaciones: [
+        { tipo: "turnante", turnanteId: "turnante_1", nombre: "T1", enfermero: turnante },
+        { tipo: "sector", sectorId: pareja.destinoSectorId, nombre: pareja.destinoSectorId, enfermero: null },
+        { tipo: "sector", sectorId: pareja.origenSectorId, nombre: pareja.origenSectorId, enfermero: promovido },
+        { tipo: "sector", sectorId: donanteSectorId, nombre: donanteSectorId, enfermero: titularDonante }
+      ],
+      extras: [],
+      personal: [promovido, turnante, titularDonante],
+      esPersonaDisponible: () => true,
+      prioridadSectorIds: prioridadEnfermeros,
+      sectorIdsDonantes: donantesEnfermeros,
+      ajustarSectores: (sectores) => aplicarPrioridadCoberturaParejas({ asignaciones: sectores })
+    }).asignaciones;
+    assert.equal(resultado.find((fila) => fila.sectorId === pareja.destinoSectorId)?.enfermero, promovido);
+    assert.equal(resultado.find((fila) => fila.sectorId === pareja.origenSectorId)?.enfermero, turnante);
+    assert.equal(resultado.find((fila) => fila.sectorId === donanteSectorId)?.enfermero, titularDonante);
+    for (const actual of [promovido, turnante, titularDonante]) {
+      assert.equal(resultado.filter((fila) => fila.enfermero === actual).length, 1);
+    }
+  });
+}
+
+probar("sin Turnante ni Extra la reposición continúa con un donante válido", () => {
+  const pareja = PAREJAS_COBERTURA_ENFERMEROS.find(
+    ({ origenSectorId }) => origenSectorId === "sillon_2"
+  );
+  const promovido = persona("promovido-sillon-2");
+  const titularRea2 = persona("titular-rea-2-reposicion");
+  const resultado = resolverTurnantesYCoberturasOperativas({
+    asignaciones: [
+      { tipo: "sector", sectorId: pareja.destinoSectorId, nombre: "Sillón 1", enfermero: null },
+      { tipo: "sector", sectorId: pareja.origenSectorId, nombre: "Sillón 2", enfermero: promovido },
+      { tipo: "sector", sectorId: "rea_2", nombre: "REA 2", enfermero: titularRea2 }
+    ],
+    extras: [],
+    personal: [promovido, titularRea2],
+    esPersonaDisponible: () => true,
+    prioridadSectorIds: prioridadEnfermeros,
+    sectorIdsDonantes: donantesEnfermeros,
+    ajustarSectores: (sectores) => aplicarPrioridadCoberturaParejas({ asignaciones: sectores })
+  }).asignaciones;
+  assert.equal(resultado.find((fila) => fila.sectorId === "sillon_1")?.enfermero, promovido);
+  assert.equal(resultado.find((fila) => fila.sectorId === "sillon_2")?.enfermero, titularRea2);
+  assert.equal(resultado.find((fila) => fila.sectorId === "rea_2")?.enfermero, null);
+});
+
+probar("un Extra repone directamente el sector 2 antes de mover otro donante", () => {
+  const pareja = PAREJAS_COBERTURA_ENFERMEROS.find(
+    ({ origenSectorId }) => origenSectorId === "sillon_2"
+  );
+  const promovido = persona("promovido-sillon-extra");
+  const titularRea2 = persona("titular-rea-2-extra");
+  const extra = persona("extra-reposicion", {
+    tipoExtra: TIPOS_EXTRA.REFUERZO,
+    origenExtra: "externo"
+  });
+  const resultado = resolverTurnantesYCoberturasOperativas({
+    asignaciones: [
+      { tipo: "sector", sectorId: pareja.destinoSectorId, nombre: "Sillón 1", enfermero: null },
+      { tipo: "sector", sectorId: pareja.origenSectorId, nombre: "Sillón 2", enfermero: promovido },
+      { tipo: "sector", sectorId: "rea_2", nombre: "REA 2", enfermero: titularRea2 }
+    ],
+    extras: [extra],
+    personal: [promovido, titularRea2],
+    esPersonaDisponible: () => true,
+    prioridadSectorIds: prioridadEnfermeros,
+    sectorIdsDonantes: donantesEnfermeros,
+    ajustarSectores: (sectores) => aplicarPrioridadCoberturaParejas({ asignaciones: sectores })
+  }).asignaciones;
+  assert.equal(resultado.find((fila) => fila.sectorId === "sillon_1")?.enfermero, promovido);
+  assert.equal(resultado.find((fila) => fila.sectorId === "sillon_2")?.enfermero, extra);
+  assert.equal(resultado.find((fila) => fila.sectorId === "rea_2")?.enfermero, titularRea2);
+});
+
 probar("Licenciados conservan el orden vigente cuando no reciben prioridad de Enfermeros", () => {
   const titular = persona("licenciado-explora");
   const turnante = persona("licenciado-turnante");

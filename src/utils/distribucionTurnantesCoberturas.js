@@ -90,6 +90,15 @@ export const resolverTurnantesYCoberturasOperativas = ({
     if (!fila.enfermero && !fila.vacioManual) fila.enfermero = tomarTurnante();
   });
 
+  const reposicionesPareja = ordenarPorPrioridad(sectores)
+    .filter((fila) => fila.cedidoAPareja && !fila.enfermero && !fila.vacioManual);
+  reposicionesPareja.forEach((fila) => {
+    if (!fila.enfermero) fila.enfermero = tomarTurnante();
+  });
+  reposicionesPareja.forEach((fila) => {
+    if (!fila.enfermero) fila.enfermero = tomarExtra();
+  });
+
   sectores = aplicarPrioridadGeneralPorSectorId({
     asignaciones: sectores,
     prioridadSectorIds,

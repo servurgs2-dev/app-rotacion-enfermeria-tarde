@@ -119,23 +119,43 @@ try {
     assert.match(fuente, /obtenerConfiguracionPlanillaEfectiva\(\{/);
     assert.doesNotMatch(fuente, /crearSnapshotConfiguracionPlanilla/);
   });
-  await probar("8b Calendario usa filas, tipos y orden del snapshot", () => {
+  await probar("8b Calendario usa sectores activos del snapshot en su orden operativo", () => {
     const efectiva = resolver({
       estadoMensual: septiembre, categoria: "enfermero", mes: "2026-09"
     });
+    efectiva.filas.find((fila) => fila.sectorId === "rea_1").etiqueta = "Reanimación principal";
+    efectiva.filas.find((fila) => fila.sectorId === "sillon_2").activo = false;
     const estructura = resolverEstructuraCalendario({
       configuracionEfectiva: efectiva,
       ordenVisualLegacy: configuracionSectores.enfermero.ordenVisual
     });
     assert.deepEqual(estructura.filas.slice(0, 2), [
       snapshotEnfermero.filas[1].etiqueta,
-      snapshotEnfermero.filas[0].etiqueta
+      "Reanimación principal"
     ]);
-    assert.equal(estructura.filasConfiguracion[0].tipo, snapshotEnfermero.filas[1].tipo);
+    assert.deepEqual(estructura.ordenVisual.slice(0, 3), [
+      "Reanimación principal", "REA 2", "DIVIDER"
+    ]);
+    assert.equal(estructura.ordenVisual.includes("SILLON 2"), false);
     assert.deepEqual(
       estructura.turnantes,
       filas(efectiva).filter((fila) => fila.tipo === "turnante").map((fila) => fila.etiqueta)
     );
+  });
+  await probar("8c Licenciados conserva orden operativo y etiquetas mensuales", () => {
+    const efectiva = resolver({
+      estadoMensual: septiembre, categoria: "licenciado", mes: "2026-09"
+    });
+    efectiva.filas.find((fila) => fila.sectorId === "triage_1").etiqueta = "Triage principal";
+    efectiva.filas.find((fila) => fila.sectorId === "observacion_2").activo = false;
+    const estructura = resolverEstructuraCalendario({
+      configuracionEfectiva: efectiva,
+      ordenVisualLegacy: configuracionSectores.licenciado.ordenVisual
+    });
+    assert.deepEqual(estructura.ordenVisual.slice(0, 3), [
+      "Triage principal", "Triage 2", "DIVIDER"
+    ]);
+    assert.equal(estructura.ordenVisual.includes("Observación 2"), false);
   });
 } finally {
   await servidor.close();

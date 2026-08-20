@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import {
   limpiarAsignacionesFijasDePersona,
+  aplicarAsignacionesFijasADistribucion,
   normalizarAsignacionesFijasMensuales,
   obtenerAsignacionFijaPorPersonaId,
   obtenerAsignacionFijaPorSectorId,
   validarAsignacionesFijasMensuales
 } from "../src/utils/asignacionesFijasMensuales.js";
+import {
+  generarRotacionMensual,
+  prepararRotacion3DiasParaGenerar,
+  regenerarRotacion3DiasDesdePrimerBloque
+} from "../src/utils/rotacionPlanilla.js";
 import {
   copiarSnapshotConfiguracionPlanilla,
   crearSnapshotConfiguracionPlanilla,
@@ -46,6 +52,42 @@ const validar = ({
   filas = snapshotEnfermero.filas
 } = {}) => validarAsignacionesFijasMensuales({ asignaciones, personal, categoria, filas });
 const codigos = (resultado) => resultado.errores.map((error) => error.codigo);
+const persona = (id, categoria = "enfermero") => ({ id, nombre: `Persona ${id}`, categoria });
+const personasGeneracion = [persona("a"), persona("b"), persona("c"), persona("d")];
+const referencia = (id) => ({ personaId: id, nombre: `Persona ${id}` });
+const filasGeneracion = [
+  ["sector_x", "Sector X"],
+  ["sillon_2", "Sillón 2"],
+  ["rea_2", "REA 2"],
+  ["sector_z", "Sector Z"]
+].map(([sectorId, etiqueta], orden) => ({
+  filaId: `enfermero.sector.${sectorId}`,
+  tipo: "sector",
+  etiqueta,
+  sectorId,
+  turnanteId: null,
+  ordinalTurnante: null,
+  orden,
+  activo: true
+}));
+const baseGeneracion = () => ({
+  "Sector X": referencia("a"),
+  "Sillón 2": referencia("b"),
+  "REA 2": referencia("c"),
+  "Sector Z": referencia("d")
+});
+const idsDistribucion = (distribucion) => Object.values(distribucion)
+  .map((item) => item?.personaId)
+  .filter(Boolean)
+  .sort();
+const aplicarGeneracion = (asignacionesFijas, distribucion = baseGeneracion()) =>
+  aplicarAsignacionesFijasADistribucion({
+    distribucion,
+    asignacionesFijas,
+    filas: filasGeneracion,
+    personal: personasGeneracion,
+    categoria: "enfermero"
+  });
 
 probar("1 undefined normaliza a lista vacía", () => {
   assert.deepEqual(normalizarAsignacionesFijasMensuales(undefined), []);
@@ -294,6 +336,306 @@ probar("30 un duplicado idéntico se normaliza sin crear un conflicto falso", ()
   ] });
   assert.equal(resultado.valido, true);
   assert.deepEqual(resultado.asignaciones, [fija("sillon_2", enfermero.id)]);
+});
+
+probar("31 fija A en Sillón 2 e intercambia a B hacia el origen de A", () => {
+  const resultado = aplicarGeneracion([fija("sillon_2", "a")]);
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.distribucion["Sillón 2"].personaId, "a");
+  assert.equal(resultado.distribucion["Sector X"].personaId, "b");
+});
+
+probar("32 la persona fija no queda duplicada", () => {
+  const resultado = aplicarGeneracion([fija("sillon_2", "a")]);
+  assert.equal(idsDistribucion(resultado.distribucion).filter((id) => id === "a").length, 1);
+});
+
+probar("33 la persona desplazada no desaparece", () => {
+  assert.ok(idsDistribucion(aplicarGeneracion([fija("sillon_2", "a")]).distribucion).includes("b"));
+});
+
+probar("34 conserva el conjunto y cantidad de identidades", () => {
+  const base = baseGeneracion();
+  const resultado = aplicarGeneracion([fija("sillon_2", "a")], base);
+  assert.deepEqual(idsDistribucion(resultado.distribucion), idsDistribucion(base));
+});
+
+probar("35 un destino vacío recibe A y deja vacío su origen", () => {
+  const base = baseGeneracion();
+  base["Sillón 2"] = "";
+  const resultado = aplicarGeneracion([fija("sillon_2", "a")], base);
+  assert.equal(resultado.distribucion["Sillón 2"].personaId, "a");
+  assert.equal(resultado.distribucion["Sector X"], "");
+});
+
+probar("36 persona ausente de la base devuelve error sin mutar", () => {
+  const base = baseGeneracion();
+  const resultado = aplicarGeneracion([fija("sillon_2", "d")], {
+    ...base,
+    "Sector Z": ""
+  });
+  assert.equal(resultado.ok, false);
+  assert.ok(codigos(resultado).includes("PERSONA_AUSENTE_EN_BASE"));
+  assert.deepEqual(baseGeneracion(), base);
+});
+
+probar("37 sector inexistente devuelve error", () => {
+  const resultado = aplicarGeneracion([fija("no_existe", "a")]);
+  assert.equal(resultado.ok, false);
+  assert.ok(codigos(resultado).includes("SECTOR_INEXISTENTE"));
+});
+
+probar("38 dos fijas compatibles se aplican juntas", () => {
+  const resultado = aplicarGeneracion([
+    fija("sillon_2", "a"), fija("rea_2", "d")
+  ]);
+  assert.equal(resultado.distribucion["Sillón 2"].personaId, "a");
+  assert.equal(resultado.distribucion["REA 2"].personaId, "d");
+  assert.deepEqual(idsDistribucion(resultado.distribucion), ["a", "b", "c", "d"]);
+});
+
+probar("39 resuelve una cadena de tres movimientos simultáneos", () => {
+  const resultado = aplicarGeneracion([
+    fija("sillon_2", "a"), fija("rea_2", "b"), fija("sector_z", "c")
+  ]);
+  assert.equal(resultado.distribucion["Sector X"].personaId, "d");
+  assert.equal(resultado.distribucion["Sillón 2"].personaId, "a");
+  assert.equal(resultado.distribucion["REA 2"].personaId, "b");
+  assert.equal(resultado.distribucion["Sector Z"].personaId, "c");
+});
+
+probar("40 resuelve un ciclo sin perder identidades", () => {
+  const resultado = aplicarGeneracion([
+    fija("sillon_2", "a"), fija("rea_2", "b"), fija("sector_x", "c")
+  ]);
+  assert.equal(resultado.distribucion["Sector X"].personaId, "c");
+  assert.equal(resultado.distribucion["Sillón 2"].personaId, "a");
+  assert.equal(resultado.distribucion["REA 2"].personaId, "b");
+  assert.equal(resultado.distribucion["Sector Z"].personaId, "d");
+});
+
+probar("41 invertir asignaciones produce el mismo resultado", () => {
+  const asignaciones = [fija("sillon_2", "a"), fija("rea_2", "d")];
+  assert.deepEqual(
+    aplicarGeneracion(asignaciones).distribucion,
+    aplicarGeneracion([...asignaciones].reverse()).distribucion
+  );
+});
+
+probar("42 la transformación no muta distribución, filas ni asignaciones", () => {
+  const base = baseGeneracion();
+  const filas = structuredClone(filasGeneracion);
+  const asignaciones = [fija("sillon_2", "a")];
+  const copia = structuredClone({ base, filas, asignaciones });
+  aplicarAsignacionesFijasADistribucion({
+    distribucion: base, asignacionesFijas: asignaciones, filas,
+    personal: personasGeneracion, categoria: "enfermero"
+  });
+  assert.deepEqual({ base, filas, asignaciones }, copia);
+});
+
+probar("43 resuelve la clave visible normalizada desde sectorId", () => {
+  const base = { ...baseGeneracion(), "SILLON 2": referencia("b") };
+  delete base["Sillón 2"];
+  const resultado = aplicarGeneracion([fija("sillon_2", "a")], base);
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.distribucion["SILLON 2"].personaId, "a");
+});
+
+probar("44 la misma transformación funciona con Licenciados", () => {
+  const personal = personasGeneracion.map((item) => ({ ...item, categoria: "licenciado" }));
+  const filas = filasGeneracion.map((fila) => ({
+    ...fila, filaId: fila.filaId.replace("enfermero", "licenciado")
+  }));
+  const resultado = aplicarAsignacionesFijasADistribucion({
+    distribucion: baseGeneracion(), asignacionesFijas: [fija("sillon_2", "a")],
+    filas, personal, categoria: "licenciado"
+  });
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.distribucion["Sillón 2"].personaId, "a");
+});
+
+probar("45 generación semanal fija Sillón 2 y rota el resto", () => {
+  const semanas = [1, 2, 3, 4, 5].map((numero) => ({ clave: `semana${numero}` }));
+  const resultado = generarRotacionMensual({
+    planilla: { semana1: baseGeneracion() },
+    filas: filasGeneracion.map((fila) => fila.etiqueta),
+    semanas,
+    filasFijas: ["Sillón 2"],
+    asignacionesFijas: [fija("sillon_2", "a")],
+    filasConfiguracion: filasGeneracion,
+    categoria: "enfermero",
+    personal: personasGeneracion
+  });
+  semanas.forEach(({ clave }) => {
+    assert.equal(resultado[clave]["Sillón 2"].personaId, "a");
+    assert.equal(idsDistribucion(resultado[clave]).filter((id) => id === "a").length, 1);
+  });
+  assert.equal(resultado.semana2["Sector X"].personaId, "d");
+  assert.equal(resultado.semana2["REA 2"].personaId, "b");
+});
+
+probar("46 generación cada tres días fija todos los bloques y rota el resto", () => {
+  const periodos = [0, 1, 2].map((indice) => ({
+    clave: `2026-08-${String(1 + indice * 3).padStart(2, "0")}`,
+    indice,
+    etiqueta: `Bloque ${indice + 1}`
+  }));
+  const resultado = regenerarRotacion3DiasDesdePrimerBloque({
+    rotacion3Dias: { bloques: { [periodos[0].clave]: baseGeneracion() }, coberturaLibreSM: {} },
+    periodos,
+    filas: filasGeneracion.map((fila) => fila.etiqueta),
+    filasFijas: ["Sillón 2"],
+    asignacionesFijas: [fija("sillon_2", "a")],
+    filasConfiguracion: filasGeneracion,
+    personal: personasGeneracion,
+    categoria: "enfermero"
+  });
+  assert.equal(resultado.ok, true);
+  periodos.forEach(({ clave }) => {
+    assert.equal(resultado.rotacion3Dias.bloques[clave]["Sillón 2"].personaId, "a");
+  });
+  assert.equal(resultado.rotacion3Dias.bloques[periodos[1].clave]["Sector X"].personaId, "d");
+});
+
+probar("47 Salud Mental explícita usa el modelo general", () => {
+  const filas = [...filasGeneracion, {
+    filaId: "enfermero.sector.salud_mental", tipo: "sector",
+    etiqueta: "SM", sectorId: "salud_mental", activo: true, orden: 4
+  }];
+  const base = { ...baseGeneracion(), SM: referencia("a") };
+  base["Sector X"] = "";
+  const resultado = aplicarAsignacionesFijasADistribucion({
+    distribucion: base,
+    asignacionesFijas: [fija("salud_mental", "d")],
+    filas,
+    personal: personasGeneracion,
+    categoria: "enfermero"
+  });
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.distribucion.SM.personaId, "d");
+  assert.equal(resultado.distribucion["Sector Z"].personaId, "a");
+});
+
+probar("48 sin asignaciones el generador conserva exactamente el resultado legacy", () => {
+  const semanas = [1, 2, 3].map((numero) => ({ clave: `semana${numero}` }));
+  const argumentos = {
+    planilla: { semana1: baseGeneracion() },
+    filas: filasGeneracion.map((fila) => fila.etiqueta),
+    semanas,
+    filaFija: "Sillón 2",
+    personal: personasGeneracion
+  };
+  assert.deepEqual(
+    generarRotacionMensual(argumentos),
+    generarRotacionMensual({ ...argumentos, asignacionesFijas: [] })
+  );
+});
+
+probar("49 coberturaLibreSM permanece intacta en bloques con fijas", () => {
+  const periodos = [{ clave: "2026-08-01", indice: 0, etiqueta: "Bloque 1" }];
+  const coberturaLibreSM = { [periodos[0].clave]: referencia("d") };
+  const resultado = regenerarRotacion3DiasDesdePrimerBloque({
+    rotacion3Dias: { bloques: { [periodos[0].clave]: baseGeneracion() }, coberturaLibreSM },
+    periodos,
+    filas: filasGeneracion.map((fila) => fila.etiqueta),
+    filasFijas: ["Sillón 2"],
+    asignacionesFijas: [fija("sillon_2", "a")],
+    filasConfiguracion: filasGeneracion,
+    personal: personasGeneracion,
+    categoria: "enfermero"
+  });
+  assert.deepEqual(resultado.rotacion3Dias.coberturaLibreSM, coberturaLibreSM);
+});
+
+probar("50 una persona fijada desde Turnante no queda duplicada", () => {
+  const base = { ...baseGeneracion(), T1: referencia("a") };
+  base["Sector X"] = "";
+  const resultado = aplicarGeneracion([fija("sillon_2", "a")], base);
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.distribucion["Sillón 2"].personaId, "a");
+  assert.equal(resultado.distribucion.T1.personaId, "b");
+  assert.equal(idsDistribucion(resultado.distribucion).filter((id) => id === "a").length, 1);
+});
+
+probar("51 una rotación de tres días ya inicializada aplica fijas a base y bloques", () => {
+  const periodos = [0, 1].map((indice) => ({
+    clave: `2026-08-${String(1 + indice * 3).padStart(2, "0")}`,
+    indice,
+    etiqueta: `Bloque ${indice + 1}`
+  }));
+  const resultado = prepararRotacion3DiasParaGenerar({
+    rotacion3Dias: {
+      asignacionBase: baseGeneracion(),
+      bloques: { [periodos[0].clave]: baseGeneracion() },
+      coberturaLibreSM: {}
+    },
+    periodos,
+    filas: filasGeneracion.map((fila) => fila.etiqueta),
+    filasFijas: ["Sillón 2"],
+    asignacionesFijas: [fija("sillon_2", "a")],
+    filasConfiguracion: filasGeneracion,
+    personal: personasGeneracion,
+    categoria: "enfermero"
+  });
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.rotacion3Dias.asignacionBase["Sillón 2"].personaId, "a");
+  periodos.forEach(({ clave }) => {
+    assert.equal(resultado.rotacion3Dias.bloques[clave]["Sillón 2"].personaId, "a");
+  });
+});
+
+probar("52 la generacion semanal expone una fija invalida como error", () => {
+  const base = baseGeneracion();
+  base["Sector Z"] = "";
+  assert.throws(
+    () => generarRotacionMensual({
+      planilla: { semana1: base },
+      filas: filasGeneracion.map((fila) => fila.etiqueta),
+      semanas: [{ clave: "semana1" }, { clave: "semana2" }],
+      asignacionesFijas: [fija("sillon_2", "d")],
+      filasConfiguracion: filasGeneracion,
+      categoria: "enfermero",
+      personal: personasGeneracion
+    }),
+    (error) => {
+      assert.equal(error.name, "ErrorGeneracionAsignacionesFijas");
+      assert.equal(error.codigo, "BASE_INCOMPATIBLE_CON_ASIGNACIONES_FIJAS");
+      assert.ok(error.errores.some(({ codigo }) => codigo === "PERSONA_AUSENTE_EN_BASE"));
+      return true;
+    }
+  );
+});
+
+probar("53 resuelve diferencias de mayusculas por sectorId", () => {
+  const base = { ...baseGeneracion(), "sIlLoN 2": referencia("b") };
+  delete base["Sillón 2"];
+  const resultado = aplicarGeneracion([fija("sillon_2", "a")], base);
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.distribucion["sIlLoN 2"].personaId, "a");
+});
+
+probar("54 resuelve diferencias de acentuacion por sectorId", () => {
+  const base = { ...baseGeneracion(), "SILLÓN 2": referencia("b") };
+  delete base["Sillón 2"];
+  const resultado = aplicarGeneracion([fija("sillon_2", "a")], base);
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.distribucion["SILLÓN 2"].personaId, "a");
+});
+
+probar("55 resuelve un alias historico aunque cambie la etiqueta visible", () => {
+  const filas = filasGeneracion.map((fila) => fila.sectorId === "sillon_2"
+    ? { ...fila, etiqueta: "Butaca operativa 2" }
+    : fila);
+  const resultado = aplicarAsignacionesFijasADistribucion({
+    distribucion: baseGeneracion(),
+    asignacionesFijas: [fija("sillon_2", "a")],
+    filas,
+    personal: personasGeneracion,
+    categoria: "enfermero"
+  });
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.distribucion["Sillón 2"].personaId, "a");
 });
 
 console.log(`\n${total} pruebas de asignaciones fijas mensuales pasaron.`);

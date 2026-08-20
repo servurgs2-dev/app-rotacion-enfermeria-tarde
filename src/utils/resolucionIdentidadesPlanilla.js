@@ -55,6 +55,14 @@ export const resolverClaveDistribucionParaFila = ({ distribucion, fila } = {}) =
   for (const alias of clavesHistoricasFila(fila)) {
     if (alias !== fila.etiqueta && Object.hasOwn(distribucion, alias)) return alias;
   }
+  const candidatasNormalizadas = new Set(
+    [fila.etiqueta, ...clavesHistoricasFila(fila)]
+      .filter(tieneTexto)
+      .map(normalizar)
+  );
+  for (const clave of Object.keys(distribucion)) {
+    if (candidatasNormalizadas.has(normalizar(clave))) return clave;
+  }
   return null;
 };
 

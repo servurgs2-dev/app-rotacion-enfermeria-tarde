@@ -1,7 +1,7 @@
 import {
-  referenciaCorrespondeAPersona,
-  resolverPersonaDesdeReferencia
-} from "./referenciasPersonas.js";
+  aplicarAsignacionesFijasADistribucion,
+  ErrorGeneracionAsignacionesFijas
+} from "./asignacionesFijasMensuales.js";
 
 const clonarAsignacion = (referencia) =>
   referencia && typeof referencia === "object"
@@ -191,6 +191,10 @@ export const regenerarRotacion3DiasDesdePrimerBloque = ({
   periodos,
   filas,
   filasFijas = [],
+  asignacionesFijas = [],
+  filasConfiguracion = [],
+  personal = [],
+  categoria = "",
   posicionesNoAplicables = [],
   estrategia
 } = {}) => {
@@ -207,9 +211,29 @@ export const regenerarRotacion3DiasDesdePrimerBloque = ({
     return { ok: false, codigo: "BLOQUE_REFERENCIA_AUSENTE", rotacion3Dias: rotacion };
   }
 
+  const referenciaConFijas = aplicarAsignacionesFijasADistribucion({
+    distribucion: bloqueReferencia.bloque,
+    asignacionesFijas,
+    filas: filasConfiguracion,
+    personal,
+    categoria
+  });
+  if (!referenciaConFijas.ok) {
+    return {
+      ok: false,
+      codigo: referenciaConFijas.codigo,
+      errores: referenciaConFijas.errores,
+      rotacion3Dias: rotacion
+    };
+  }
+  const bloqueReferenciaPreparado = {
+    ...bloqueReferencia,
+    bloque: referenciaConFijas.distribucion
+  };
+
   const asignacionBase = derivarAsignacionBaseDesdeBloque({
-    bloqueReferencia: bloqueReferencia.bloque,
-    indiceReferencia: bloqueReferencia.periodo.indice,
+    bloqueReferencia: bloqueReferenciaPreparado.bloque,
+    indiceReferencia: bloqueReferenciaPreparado.periodo.indice,
     filas,
     filasFijas,
     posicionesNoAplicables
@@ -217,8 +241,8 @@ export const regenerarRotacion3DiasDesdePrimerBloque = ({
   const bloques = Object.fromEntries(
     periodosValidos.map((periodo) => [
       periodo.clave,
-      periodo.clave === bloqueReferencia.periodo.clave
-        ? clonarDistribucion(bloqueReferencia.bloque)
+      periodo.clave === bloqueReferenciaPreparado.periodo.clave
+        ? clonarDistribucion(bloqueReferenciaPreparado.bloque)
         : generarDistribucionParaIndice({
             distribucionBase: asignacionBase,
             filas,
@@ -231,7 +255,7 @@ export const regenerarRotacion3DiasDesdePrimerBloque = ({
 
   return {
     ok: true,
-    bloqueReferencia,
+    bloqueReferencia: bloqueReferenciaPreparado,
     rotacion3Dias: {
       ...rotacion,
       version: rotacion.version ?? 1,
@@ -249,6 +273,10 @@ export const prepararRotacion3DiasParaGenerar = ({
   periodos,
   filas,
   filasFijas = [],
+  asignacionesFijas = [],
+  filasConfiguracion = [],
+  personal = [],
+  categoria = "",
   posicionesNoAplicables = [],
   estrategia
 } = {}) => {
@@ -260,12 +288,47 @@ export const prepararRotacion3DiasParaGenerar = ({
     : null;
   let bloqueReferencia = null;
 
+  if (asignacionBase) {
+    const baseConFijas = aplicarAsignacionesFijasADistribucion({
+      distribucion: asignacionBase,
+      asignacionesFijas,
+      filas: filasConfiguracion,
+      personal,
+      categoria
+    });
+    if (!baseConFijas.ok) {
+      return {
+        ok: false,
+        codigo: baseConFijas.codigo,
+        errores: baseConFijas.errores,
+        rotacion3Dias: rotacion
+      };
+    }
+    asignacionBase = baseConFijas.distribucion;
+  }
+
   if (!asignacionBase) {
     bloqueReferencia = obtenerPrimerBloqueReferencia({ rotacion3Dias: rotacion, periodos });
     if (!bloqueReferencia) {
       return { ok: false, codigo: "BLOQUE_REFERENCIA_AUSENTE", rotacion3Dias: rotacion };
     }
 
+    const referenciaConFijas = aplicarAsignacionesFijasADistribucion({
+      distribucion: bloqueReferencia.bloque,
+      asignacionesFijas,
+      filas: filasConfiguracion,
+      personal,
+      categoria
+    });
+    if (!referenciaConFijas.ok) {
+      return {
+        ok: false,
+        codigo: referenciaConFijas.codigo,
+        errores: referenciaConFijas.errores,
+        rotacion3Dias: rotacion
+      };
+    }
+    bloqueReferencia = { ...bloqueReferencia, bloque: referenciaConFijas.distribucion };
     asignacionBase = derivarAsignacionBaseDesdeBloque({
       bloqueReferencia: bloqueReferencia.bloque,
       indiceReferencia: bloqueReferencia.periodo.indice,
@@ -275,13 +338,37 @@ export const prepararRotacion3DiasParaGenerar = ({
     });
   }
 
+  const bloquesPreparados = {};
+  for (const [clave, bloque] of Object.entries(rotacion.bloques || {})) {
+    if (!tieneAsignacionesUtiles(bloque)) {
+      bloquesPreparados[clave] = clonarDistribucion(bloque);
+      continue;
+    }
+    const bloqueConFijas = aplicarAsignacionesFijasADistribucion({
+      distribucion: bloque,
+      asignacionesFijas,
+      filas: filasConfiguracion,
+      personal,
+      categoria
+    });
+    if (!bloqueConFijas.ok) {
+      return {
+        ok: false,
+        codigo: bloqueConFijas.codigo,
+        errores: bloqueConFijas.errores,
+        rotacion3Dias: rotacion
+      };
+    }
+    bloquesPreparados[clave] = bloqueConFijas.distribucion;
+  }
+
   const preparada = {
     ...rotacion,
     version: rotacion.version ?? 1,
     fechaBase: estrategia?.fechaBase ?? rotacion.fechaBase,
     duracionDias: estrategia?.duracionDias ?? rotacion.duracionDias,
     asignacionBase,
-    bloques: rotacion.bloques || {},
+    bloques: bloquesPreparados,
     coberturaLibreSM: rotacion.coberturaLibreSM || {}
   };
 
@@ -387,29 +474,31 @@ export const generarRotacionMensual = ({
   filas,
   semanas,
   filaFija,
+  filasFijas = [],
+  asignacionesFijas = [],
+  filasConfiguracion = [],
+  categoria = "",
   personal,
   posicionesNoAplicables = []
 }) => {
-  const semana1 = planilla?.semana1 || {};
+  const preparacionBase = aplicarAsignacionesFijasADistribucion({
+    distribucion: planilla?.semana1 || {},
+    asignacionesFijas,
+    filas: filasConfiguracion,
+    personal,
+    categoria
+  });
+  if (!preparacionBase.ok) {
+    throw new ErrorGeneracionAsignacionesFijas(preparacionBase);
+  }
+  const semana1 = preparacionBase.distribucion;
   const excluidas = new Set(
     Array.isArray(posicionesNoAplicables) ? posicionesNoAplicables : []
   );
-  const filasRotables = filas.filter(
-    (fila) => fila !== filaFija && !excluidas.has(fila)
-  );
-  const baseRotable = filasRotables.map((fila) => semana1[fila] || "");
-  const tieneFilaFija = typeof filaFija === "string" && filaFija.length > 0;
-  const tieneAsignacionFija = tieneFilaFija &&
-    Object.prototype.hasOwnProperty.call(semana1, filaFija);
-  const referenciaFija = tieneAsignacionFija && !excluidas.has(filaFija)
-    ? semana1[filaFija]
-    : "";
-  const personaFija = resolverPersonaDesdeReferencia(referenciaFija, personal);
-
-  const correspondeAFija = (referencia) => {
-    if (!personaFija) return false;
-    return referenciaCorrespondeAPersona(referencia, personaFija, personal);
-  };
+  const filasFijasEfectivas = [...new Set([
+    ...(Array.isArray(filasFijas) ? filasFijas : []),
+    ...(typeof filaFija === "string" && filaFija ? [filaFija] : [])
+  ])];
 
   const nuevaPlanilla = {
     ...planilla,
@@ -418,23 +507,13 @@ export const generarRotacionMensual = ({
   };
 
   semanas.slice(1).forEach((semana, indiceSemana) => {
-    const referenciasRotadas = rotarValores(baseRotable, indiceSemana + 1);
-    const semanaGenerada = Object.fromEntries(filas.map((fila) => [fila, ""]));
-
-    filasRotables.forEach((fila, indiceFila) => {
-      const referencia = referenciasRotadas[indiceFila];
-      semanaGenerada[fila] = correspondeAFija(referencia)
-        ? ""
-        : clonarAsignacion(referencia);
+    nuevaPlanilla[semana.clave] = generarDistribucionParaIndice({
+      distribucionBase: semana1,
+      filas,
+      filasFijas: filasFijasEfectivas,
+      posicionesNoAplicables: [...excluidas],
+      indice: indiceSemana + 1
     });
-
-    if (tieneFilaFija) {
-      semanaGenerada[filaFija] = clonarAsignacion(referenciaFija);
-    }
-    excluidas.forEach((fila) => {
-      semanaGenerada[fila] = "";
-    });
-    nuevaPlanilla[semana.clave] = semanaGenerada;
   });
 
   return nuevaPlanilla;

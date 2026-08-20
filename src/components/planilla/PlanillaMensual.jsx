@@ -145,6 +145,22 @@ function PlanillaMensual({
   const filas = obtenerEtiquetasFilasPlanilla(filasActivas);
   const filaSaludMental = obtenerFilaSaludMentalActiva(filasConfiguracion);
   const etiquetaSaludMental = filaSaludMental?.etiqueta || null;
+  const asignacionesFijas = configuracionEfectiva?.asignacionesFijas || [];
+  const sectoresFijosConfigurados = new Set(
+    asignacionesFijas.map((asignacion) => asignacion.sectorId)
+  );
+  const filasFijasGeneracion = [
+    ...filasConfiguracion
+      .filter((fila) => fila.tipo === "sector" &&
+        fila.activo !== false &&
+        sectoresFijosConfigurados.has(fila.sectorId))
+      .map((fila) => fila.etiqueta),
+    ...(
+      etiquetaSaludMental && !sectoresFijosConfigurados.has("salud_mental")
+        ? [etiquetaSaludMental]
+        : []
+    )
+  ];
   const posicionTurnanteMensual = obtenerPosicionTurnanteMensual(tipo);
   const turnanteMensualHabilitado = filas.includes(posicionTurnanteMensual);
   const capacidadNormal = obtenerCapacidadNormalPlanilla(tipo);
@@ -257,7 +273,11 @@ function PlanillaMensual({
             rotacion3Dias: planillaAdaptada.rotacion3Dias,
             periodos,
             filas,
-            filasFijas: etiquetaSaludMental ? [etiquetaSaludMental] : [],
+            filasFijas: filasFijasGeneracion,
+            asignacionesFijas,
+            filasConfiguracion,
+            personal: personalFiltrado,
+            categoria: tipo,
             posicionesNoAplicables,
             estrategia
           })
@@ -265,7 +285,11 @@ function PlanillaMensual({
             rotacion3Dias: planillaAdaptada.rotacion3Dias,
             periodos,
             filas,
-            filasFijas: etiquetaSaludMental ? [etiquetaSaludMental] : [],
+            filasFijas: filasFijasGeneracion,
+            asignacionesFijas,
+            filasConfiguracion,
+            personal: personalFiltrado,
+            categoria: tipo,
             posicionesNoAplicables,
             estrategia
           });
@@ -289,7 +313,13 @@ function PlanillaMensual({
           }),
           filas,
           semanas: periodos,
-          filaFija: etiquetaSaludMental,
+          filaFija: sectoresFijosConfigurados.has("salud_mental")
+            ? null
+            : etiquetaSaludMental,
+          filasFijas: filasFijasGeneracion,
+          asignacionesFijas,
+          filasConfiguracion,
+          categoria: tipo,
           personal: personalFiltrado,
           posicionesNoAplicables
         }),
@@ -387,14 +417,22 @@ function PlanillaMensual({
             rotacion3Dias: planillaAdaptada.rotacion3Dias,
             periodos,
             filas,
-            filasFijas: etiquetaSaludMental ? [etiquetaSaludMental] : [],
+            filasFijas: filasFijasGeneracion,
+            asignacionesFijas,
+            filasConfiguracion,
+            personal: personalFiltrado,
+            categoria: tipo,
             estrategia
           })
           : prepararRotacion3DiasParaGenerar({
             rotacion3Dias: planillaAdaptada.rotacion3Dias,
             periodos,
             filas,
-            filasFijas: etiquetaSaludMental ? [etiquetaSaludMental] : [],
+            filasFijas: filasFijasGeneracion,
+            asignacionesFijas,
+            filasConfiguracion,
+            personal: personalFiltrado,
+            categoria: tipo,
             estrategia
           });
       };
@@ -435,7 +473,13 @@ function PlanillaMensual({
       }),
       filas,
       semanas: periodos,
-      filaFija: etiquetaSaludMental,
+      filaFija: sectoresFijosConfigurados.has("salud_mental")
+        ? null
+        : etiquetaSaludMental,
+      filasFijas: filasFijasGeneracion,
+      asignacionesFijas,
+      filasConfiguracion,
+      categoria: tipo,
       personal: personalFiltrado
     }));
   }

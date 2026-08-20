@@ -1,26 +1,15 @@
+import {
+  resolverPersonaDesdeReferencia
+} from "./referenciasPersonas.js";
+import { resolverClaveDistribucionParaFila } from "./resolucionIdentidadesPlanilla.js";
+import { normalizarAsignacionesFijasMensuales } from "./modeloAsignacionesFijasMensuales.js";
+
+export { normalizarAsignacionesFijasMensuales } from "./modeloAsignacionesFijasMensuales.js";
+
 const textoId = (valor) => String(valor ?? "").trim();
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
-
-const compararAsignaciones = (a, b) =>
-  a.sectorId.localeCompare(b.sectorId) || a.personaId.localeCompare(b.personaId);
-
-export const normalizarAsignacionesFijasMensuales = (asignaciones) => {
-  if (!Array.isArray(asignaciones)) return [];
-
-  const unicas = new Map();
-  asignaciones.forEach((asignacion) => {
-    if (!esObjeto(asignacion)) return;
-    const sectorId = textoId(asignacion.sectorId);
-    const personaId = textoId(asignacion.personaId);
-    if (!sectorId || !personaId) return;
-    const normalizada = { sectorId, personaId };
-    unicas.set(`${sectorId}\u0000${personaId}`, normalizada);
-  });
-
-  return [...unicas.values()].sort(compararAsignaciones);
-};
 
 export const limpiarAsignacionesFijasDePersona = (asignaciones, personaId) => {
   const id = textoId(personaId);
@@ -132,3 +121,163 @@ export const validarAsignacionesFijasMensuales = ({
     asignaciones: normalizarAsignacionesFijasMensuales(entradas)
   };
 };
+
+const clonarReferencia = (referencia) =>
+  esObjeto(referencia) ? { ...referencia } : referencia;
+
+const clonarDistribucion = (distribucion) => Object.fromEntries(
+  Object.entries(esObjeto(distribucion) ? distribucion : {}).map(([clave, referencia]) => [
+    clave,
+    clonarReferencia(referencia)
+  ])
+);
+
+const obtenerIdentidadReferencia = (referencia, personal) =>
+  textoId(resolverPersonaDesdeReferencia(referencia, personal)?.id);
+
+const obtenerIdentidadesDistribucion = (distribucion, personal) =>
+  Object.values(distribucion)
+    .map((referencia) => obtenerIdentidadReferencia(referencia, personal))
+    .filter(Boolean)
+    .sort();
+
+export const aplicarAsignacionesFijasADistribucion = ({
+  distribucion,
+  asignacionesFijas,
+  filas,
+  personal,
+  categoria
+} = {}) => {
+  const original = clonarDistribucion(distribucion);
+  const asignaciones = normalizarAsignacionesFijasMensuales(asignacionesFijas);
+  if (asignaciones.length === 0) {
+    return { ok: true, distribucion: original, clavesFijas: [], errores: [] };
+  }
+
+  const validacion = validarAsignacionesFijasMensuales({
+    asignaciones: asignacionesFijas,
+    personal,
+    categoria,
+    filas
+  });
+  if (!validacion.valido) {
+    return {
+      ok: false,
+      codigo: "ASIGNACIONES_FIJAS_INVALIDAS",
+      errores: validacion.errores,
+      distribucion: original,
+      clavesFijas: []
+    };
+  }
+
+  const filasPorSector = new Map(
+    filas
+      .filter((fila) => fila?.tipo === "sector" && fila.activo !== false)
+      .map((fila) => [textoId(fila.sectorId), fila])
+  );
+  const destinos = new Map();
+  const fuentes = new Map();
+  const referenciasPorPersona = new Map();
+  const errores = [];
+
+  Object.entries(original).forEach(([clave, referencia]) => {
+    const persona = resolverPersonaDesdeReferencia(referencia, personal);
+    const personaId = textoId(persona?.id);
+    if (!personaId) return;
+    if (fuentes.has(personaId)) {
+      errores.push({ codigo: "PERSONA_DUPLICADA_EN_BASE", personaId });
+      return;
+    }
+    fuentes.set(personaId, clave);
+    referenciasPorPersona.set(personaId, clonarReferencia(referencia));
+  });
+
+  asignaciones.forEach(({ sectorId, personaId }) => {
+    const fila = filasPorSector.get(sectorId);
+    const claveDestino = resolverClaveDistribucionParaFila({
+      distribucion: original,
+      fila
+    });
+    if (claveDestino === null) {
+      errores.push({ codigo: "SECTOR_AUSENTE_EN_BASE", sectorId });
+    } else {
+      destinos.set(personaId, claveDestino);
+    }
+    if (!fuentes.has(personaId)) {
+      errores.push({ codigo: "PERSONA_AUSENTE_EN_BASE", personaId });
+    }
+  });
+
+  if (errores.length > 0) {
+    return {
+      ok: false,
+      codigo: "BASE_INCOMPATIBLE_CON_ASIGNACIONES_FIJAS",
+      errores,
+      distribucion: original,
+      clavesFijas: []
+    };
+  }
+
+  const aristas = new Map();
+  asignaciones.forEach(({ personaId }) => {
+    aristas.set(fuentes.get(personaId), destinos.get(personaId));
+  });
+  const clavesDestino = new Set(destinos.values());
+  const resultado = clonarDistribucion(original);
+
+  [...aristas.keys()]
+    .filter((claveFuente) => !clavesDestino.has(claveFuente))
+    .sort()
+    .forEach((inicio) => {
+      let final = inicio;
+      const visitadas = new Set();
+      while (aristas.has(final) && !visitadas.has(final)) {
+        visitadas.add(final);
+        final = aristas.get(final);
+      }
+      resultado[inicio] = clonarReferencia(original[final] ?? "");
+    });
+
+  asignaciones.forEach(({ personaId }) => {
+    resultado[destinos.get(personaId)] = clonarReferencia(
+      referenciasPorPersona.get(personaId)
+    );
+  });
+
+  const identidadesAntes = obtenerIdentidadesDistribucion(original, personal);
+  const identidadesDespues = obtenerIdentidadesDistribucion(resultado, personal);
+  const fijasCorrectas = asignaciones.every(({ personaId }) =>
+    obtenerIdentidadReferencia(resultado[destinos.get(personaId)], personal) === personaId
+  );
+  const sinDuplicados = new Set(identidadesDespues).size === identidadesDespues.length;
+  if (
+    !fijasCorrectas ||
+    !sinDuplicados ||
+    identidadesAntes.length !== identidadesDespues.length ||
+    identidadesAntes.some((personaId, indice) => personaId !== identidadesDespues[indice])
+  ) {
+    return {
+      ok: false,
+      codigo: "INVARIANTES_ASIGNACIONES_FIJAS",
+      errores: [{ codigo: "DISTRIBUCION_NO_CONSERVADA" }],
+      distribucion: original,
+      clavesFijas: []
+    };
+  }
+
+  return {
+    ok: true,
+    distribucion: resultado,
+    clavesFijas: [...clavesDestino].sort(),
+    errores: []
+  };
+};
+
+export class ErrorGeneracionAsignacionesFijas extends Error {
+  constructor(resultado) {
+    super("No se pudo generar la Planilla porque las asignaciones fijas son inválidas.");
+    this.name = "ErrorGeneracionAsignacionesFijas";
+    this.codigo = resultado?.codigo || "ASIGNACIONES_FIJAS_INVALIDAS";
+    this.errores = Array.isArray(resultado?.errores) ? resultado.errores : [];
+  }
+}

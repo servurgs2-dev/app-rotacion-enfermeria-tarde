@@ -1,5 +1,5 @@
 import { configuracionSectores } from "../data/sectores.js";
-import { normalizarAsignacionesFijasMensuales } from "./asignacionesFijasMensuales.js";
+import { normalizarAsignacionesFijasMensuales } from "./modeloAsignacionesFijasMensuales.js";
 import { normalizar } from "./texto.js";
 
 export const TIPOS_FILA_PLANILLA = Object.freeze({

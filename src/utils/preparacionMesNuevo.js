@@ -29,6 +29,7 @@ import {
   crearBorradoresConfiguracionPlanilla,
   validarBorradoresConfiguracionPlanilla
 } from "./plantillasConfiguracionPlanilla.js";
+import { validarAsignacionesFijasMensuales } from "./asignacionesFijasMensuales.js";
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -502,16 +503,40 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
     mesOrigen: analisis.mesOrigen
   });
   if (!validacionBorradores.ok) return validacionBorradores;
+  for (const categoria of ["enfermero", "licenciado"]) {
+    const borrador = validacionBorradores.borradores[categoria];
+    const validacionFijas = validarAsignacionesFijasMensuales({
+      asignaciones: borrador.asignacionesFijas,
+      personal: analisis.personal,
+      categoria,
+      filas: borrador.filas
+    });
+    if (!validacionFijas.valido) {
+      return {
+        ok: false,
+        codigo: "ASIGNACIONES_FIJAS_INVALIDAS",
+        categoria,
+        errores: validacionFijas.errores,
+        mensaje: `Revisá las asignaciones fijas de ${
+          categoria === "enfermero" ? "Enfermeros" : "Licenciados"
+        } antes de preparar el mes.`
+      };
+    }
+  }
   const configuracionPlanilla = Object.fromEntries(
     ["enfermero", "licenciado"].map((categoria) => [
       categoria,
-      analisis.configuracionPlanillaDestino?.[categoria] ||
-        crearSnapshotConfiguracionPlanillaDesdeFilas({
+      (() => {
+        const borrador = validacionBorradores.borradores[categoria];
+        const destinoExistente = analisis.configuracionPlanillaDestino?.[categoria];
+        return crearSnapshotConfiguracionPlanillaDesdeFilas({
           turno: analisis.turnoId,
           categoria,
           mes: analisis.mesDestino,
-          filas: validacionBorradores.borradores[categoria].filas
-        })
+          filas: destinoExistente?.filas || borrador.filas,
+          asignacionesFijas: borrador.asignacionesFijas
+        });
+      })()
     ])
   );
   const posicionAdicionalActiva = (categoria, etiqueta) =>

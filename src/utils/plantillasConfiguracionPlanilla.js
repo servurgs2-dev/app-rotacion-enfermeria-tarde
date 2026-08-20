@@ -2,6 +2,7 @@ import {
   obtenerConfiguracionLegacyPlanilla,
   obtenerConfiguracionPlanillaEfectiva
 } from "./configuracionPlanilla.js";
+import { normalizarAsignacionesFijasMensuales } from "./modeloAsignacionesFijasMensuales.js";
 
 export const CATEGORIAS_PLANTILLA_PLANILLA = Object.freeze([
   "enfermero",
@@ -28,7 +29,10 @@ const crearBorradorCategoria = ({ estadoMensual, turno, categoria, mes }) => {
     turnoId: turno,
     categoria,
     mesOrigen: mes,
-    filas: filasFuente.map(copiarFila).sort((a, b) => a.orden - b.orden)
+    filas: filasFuente.map(copiarFila).sort((a, b) => a.orden - b.orden),
+    asignacionesFijas: normalizarAsignacionesFijasMensuales(
+      efectiva?.asignacionesFijas
+    )
   };
 };
 
@@ -156,6 +160,9 @@ export const validarBorradorConfiguracionPlanilla = ({
       mesOrigen: borrador.mesOrigen,
       filas: normalizarOrdenFilasBorrador(
         [...borrador.filas].sort((a, b) => a.orden - b.orden)
+      ),
+      asignacionesFijas: normalizarAsignacionesFijasMensuales(
+        borrador.asignacionesFijas
       )
     }
   };

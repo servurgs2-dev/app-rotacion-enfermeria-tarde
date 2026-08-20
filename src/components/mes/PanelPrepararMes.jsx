@@ -1,4 +1,5 @@
 import ConfiguracionPlanilla from "../configuracion/ConfiguracionPlanilla.jsx";
+import AsignacionesFijasMes from "./AsignacionesFijasMes.jsx";
 
 function PanelPrepararMes({
   analisis,
@@ -99,6 +100,17 @@ function PanelPrepararMes({
             borradores={borradoresConfiguracionPlanilla}
             onActualizarBorrador={onActualizarBorradorConfiguracionPlanilla}
           />
+        </section>
+
+        <section className="mt-4 rounded-xl border border-slate-200 p-4">
+          <h4 className="font-semibold text-slate-900">Asignaciones fijas del mes</h4>
+          <div className="mt-3">
+            <AsignacionesFijasMes
+              borradores={borradoresConfiguracionPlanilla}
+              personal={analisis.personal}
+              onActualizarBorrador={onActualizarBorradorConfiguracionPlanilla}
+            />
+          </div>
         </section>
 
         <section className="mt-4 rounded-xl border border-slate-200 p-4 text-sm">

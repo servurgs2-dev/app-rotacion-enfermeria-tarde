@@ -79,6 +79,7 @@ import {
   obtenerFilaSaludMentalActiva,
   obtenerReferenciaSaludMental
 } from "../../utils/saludMentalGeneracion.js";
+import { ErrorGeneracionAsignacionesFijas } from "../../utils/asignacionesFijasMensuales.js";
 
 function PlanillaMensual({
   personal,
@@ -92,6 +93,17 @@ function PlanillaMensual({
   soloLectura = false,
   versionHistoricaActiva = false
 }) {
+  const generarRotacionSemanalSegura = (argumentos) => {
+    try {
+      return generarRotacionMensual(argumentos);
+    } catch (error) {
+      if (!(error instanceof ErrorGeneracionAsignacionesFijas)) throw error;
+      alert(
+        "No se pudo generar la Planilla porque una asignación fija no coincide con la base actual. Revisá la configuración del mes."
+      );
+      return null;
+    }
+  };
   const personalSeguro = Array.isArray(personal) ? personal : [];
   const personalFiltrado = personalSeguro.filter((p) => p.categoria === tipo);
   const idsDuplicados = obtenerIdsPersonalDuplicados(personalSeguro);
@@ -305,10 +317,9 @@ function PlanillaMensual({
         };
       });
     } else {
-      setPlanilla((prev) => ({
-        ...generarRotacionMensual({
+      const generada = generarRotacionSemanalSegura({
           planilla: adaptarPlanillaSaludMental({
-            planilla: prev,
+            planilla,
             filasConfiguracion
           }),
           filas,
@@ -322,9 +333,12 @@ function PlanillaMensual({
           categoria: tipo,
           personal: personalFiltrado,
           posicionesNoAplicables
-        }),
+        });
+      if (!generada) return;
+      setPlanilla({
+        ...generada,
         generacionFlexible: metadata
-      }));
+      });
     }
 
     setPreparacionFlexible(null);
@@ -466,9 +480,9 @@ function PlanillaMensual({
       return;
     }
 
-    setPlanilla((prev) => generarRotacionMensual({
+    const generada = generarRotacionSemanalSegura({
       planilla: adaptarPlanillaSaludMental({
-        planilla: prev,
+        planilla,
         filasConfiguracion
       }),
       filas,
@@ -481,7 +495,8 @@ function PlanillaMensual({
       filasConfiguracion,
       categoria: tipo,
       personal: personalFiltrado
-    }));
+    });
+    if (generada) setPlanilla(generada);
   }
 
   function actualizarCelda(periodo, sector, personaId) {

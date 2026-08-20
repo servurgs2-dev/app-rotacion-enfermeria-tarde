@@ -1,4 +1,5 @@
 import { configuracionSectores } from "../data/sectores.js";
+import { normalizarAsignacionesFijasMensuales } from "./asignacionesFijasMensuales.js";
 import { normalizar } from "./texto.js";
 
 export const TIPOS_FILA_PLANILLA = Object.freeze({
@@ -107,7 +108,8 @@ export const copiarSnapshotConfiguracionPlanilla = (snapshot) => ({
   turnoId: snapshot.turnoId,
   categoria: snapshot.categoria,
   mes: snapshot.mes,
-  filas: snapshot.filas.map(copiarFilaSnapshot)
+  filas: snapshot.filas.map(copiarFilaSnapshot),
+  asignacionesFijas: normalizarAsignacionesFijasMensuales(snapshot.asignacionesFijas)
 });
 
 export const adaptarConfiguracionLegacyPlanilla = (configuracion = {}, tipoSolicitado = "") => {
@@ -170,7 +172,8 @@ export const crearSnapshotConfiguracionPlanilla = ({
     turnoId,
     categoria: categoriaNormalizada,
     mes: mesNormalizado,
-    filas
+    filas,
+    asignacionesFijas: []
   };
 };
 
@@ -178,7 +181,8 @@ export const crearSnapshotConfiguracionPlanillaDesdeFilas = ({
   turno,
   categoria,
   mes,
-  filas
+  filas,
+  asignacionesFijas = []
 } = {}) => {
   if (!tieneTexto(turno) || !tieneTexto(categoria) || !tieneTexto(mes) || !Array.isArray(filas)) {
     throw new Error("El contexto y las filas son obligatorios para confirmar la configuración de Planilla.");
@@ -192,7 +196,8 @@ export const crearSnapshotConfiguracionPlanillaDesdeFilas = ({
     turnoId,
     categoria: categoriaNormalizada,
     mes: mesNormalizado,
-    filas: filas.map(copiarFilaSnapshot)
+    filas: filas.map(copiarFilaSnapshot),
+    asignacionesFijas: normalizarAsignacionesFijasMensuales(asignacionesFijas)
   };
 };
 
@@ -225,7 +230,8 @@ export const obtenerConfiguracionPlanillaEfectiva = ({
       estadoMensual?.planillas?.[
         categoria.trim() === "enfermero" ? "enfermeros" : "licenciados"
       ]
-    ).map(copiarFilaSnapshot)
+    ).map(copiarFilaSnapshot),
+    asignacionesFijas: []
   };
 };
 

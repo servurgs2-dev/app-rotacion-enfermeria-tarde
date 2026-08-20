@@ -4,6 +4,7 @@ import {
   referenciaIdentificaPersona,
   referenciaCorrespondeAPersona
 } from "./referenciasPersonas.js";
+import { limpiarAsignacionesFijasDePersona } from "./asignacionesFijasMensuales.js";
 import { licenciaCorrespondeAPersona } from "./licenciasPersonas.js";
 import { certificacionCorrespondeAPersona } from "./certificacionesPersonas.js";
 import { personasCompartenId } from "./extrasPersonas.js";
@@ -297,10 +298,22 @@ export const limpiarReferenciasDeCategoria = (mesData, categoria, persona) => {
     persona,
     mesData.personal || []
   );
+  const configuracionPlanilla = mesData.configuracionPlanilla || {};
+  const snapshotCategoria = configuracionPlanilla[categoria];
+  const asignacionesFijasActuales = snapshotCategoria?.asignacionesFijas;
+  const asignacionesFijasLimpias = limpiarAsignacionesFijasDePersona(
+    asignacionesFijasActuales,
+    persona?.id
+  );
+  const configuracionCambio = Array.isArray(asignacionesFijasActuales) &&
+    asignacionesFijasActuales.some(
+      (asignacion) => String(asignacion?.personaId ?? "").trim() === String(persona?.id ?? "").trim()
+    );
 
   if (
     planillaLimpia === planillas[claveCategoria] &&
-    calendarioLimpio === calendario[claveCategoria]
+    calendarioLimpio === calendario[claveCategoria] &&
+    !configuracionCambio
   ) {
     return mesData;
   }
@@ -318,7 +331,18 @@ export const limpiarReferenciasDeCategoria = (mesData, categoria, persona) => {
       ...(calendarioLimpio !== calendario[claveCategoria]
         ? { [claveCategoria]: calendarioLimpio }
         : {})
-    }
+    },
+    ...(configuracionCambio
+      ? {
+          configuracionPlanilla: {
+            ...configuracionPlanilla,
+            [categoria]: {
+              ...snapshotCategoria,
+              asignacionesFijas: asignacionesFijasLimpias
+            }
+          }
+        }
+      : {})
   };
 };
 

@@ -15,6 +15,7 @@ import {
 } from "./extrasPersonas.js";
 import { parsearFechaIsoUTC } from "./periodosRotacionPlanilla.js";
 import { normalizar } from "./texto.js";
+import { normalizarAsignacionesFijasMensuales } from "./asignacionesFijasMensuales.js";
 
 const esObjetoValido = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -333,6 +334,9 @@ export const normalizarEstadoMensual = (estado) => {
   const normalizado = clonarValor(estado);
   const planillas = esObjetoValido(normalizado.planillas) ? normalizado.planillas : {};
   const calendario = esObjetoValido(normalizado.calendario) ? normalizado.calendario : {};
+  const configuracionPlanilla = esObjetoValido(normalizado.configuracionPlanilla)
+    ? normalizado.configuracionPlanilla
+    : {};
 
   normalizado.personal = Array.isArray(normalizado.personal)
     ? normalizado.personal.map(normalizarPersona)
@@ -356,6 +360,22 @@ export const normalizarEstadoMensual = (estado) => {
     ),
     licenciados: normalizarPlanilla(planillas.licenciados, normalizado.personal)
   };
+
+  if (esObjetoValido(normalizado.configuracionPlanilla)) {
+    normalizado.configuracionPlanilla = Object.fromEntries(
+      Object.entries(configuracionPlanilla).map(([categoria, snapshot]) => [
+        categoria,
+        esObjetoValido(snapshot)
+          ? {
+              ...snapshot,
+              asignacionesFijas: normalizarAsignacionesFijasMensuales(
+                snapshot.asignacionesFijas
+              )
+            }
+          : snapshot
+      ])
+    );
+  }
 
   normalizado.calendario = {
     ...calendario,

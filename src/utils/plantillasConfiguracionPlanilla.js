@@ -3,6 +3,7 @@ import {
   obtenerConfiguracionPlanillaEfectiva
 } from "./configuracionPlanilla.js";
 import { normalizarAsignacionesFijasMensuales } from "./modeloAsignacionesFijasMensuales.js";
+import { copiarPrioridadCoberturaMensual } from "./prioridadCoberturaMensual.js";
 
 export const CATEGORIAS_PLANTILLA_PLANILLA = Object.freeze([
   "enfermero",
@@ -32,6 +33,9 @@ const crearBorradorCategoria = ({ estadoMensual, turno, categoria, mes }) => {
     filas: filasFuente.map(copiarFila).sort((a, b) => a.orden - b.orden),
     asignacionesFijas: normalizarAsignacionesFijasMensuales(
       efectiva?.asignacionesFijas
+    ),
+    prioridadCoberturaSectorIds: copiarPrioridadCoberturaMensual(
+      efectiva?.prioridadCoberturaSectorIds
     )
   };
 };
@@ -163,6 +167,9 @@ export const validarBorradorConfiguracionPlanilla = ({
       ),
       asignacionesFijas: normalizarAsignacionesFijasMensuales(
         borrador.asignacionesFijas
+      ),
+      prioridadCoberturaSectorIds: copiarPrioridadCoberturaMensual(
+        borrador.prioridadCoberturaSectorIds
       )
     }
   };

@@ -16,6 +16,7 @@ import {
 import { parsearFechaIsoUTC } from "./periodosRotacionPlanilla.js";
 import { normalizar } from "./texto.js";
 import { normalizarAsignacionesFijasMensuales } from "./asignacionesFijasMensuales.js";
+import { copiarPrioridadCoberturaMensual } from "./prioridadCoberturaMensual.js";
 
 const esObjetoValido = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -370,6 +371,9 @@ export const normalizarEstadoMensual = (estado) => {
               ...snapshot,
               asignacionesFijas: normalizarAsignacionesFijasMensuales(
                 snapshot.asignacionesFijas
+              ),
+              prioridadCoberturaSectorIds: copiarPrioridadCoberturaMensual(
+                snapshot.prioridadCoberturaSectorIds
               )
             }
           : snapshot

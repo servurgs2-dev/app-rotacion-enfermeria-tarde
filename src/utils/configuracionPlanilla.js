@@ -1,5 +1,9 @@
 import { configuracionSectores } from "../data/sectores.js";
 import { normalizarAsignacionesFijasMensuales } from "./modeloAsignacionesFijasMensuales.js";
+import {
+  copiarPrioridadCoberturaMensual,
+  obtenerPrioridadCoberturaEfectiva
+} from "./prioridadCoberturaMensual.js";
 import { normalizar } from "./texto.js";
 
 export const TIPOS_FILA_PLANILLA = Object.freeze({
@@ -109,7 +113,10 @@ export const copiarSnapshotConfiguracionPlanilla = (snapshot) => ({
   categoria: snapshot.categoria,
   mes: snapshot.mes,
   filas: snapshot.filas.map(copiarFilaSnapshot),
-  asignacionesFijas: normalizarAsignacionesFijasMensuales(snapshot.asignacionesFijas)
+  asignacionesFijas: normalizarAsignacionesFijasMensuales(snapshot.asignacionesFijas),
+  prioridadCoberturaSectorIds: copiarPrioridadCoberturaMensual(
+    snapshot.prioridadCoberturaSectorIds
+  )
 });
 
 export const adaptarConfiguracionLegacyPlanilla = (configuracion = {}, tipoSolicitado = "") => {
@@ -173,7 +180,11 @@ export const crearSnapshotConfiguracionPlanilla = ({
     categoria: categoriaNormalizada,
     mes: mesNormalizado,
     filas,
-    asignacionesFijas: []
+    asignacionesFijas: [],
+    prioridadCoberturaSectorIds: obtenerPrioridadCoberturaEfectiva({
+      filas,
+      prioridadFallback: configuracionSectores[categoriaNormalizada]?.prioridadSectoresIds
+    }).prioridadSectorIds
   };
 };
 
@@ -182,7 +193,8 @@ export const crearSnapshotConfiguracionPlanillaDesdeFilas = ({
   categoria,
   mes,
   filas,
-  asignacionesFijas = []
+  asignacionesFijas = [],
+  prioridadCoberturaSectorIds
 } = {}) => {
   if (!tieneTexto(turno) || !tieneTexto(categoria) || !tieneTexto(mes) || !Array.isArray(filas)) {
     throw new Error("El contexto y las filas son obligatorios para confirmar la configuración de Planilla.");
@@ -190,14 +202,24 @@ export const crearSnapshotConfiguracionPlanillaDesdeFilas = ({
   const turnoId = turno.trim();
   const categoriaNormalizada = categoria.trim();
   const mesNormalizado = mes.trim();
+  const filasSnapshot = filas.map(copiarFilaSnapshot);
+  const prioridadConfigurada = copiarPrioridadCoberturaMensual(
+    prioridadCoberturaSectorIds
+  );
   return {
     schemaVersion: SCHEMA_VERSION_CONFIGURACION_PLANILLA,
     versionId: `${turnoId}:${categoriaNormalizada}:${mesNormalizado}:v${SCHEMA_VERSION_CONFIGURACION_PLANILLA}`,
     turnoId,
     categoria: categoriaNormalizada,
     mes: mesNormalizado,
-    filas: filas.map(copiarFilaSnapshot),
-    asignacionesFijas: normalizarAsignacionesFijasMensuales(asignacionesFijas)
+    filas: filasSnapshot,
+    asignacionesFijas: normalizarAsignacionesFijasMensuales(asignacionesFijas),
+    prioridadCoberturaSectorIds: prioridadConfigurada.length
+      ? prioridadConfigurada
+      : obtenerPrioridadCoberturaEfectiva({
+          filas: filasSnapshot,
+          prioridadFallback: configuracionSectores[categoriaNormalizada]?.prioridadSectoresIds
+        }).prioridadSectorIds
   };
 };
 
@@ -216,7 +238,14 @@ export const obtenerConfiguracionPlanillaEfectiva = ({
     snapshot.categoria === categoria.trim() &&
     snapshot.mes === mes.trim()
   ) {
-    return copiarSnapshotConfiguracionPlanilla(snapshot);
+    const copia = copiarSnapshotConfiguracionPlanilla(snapshot);
+    if (copia.prioridadCoberturaSectorIds.length === 0) {
+      copia.prioridadCoberturaSectorIds = obtenerPrioridadCoberturaEfectiva({
+        filas: copia.filas,
+        prioridadFallback: configuracionSectores[categoria.trim()]?.prioridadSectoresIds
+      }).prioridadSectorIds;
+    }
+    return copia;
   }
 
   return {
@@ -231,7 +260,16 @@ export const obtenerConfiguracionPlanillaEfectiva = ({
         categoria.trim() === "enfermero" ? "enfermeros" : "licenciados"
       ]
     ).map(copiarFilaSnapshot),
-    asignacionesFijas: []
+    asignacionesFijas: [],
+    prioridadCoberturaSectorIds: obtenerPrioridadCoberturaEfectiva({
+      filas: obtenerFilasConfiguracionEfectivas(
+        categoria.trim(),
+        estadoMensual?.planillas?.[
+          categoria.trim() === "enfermero" ? "enfermeros" : "licenciados"
+        ]
+      ),
+      prioridadFallback: configuracionSectores[categoria.trim()]?.prioridadSectoresIds
+    }).prioridadSectorIds
   };
 };
 

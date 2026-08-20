@@ -534,7 +534,8 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
           categoria,
           mes: analisis.mesDestino,
           filas: destinoExistente?.filas || borrador.filas,
-          asignacionesFijas: borrador.asignacionesFijas
+          asignacionesFijas: borrador.asignacionesFijas,
+          prioridadCoberturaSectorIds: borrador.prioridadCoberturaSectorIds
         });
       })()
     ])

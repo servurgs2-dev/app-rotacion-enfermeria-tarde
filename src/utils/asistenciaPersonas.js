@@ -18,6 +18,15 @@ export const obtenerPersonasPrevistas = (asignaciones) => [
   ).values()
 ];
 
+export const obtenerPersonasPrevistasConAusentes = ({ asignaciones, ausentes } = {}) =>
+  obtenerPersonasPrevistas([
+    ...(Array.isArray(asignaciones) ? asignaciones : []),
+    ...(Array.isArray(ausentes) ? ausentes : []).flatMap((registro) => {
+      const persona = registro?.persona || registro;
+      return persona ? [{ enfermero: persona }] : [];
+    })
+  ]);
+
 export const obtenerEstadoAsistencia = (registros, persona) => {
   const clave = obtenerClaveIdentidadPersona(persona);
   const registro = clave && esObjeto(registros) ? registros[clave] : undefined;

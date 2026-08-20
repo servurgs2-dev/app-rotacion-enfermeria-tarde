@@ -43,6 +43,7 @@ const crearDestinosOperativos = (destinos, sectoresLegacy) => {
 
 export const crearResumenTurno = ({
   asignaciones = [],
+  personasPrevistas,
   asistencia = {},
   libres = [],
   licencias = [],
@@ -56,7 +57,9 @@ export const crearResumenTurno = ({
   sectoresCriticos = [],
   sectoresSaludMental = []
 } = {}) => {
-  const previstas = obtenerPersonasPrevistas(asignaciones);
+  const previstas = Array.isArray(personasPrevistas)
+    ? obtenerPersonasPrevistas(personasPrevistas.map((persona) => ({ enfermero: persona })))
+    : obtenerPersonasPrevistas(asignaciones);
   const resumenAsistencia = resumirAsistencia(previstas, asistencia);
   const clavesLibres = clavesPersonas(libres);
   const clavesLicencias = clavesPersonas(licencias);

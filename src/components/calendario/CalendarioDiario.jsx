@@ -59,7 +59,7 @@ import {
 import {
   ESTADOS_ASISTENCIA,
   obtenerEstadoAsistencia,
-  obtenerPersonasPrevistas
+  obtenerPersonasPrevistasConAusentes
 } from "../../utils/asistenciaPersonas.js";
 import {
   cambiarAsistenciaCalendario,
@@ -164,6 +164,8 @@ import {
   incorporarDestinosDinamicosAlOrden,
   resolverDestinosDinamicosCalendario
 } from "../../utils/destinosDinamicosCalendario.js";
+
+const ASISTENCIA_VACIA = Object.freeze({});
 
 const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
   const clave = obtenerClaveIdentidadPersona({
@@ -324,7 +326,7 @@ const mensajeErrorResponsable = errorResponsable.contexto === contextoResponsabl
   ? errorResponsable.mensaje
   : "";
 const licenciadosResponsables = obtenerResponsablesCierre(personal);
-const asistenciaFecha = asistenciaDia[keyDia] || {};
+const asistenciaFecha = asistenciaDia[keyDia] || ASISTENCIA_VACIA;
 const ausentesDelDia = obtenerAusentesDelDia({
   registros: asistenciaFecha,
   personal: [
@@ -1529,6 +1531,11 @@ const quitarCertificacionRapida = (certificacion) => {
   }));
 };
 
+const personasPrevistas = obtenerPersonasPrevistasConAusentes({
+  asignaciones: asignacionOrdenada,
+  ausentes: ausentesDelDia
+});
+
 useEffect(() => {
   const asignacionesParaPDF = asignacionOrdenada.map((item) => {
     if (item.tipo === "divider" || item.enfermero) return item;
@@ -1564,6 +1571,8 @@ useEffect(() => {
     libres: libresParaPDF,
     resumenInicio: {
       asignaciones: asignacionOrdenada,
+      personasPrevistas,
+      asistencia: asistenciaFecha,
       libres: libresParaPDF,
       ausentes: [
         ...ausentesDelDia.map((registro) => registro.persona).filter(Boolean),
@@ -1591,6 +1600,7 @@ useEffect(() => {
   }
 }, [
   asignacionOrdenada,
+  asistenciaFecha,
   ausentesDelDia,
   certificados,
   esDiaParo,
@@ -1603,11 +1613,11 @@ useEffect(() => {
   noDisponiblesPresentacion,
   onDataReady,
   personalFiltrado,
+  personasPrevistas,
   sectoresCriticos,
   sectoresCriticosIds
 ]);
 
-  const personasPrevistas = obtenerPersonasPrevistas(asignacionOrdenada);
   const datosResumenTurno = (() => {
     const hayFilasDivididas = tipo === "licenciado" &&
       asignacionOrdenada.filter(esDestinoSinteticoReanimacionSillones).length === 2;
@@ -1658,6 +1668,7 @@ useEffect(() => {
   })();
   const resumenTurno = crearResumenTurno({
     asignaciones: asignacionOrdenada,
+    personasPrevistas,
     asistencia: asistenciaFecha,
     ...datosResumenTurno
   });

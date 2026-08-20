@@ -1,5 +1,8 @@
 import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
-import { obtenerPersonasPrevistas } from "./asistenciaPersonas.js";
+import {
+  obtenerPersonasPrevistas,
+  resumirAsistencia
+} from "./asistenciaPersonas.js";
 import { construirReporteNovedades } from "./reporteNovedades.js";
 import { normalizar } from "./texto.js";
 
@@ -26,8 +29,15 @@ export const crearResumenCategoriaInicio = (datos = {}) => {
   const libres = personasUnicas(datos.libres);
   const extras = personasUnicas(datos.extras);
   const sinAsignar = obtenerSinAsignar(datos.asignaciones);
+  const personasPrevistas = Array.isArray(datos.personasPrevistas)
+    ? personasUnicas(datos.personasPrevistas)
+    : obtenerPersonasPrevistas(datos.asignaciones);
+  const asistencia = resumirAsistencia(personasPrevistas, datos.asistencia);
   return {
-    previstos: obtenerPersonasPrevistas(datos.asignaciones).length,
+    previstos: asistencia.previstos,
+    presentes: asistencia.presente,
+    pendientes: asistencia.pendiente,
+    ausentesAsistencia: asistencia.ausente,
     ausentes: ausentes.length,
     libres: libres.length,
     extras: extras.length,

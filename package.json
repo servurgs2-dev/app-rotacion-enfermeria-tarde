@@ -40,6 +40,7 @@
     "test:asignaciones-fijas-mensuales": "node tests/asignaciones-fijas-mensuales.test.mjs",
     "test:asignaciones-fijas-preparacion": "node tests/asignaciones-fijas-preparacion.test.mjs",
     "test:prioridad-cobertura-mensual": "node tests/prioridad-cobertura-mensual.test.mjs",
+    "test:calendario-prioridad-cobertura-mensual": "node tests/calendario-prioridad-cobertura-mensual.test.mjs",
     "test:resumen-asistencia-calendario": "node tests/resumen-asistencia-calendario.test.mjs",
     "test:correo-pdf": "node tests/correo-pdf.test.mjs",
     "test:configuracion-planilla": "node tests/configuracion-planilla.test.mjs",

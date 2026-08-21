@@ -3,6 +3,7 @@ import { configuracionSectores } from "../../data/sectores";
 import {
   obtenerConfiguracionPlanillaEfectiva
 } from "../../utils/configuracionPlanilla.js";
+import { obtenerPrioridadCoberturaEfectiva } from "../../utils/prioridadCoberturaMensual.js";
 import { resolverEstructuraCalendario } from "../../utils/estructuraCalendario.js";
 import {
   obtenerConfiguracionTurno,
@@ -238,7 +239,7 @@ const {
     sectoresBajaPrioridad = [],
     prioridadSectores = [],
     sectoresCriticosIds = [],
-    prioridadSectoresIds = [],
+    prioridadSectoresIds: prioridadSectoresIdsFallback = [],
     sectoresDonantesIds = [],
     sectoresParo = [],
     prioridadesParo = {},
@@ -254,6 +255,11 @@ const {
     }),
     [estadoMensual, mesActivo, tipo, turnoActivo]
   );
+  const prioridadCoberturaEfectivaIds = obtenerPrioridadCoberturaEfectiva({
+    prioridadConfigurada: configuracionEfectiva?.prioridadCoberturaSectorIds,
+    filas: configuracionEfectiva?.filas,
+    prioridadFallback: prioridadSectoresIdsFallback
+  }).prioridadSectorIds;
   const estructuraCalendario = resolverEstructuraCalendario({
     configuracionEfectiva,
     ordenVisualLegacy: ordenVisual
@@ -782,7 +788,7 @@ const resolucionOperativa = resolverTurnantesYCoberturasOperativas({
   esPersonaDisponible: (persona) => !estaAusente(persona),
   esPersonaDisponibleParaCobertura: puedeAplicarseCoberturaDirecta,
   prioridadSectorIds: tipo === "enfermero" && !esDiaParo
-    ? prioridadSectoresIds
+    ? prioridadCoberturaEfectivaIds
     : [],
   sectorIdsDonantes: tipo === "enfermero" && !esDiaParo
     ? sectoresDonantesIds
@@ -825,7 +831,7 @@ let asignacionBase = resolucionOperativa.asignaciones;
   } else if (tipo !== "enfermero") {
     asignacionBase = aplicarPrioridadGeneralPorSectorId({
       asignaciones: asignacionBase,
-      prioridadSectorIds: prioridadSectoresIds,
+      prioridadSectorIds: prioridadCoberturaEfectivaIds,
       esPersonaDisponible: (persona) => !estaAusente(persona)
     });
   }

@@ -26,6 +26,15 @@ const probar = async (nombre, prueba) => {
   console.log(`✓ ${nombre}`);
 };
 
+const extraerFuncionConst = (fuente, nombre) => {
+  const inicio = fuente.indexOf(`const ${nombre}`);
+  assert.notEqual(inicio, -1, `No se encontró ${nombre}`);
+  const resto = fuente.slice(inicio);
+  const cierre = resto.search(/\r?\n};(?:\r?\n|$)/);
+  assert.notEqual(cierre, -1, `No se encontró el cierre de ${nombre}`);
+  return resto.slice(0, cierre + 3);
+};
+
 const filasEnf = obtenerFilasPlanilla(configuracionSectores.enfermero);
 const filasLic = obtenerFilasPlanilla(configuracionSectores.licenciado);
 const personasEnf = filasEnf.map((_, indice) => ({
@@ -524,15 +533,14 @@ await probar("76 persona duplicada bloquea", () => {
 });
 await probar("77 conserva validación entre turnos", () => assert.match(app, /validarPersonasDisponiblesEnOtrosTurnos/));
 await probar("78 confirmación usa una actualización funcional", () => {
-  const inicio = app.indexOf("const confirmarPreparacionMes");
-  const fin = inicio + app.slice(inicio).search(/\r?\n\r?\nreturn \(/);
-  const bloque = app.slice(inicio, fin);
-  assert.equal((bloque.match(/setEstadoPorTurnoMes\(\(prev\)/g) || []).length, 1);
+  const bloque = extraerFuncionConst(app, "confirmarPreparacionMes");
+  const actualizacionesFuncionales = bloque.match(
+    /setEstadoPorTurnoMes\s*\(\s*\(\s*[A-Za-z_$][\w$]*\s*\)\s*=>/g
+  ) || [];
+  assert.equal(actualizacionesFuncionales.length, 1);
 });
 await probar("79 no usa setters separados", () => {
-  const inicio = app.indexOf("const confirmarPreparacionMes");
-  const fin = inicio + app.slice(inicio).search(/\r?\n\r?\nreturn \(/);
-  const bloque = app.slice(inicio, fin);
+  const bloque = extraerFuncionConst(app, "confirmarPreparacionMes");
   assert.doesNotMatch(bloque, /setPlanillaEnfermeros|setPlanillaLicenciados|setLicencias|setCertificaciones/);
 });
 await probar("80 autosave CAS permanece", () => assert.match(app, /guardarEstadoTurnoMesConRevision/));

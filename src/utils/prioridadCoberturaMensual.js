@@ -24,6 +24,61 @@ export const normalizarPrioridadCoberturaConfigurada = (prioridad) => {
 export const copiarPrioridadCoberturaMensual = (prioridad) =>
   [...normalizarPrioridadCoberturaConfigurada(prioridad)];
 
+export const actualizarPrioridadCoberturaEnEstadoMensual = ({
+  estadoMensual,
+  categoria,
+  prioridadCoberturaSectorIds
+} = {}) => {
+  const categoriaNormalizada = typeof categoria === "string" ? categoria.trim() : "";
+  const snapshot = estadoMensual?.configuracionPlanilla?.[categoriaNormalizada];
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    return { ok: false, codigo: "SNAPSHOT_CONFIGURACION_INEXISTENTE", estado: estadoMensual };
+  }
+  const prioridadNormalizada = copiarPrioridadCoberturaMensual(
+    prioridadCoberturaSectorIds
+  );
+  const prioridadActual = copiarPrioridadCoberturaMensual(
+    snapshot.prioridadCoberturaSectorIds
+  );
+  if (
+    prioridadActual.length === prioridadNormalizada.length &&
+    prioridadActual.every((sectorId, indice) => sectorId === prioridadNormalizada[indice])
+  ) {
+    return { ok: true, estado: estadoMensual };
+  }
+  return {
+    ok: true,
+    estado: {
+      ...estadoMensual,
+      configuracionPlanilla: {
+        ...estadoMensual.configuracionPlanilla,
+        [categoriaNormalizada]: {
+          ...snapshot,
+          prioridadCoberturaSectorIds: prioridadNormalizada
+        }
+      }
+    }
+  };
+};
+
+export const moverSectorEnPrioridadCobertura = ({
+  prioridad,
+  sectorId,
+  direccion
+} = {}) => {
+  const normalizada = normalizarPrioridadCoberturaConfigurada(prioridad);
+  const id = normalizarSectorId(sectorId);
+  const indice = normalizada.indexOf(id);
+  const desplazamiento = direccion === "arriba" ? -1 : direccion === "abajo" ? 1 : 0;
+  const destino = indice + desplazamiento;
+  if (indice < 0 || desplazamiento === 0 || destino < 0 || destino >= normalizada.length) {
+    return normalizada;
+  }
+  const resultado = [...normalizada];
+  [resultado[indice], resultado[destino]] = [resultado[destino], resultado[indice]];
+  return resultado;
+};
+
 export const obtenerPrioridadCoberturaEfectiva = ({
   prioridadConfigurada,
   filas,

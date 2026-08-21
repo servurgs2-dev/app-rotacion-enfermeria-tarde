@@ -25,6 +25,7 @@ import Estadisticas from "./components/estadisticas/Estadisticas";
 import HistorialCambios from "./components/historial/HistorialCambios";
 import PanelConflictoEdicion from "./components/concurrencia/PanelConflictoEdicion";
 import PanelPrepararMes from "./components/mes/PanelPrepararMes";
+import PanelPrioridadCoberturaMes from "./components/mes/PanelPrioridadCoberturaMes";
 import PanelReiniciarMes from "./components/mes/PanelReiniciarMes";
 import SelectorTurno from "./components/turnos/SelectorTurno";
 import {
@@ -125,6 +126,11 @@ import {
 } from "./utils/restauracionHistorial.js";
 import { reiniciarMesEnEstado } from "./utils/limpiezaSegura.js";
 import { validarBorradoresConfiguracionPlanilla } from "./utils/plantillasConfiguracionPlanilla.js";
+import { esSnapshotConfiguracionPlanillaValido } from "./utils/configuracionPlanilla.js";
+import {
+  actualizarPrioridadCoberturaEnEstadoMensual,
+  copiarPrioridadCoberturaMensual
+} from "./utils/prioridadCoberturaMensual.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
@@ -190,6 +196,7 @@ const [cerrandoSesion, setCerrandoSesion] = useState(false);
 const [errorCierreSesion, setErrorCierreSesion] = useState("");
 const [preparacionMes, setPreparacionMes] = useState(null);
 const [reinicioMes, setReinicioMes] = useState(null);
+const [edicionPrioridadCobertura, setEdicionPrioridadCobertura] = useState(null);
 const [novedadesPersonal, setNovedadesPersonal] = useState([]);
 const [cargandoNovedades, setCargandoNovedades] = useState(false);
 const [errorNovedades, setErrorNovedades] = useState("");
@@ -1922,6 +1929,106 @@ const confirmarPreparacionMes = () => {
   setEstadoGuardado("pending");
 };
 
+const abrirEdicionPrioridadCobertura = () => {
+  const metadatos = metadatosPorClaveRef.current.get(claveActiva);
+  const estadoEsperado = estadoPorTurnoMesRef.current[claveActiva];
+  const configuraciones = estadoEsperado?.configuracionPlanilla;
+  const categorias = ["enfermero", "licenciado"];
+  const snapshotsValidos = categorias.every((categoria) => {
+    const snapshot = configuraciones?.[categoria];
+    return esSnapshotConfiguracionPlanillaValido(snapshot) &&
+      snapshot.turnoId === turnoActivo && snapshot.mes === mesActivo;
+  });
+  if (
+    !claveActiva || destinoActivoPreparacion.permitido || !snapshotsValidos ||
+    !puedeEditarActivo || modoSoloLecturaEfectiva || cargandoRef.current ||
+    erroresCargaRef.current.has(claveActiva) || metadatos?.conflicto ||
+    clavesBloqueadasTrasRestauracionRef.current.has(claveActiva) ||
+    hayPendientesEnClave(claveActiva) || !String(metadatos?.revisionConfirmada ?? "")
+  ) return;
+  setEdicionPrioridadCobertura({
+    turnoId: turnoActivo,
+    mesActivo,
+    clave: claveActiva,
+    revision: String(metadatos.revisionConfirmada),
+    estadoEsperado,
+    borradores: Object.fromEntries(categorias.map((categoria) => {
+      const snapshot = configuraciones[categoria];
+      return [categoria, {
+        filas: snapshot.filas.map((fila) => ({ ...fila })),
+        prioridadCoberturaSectorIds: copiarPrioridadCoberturaMensual(
+          snapshot.prioridadCoberturaSectorIds
+        )
+      }];
+    })),
+    error: ""
+  });
+};
+
+const actualizarBorradorPrioridadCobertura = (categoria, prioridad) => {
+  setEdicionPrioridadCobertura((actual) => actual?.borradores?.[categoria] ? {
+    ...actual,
+    borradores: {
+      ...actual.borradores,
+      [categoria]: {
+        ...actual.borradores[categoria],
+        prioridadCoberturaSectorIds: copiarPrioridadCoberturaMensual(prioridad)
+      }
+    }
+  } : actual);
+};
+
+const guardarPrioridadCoberturaMesPreparado = () => {
+  if (!edicionPrioridadCobertura) return;
+  const metadatos = metadatosPorClaveRef.current.get(edicionPrioridadCobertura.clave);
+  const estadoActual = estadoPorTurnoMesRef.current[edicionPrioridadCobertura.clave];
+  const contextoValido =
+    edicionPrioridadCobertura.turnoId === turnoActivo &&
+    edicionPrioridadCobertura.mesActivo === mesActivo &&
+    edicionPrioridadCobertura.clave === claveActiva &&
+    edicionPrioridadCobertura.revision === String(metadatos?.revisionConfirmada ?? "") &&
+    edicionPrioridadCobertura.estadoEsperado === estadoActual &&
+    puedeEditarActivo && !modoSoloLecturaEfectiva && !cargandoRef.current &&
+    !erroresCargaRef.current.has(claveActiva) && !metadatos?.conflicto &&
+    !clavesBloqueadasTrasRestauracionRef.current.has(claveActiva) &&
+    !hayPendientesEnClave(claveActiva) &&
+    !clasificarEstadoMesDestino({
+      existeRemoto: metadatos?.existeRemoto === true,
+      estado: estadoActual
+    }).permitido;
+  if (!contextoValido) {
+    setEdicionPrioridadCobertura((actual) => ({
+      ...actual,
+      error: "El estado del mes cambió. Cancelá y volvé a abrir el editor."
+    }));
+    return;
+  }
+  let resultado = { ok: true, estado: estadoActual };
+  ["enfermero", "licenciado"].forEach((categoria) => {
+    if (!resultado.ok) return;
+    resultado = actualizarPrioridadCoberturaEnEstadoMensual({
+      estadoMensual: resultado.estado,
+      categoria,
+      prioridadCoberturaSectorIds:
+        edicionPrioridadCobertura.borradores[categoria].prioridadCoberturaSectorIds
+    });
+  });
+  if (!resultado.ok) {
+    setEdicionPrioridadCobertura((actual) => ({
+      ...actual,
+      error: "No se pudo actualizar la prioridad porque falta la configuración mensual."
+    }));
+    return;
+  }
+  if (resultado.estado !== estadoActual) {
+    setEstadoPorTurnoMes((prev) => prev[claveActiva] === estadoActual
+      ? { ...prev, [claveActiva]: resultado.estado }
+      : prev);
+    setEstadoGuardado("pending");
+  }
+  setEdicionPrioridadCobertura(null);
+};
+
 const actualizarBorradorConfiguracionPlanilla = (categoria, actualizador) => {
   setPreparacionMes((actual) => {
     if (actual?.estado !== "lista" || !actual.borradoresConfiguracionPlanilla?.[categoria]) {
@@ -2333,21 +2440,41 @@ return (
                 </div>
               )}
               {puedeEditarActivo && !modoSoloLecturaEfectiva && (
-                <button
-                  type="button"
-                  onClick={abrirReinicioMes}
-                  disabled={
-                    cargando ||
-                    Boolean(metadatosActivos?.conflicto) ||
-                    clavesBloqueadasTrasRestauracion.has(claveActiva) ||
-                    hayPendientesEnClave(claveActiva)
-                  }
-                  className="mt-4 rounded-lg border border-red-300 bg-white px-4 py-2 font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
-                >
-                  Reiniciar mes completo
-                </button>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <button type="button" onClick={abrirEdicionPrioridadCobertura}
+                    disabled={cargando || Boolean(metadatosActivos?.conflicto) ||
+                      clavesBloqueadasTrasRestauracion.has(claveActiva) ||
+                      hayPendientesEnClave(claveActiva)}
+                    className="min-h-11 rounded-lg border border-blue-300 bg-white px-4 py-2 font-medium text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400">
+                    Editar prioridad de cobertura
+                  </button>
+                  <button
+                    type="button"
+                    onClick={abrirReinicioMes}
+                    disabled={
+                      cargando ||
+                      Boolean(metadatosActivos?.conflicto) ||
+                      clavesBloqueadasTrasRestauracion.has(claveActiva) ||
+                      hayPendientesEnClave(claveActiva)
+                    }
+                    className="rounded-lg border border-red-300 bg-white px-4 py-2 font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                  >
+                    Reiniciar mes completo
+                  </button>
+                </div>
               )}
             </div>
+          )}
+          {edicionPrioridadCobertura?.clave === claveActiva && (
+            <PanelPrioridadCoberturaMes
+              turnoNombre={configTurno.nombre}
+              mes={mesActivo}
+              borradores={edicionPrioridadCobertura.borradores}
+              error={edicionPrioridadCobertura.error}
+              onActualizar={actualizarBorradorPrioridadCobertura}
+              onCancelar={() => setEdicionPrioridadCobertura(null)}
+              onGuardar={guardarPrioridadCoberturaMesPreparado}
+            />
           )}
           {mesActivo === mesSiguiente &&
             destinoActivoPreparacion.permitido &&

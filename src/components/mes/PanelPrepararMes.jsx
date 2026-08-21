@@ -1,5 +1,8 @@
 import ConfiguracionPlanilla from "../configuracion/ConfiguracionPlanilla.jsx";
 import AsignacionesFijasMes from "./AsignacionesFijasMes.jsx";
+import PrioridadCoberturaMes from "./PrioridadCoberturaMes.jsx";
+
+const CATEGORIAS_PRIORIDAD = Object.freeze(["enfermero", "licenciado"]);
 
 function PanelPrepararMes({
   analisis,
@@ -100,6 +103,33 @@ function PanelPrepararMes({
             borradores={borradoresConfiguracionPlanilla}
             onActualizarBorrador={onActualizarBorradorConfiguracionPlanilla}
           />
+        </section>
+
+        <section className="mt-4 rounded-xl border border-slate-200 p-4">
+          <h4 className="font-semibold text-slate-900">Prioridad de cobertura</h4>
+          <p className="mt-2 text-sm text-slate-600">
+            Define qué sectores se intentan cubrir primero cuando faltan funcionarios.
+            No modifica la distribución base de la Planilla.
+          </p>
+          <div className="mt-4 grid gap-5 lg:grid-cols-2">
+            {CATEGORIAS_PRIORIDAD.map((categoria) => {
+              const borrador = borradoresConfiguracionPlanilla?.[categoria];
+              return (
+                <PrioridadCoberturaMes
+                  key={categoria}
+                  categoria={categoria}
+                  filas={borrador?.filas || []}
+                  prioridadCoberturaSectorIds={borrador?.prioridadCoberturaSectorIds || []}
+                  onCambiarPrioridad={(prioridadCoberturaSectorIds) =>
+                    onActualizarBorradorConfiguracionPlanilla?.(categoria, (actual) => ({
+                      ...actual,
+                      prioridadCoberturaSectorIds
+                    }))
+                  }
+                />
+              );
+            })}
+          </div>
         </section>
 
         <section className="mt-4 rounded-xl border border-slate-200 p-4">

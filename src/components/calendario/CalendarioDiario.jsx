@@ -6,18 +6,15 @@ import {
 import { obtenerPrioridadCoberturaEfectiva } from "../../utils/prioridadCoberturaMensual.js";
 import { resolverEstructuraCalendario } from "../../utils/estructuraCalendario.js";
 import {
-  obtenerConfiguracionTurno,
-  obtenerEstrategiaRotacionPlanilla
+  obtenerConfiguracionTurno
 } from "../../config/turnos.js";
 import {
   estaCertificado,
   estaDeLicencia,
   esDiaLibre,
-  keyDiaFromDate,
-  obtenerSemanasDelMes,
-  semanaKeyFromDate
+  keyDiaFromDate
 } from "../../utils/fechas";
-import { obtenerBloqueParaFecha } from "../../utils/periodosRotacionPlanilla.js";
+import { resolverPeriodoPlanillaDia } from "../../utils/periodoPlanillaDia.js";
 import { normalizar } from "../../utils/texto";
 import {
   obtenerClaveIdentidadPersona,
@@ -273,43 +270,22 @@ const {
 
 const keyDia = keyDiaFromDate(fecha);
 const periodoPlanilla = useMemo(() => {
-  const estrategia = obtenerEstrategiaRotacionPlanilla({
-    turnoId: turnoActivo,
-    tipo,
-    mesActivo
+  const resultado = resolverPeriodoPlanillaDia({
+    estadoMensual,
+    planilla,
+    fecha,
+    turno: turnoActivo,
+    categoria: tipo,
+    mes: mesActivo
   });
-
-  if (estrategia.tipo === "cada_3_dias") {
-    const bloque = obtenerBloqueParaFecha({
-      fecha: keyDia,
-      fechaBase: estrategia.fechaBase,
-      duracionDias: estrategia.duracionDias
-    });
-    const clavePeriodo = bloque?.clave || null;
-
-    return {
-      tipoPeriodo: "cada_3_dias",
-      clavePeriodo,
-      periodo: bloque,
-      planillaPeriodo: clavePeriodo
-        ? planilla?.rotacion3Dias?.bloques?.[clavePeriodo] || {}
-        : {},
-      coberturasSaludMental: planilla?.rotacion3Dias?.coberturaLibreSM || {}
-    };
-  }
-
-  const clavePeriodo = semanaKeyFromDate(fecha, mesActivo);
-  const periodo = obtenerSemanasDelMes(mesActivo).find(
-    (semana) => semana.clave === clavePeriodo
-  );
   return {
-    tipoPeriodo: "semanal",
-    clavePeriodo,
-    periodo,
-    planillaPeriodo: clavePeriodo ? planilla?.[clavePeriodo] || {} : {},
-    coberturasSaludMental: planilla?.coberturaLibreSM || {}
+    tipoPeriodo: resultado.tipoPeriodo,
+    clavePeriodo: resultado.clavePeriodo,
+    periodo: resultado.periodo,
+    planillaPeriodo: resultado.distribucion || {},
+    coberturasSaludMental: resultado.coberturasSaludMental || {}
   };
-}, [fecha, keyDia, mesActivo, planilla, tipo, turnoActivo]);
+}, [estadoMensual, fecha, mesActivo, planilla, tipo, turnoActivo]);
 const {
   clavePeriodo,
   periodo,

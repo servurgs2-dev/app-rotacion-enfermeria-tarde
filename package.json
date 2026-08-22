@@ -44,6 +44,7 @@
     "test:prioridad-cobertura-editor": "node tests/prioridad-cobertura-editor.test.mjs",
     "test:dotacion-supervision": "node tests/dotacion-supervision.test.mjs",
     "test:datos-supervision-mes": "node tests/datos-supervision-mes.test.mjs",
+    "test:cohorte-planificada-supervision": "node tests/cohorte-planificada-supervision.test.mjs",
     "test:resumen-asistencia-calendario": "node tests/resumen-asistencia-calendario.test.mjs",
     "test:correo-pdf": "node tests/correo-pdf.test.mjs",
     "test:configuracion-planilla": "node tests/configuracion-planilla.test.mjs",

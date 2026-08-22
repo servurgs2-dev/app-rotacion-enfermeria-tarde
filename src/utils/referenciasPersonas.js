@@ -1,4 +1,5 @@
 import { normalizar } from "./texto.js";
+import { normalizarFuncionarioIdentidad } from "./identidadPersonas.js";
 
 const normalizarNombreReferencia = (nombre) =>
   (normalizar(nombre) || "").replace(/\s+/g, " ");
@@ -42,6 +43,22 @@ const buscarUnicoPorNombre = (
   return elegirRepresentanteCanonico(identidad, candidatos, personalCanonico);
 };
 
+const buscarUnicoPorFuncionario = (
+  funcionario,
+  candidatos,
+  personalCanonico = candidatos
+) => {
+  const funcionarioNormalizado = normalizarFuncionarioIdentidad(funcionario);
+  if (!funcionarioNormalizado) return null;
+  const coincidencias = (Array.isArray(candidatos) ? candidatos : []).filter(
+    (persona) =>
+      normalizarFuncionarioIdentidad(persona?.funcionario) === funcionarioNormalizado
+  );
+  const ids = new Set(coincidencias.map((persona) => obtenerId(persona?.id)).filter(Boolean));
+  if (ids.size !== 1) return null;
+  return elegirRepresentanteCanonico([...ids][0], candidatos, personalCanonico);
+};
+
 export const esReferenciaPersona = (valor) =>
   esObjeto(valor) && Boolean(obtenerId(valor.personaId));
 
@@ -67,6 +84,15 @@ export const resolverPersonaDesdeReferencia = (
     const porId = elegirRepresentanteCanonico(personaId, lista, personalCanonico);
     if (porId) return porId;
     if (esObjeto(referencia)) return null;
+  }
+
+  if (esObjeto(referencia) && referencia.funcionario !== undefined) {
+    const porFuncionario = buscarUnicoPorFuncionario(
+      referencia.funcionario,
+      lista,
+      personalCanonico
+    );
+    if (porFuncionario) return porFuncionario;
   }
 
   const nombreHistorico = esObjeto(referencia)

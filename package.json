@@ -48,6 +48,7 @@
     "test:proyeccion-dotacion-supervision": "node tests/proyeccion-dotacion-supervision.test.mjs",
     "test:asistencia-supervision": "node tests/asistencia-supervision.test.mjs",
     "test:agregado-supervision-dia": "node tests/agregado-supervision-dia.test.mjs",
+    "test:proyeccion-supervision-mes": "node tests/proyeccion-supervision-mes.test.mjs",
     "test:extras-supervision-entre-turnos": "node tests/extras-supervision-entre-turnos.test.mjs",
     "test:supervision-tablero": "node tests/supervision-tablero.test.mjs",
     "test:supervision-detalle": "node tests/supervision-detalle.test.mjs",

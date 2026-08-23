@@ -28,6 +28,7 @@ import PanelPrepararMes from "./components/mes/PanelPrepararMes";
 import PanelPrioridadCoberturaMes from "./components/mes/PanelPrioridadCoberturaMes";
 import PanelReiniciarMes from "./components/mes/PanelReiniciarMes";
 import SelectorTurno from "./components/turnos/SelectorTurno";
+import VistaSupervision from "./components/supervision/VistaSupervision";
 import {
   exportarPlanillaPDF,
   exportarCalendarioPDF,
@@ -163,6 +164,7 @@ const [tabPlanilla, setTabPlanilla] = useState("enfermeros");
 const [tabCalendario, setTabCalendario] = useState("enfermeros");
 const [vistaActiva, setVistaActiva] = useState("inicio");
 const [subvistaMas, setSubvistaMas] = useState(null);
+const [vistaInicial, setVistaInicial] = useState("selector");
 
 const [fecha, setFecha] = useState(() => parsearFechaLocal(keyDiaFromDate(new Date())));
 const claveActiva = turnoActivo
@@ -1439,6 +1441,15 @@ const seleccionarTurno = (turnoId) => {
   setTurnoActivo(turnoId);
 };
 
+const abrirSupervision = () => {
+  if (!esPerfilSupervision(perfil)) return;
+  setVistaInicial("supervision");
+};
+
+const volverDesdeSupervision = () => {
+  setVistaInicial("selector");
+};
+
 const cambiarTurno = () => {
   setPreparacionMes(null);
   cargaActualRef.current = {
@@ -1544,11 +1555,27 @@ const avisoGlobalConflictos = conflictosPendientes.length > 0 && (
 );
 
 if (!turnoActivo) {
+  if (vistaInicial === "supervision" && esPerfilSupervision(perfil)) {
+    return (
+      <VistaSupervision
+        turnoActivo={turnoActivo}
+        mesActivo={mesActivo}
+        estadoActivo={null}
+        onVolver={volverDesdeSupervision}
+        controlSesion={controlSesion}
+      />
+    );
+  }
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6">
       {controlSesion}
       <div className="mx-auto mt-4 max-w-3xl">{avisoGlobalConflictos}</div>
-      <SelectorTurno turnos={TURNOS} onSeleccionar={seleccionarTurno} />
+      <SelectorTurno
+        turnos={TURNOS}
+        onSeleccionar={seleccionarTurno}
+        mostrarSupervision={esPerfilSupervision(perfil)}
+        onSeleccionarSupervision={abrirSupervision}
+      />
     </div>
   );
 }

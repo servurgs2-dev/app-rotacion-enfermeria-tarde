@@ -2,7 +2,12 @@ import { TURNOS } from "../../config/turnos.js";
 
 const ORDEN_TURNOS = ["noche", "manana", "tarde", "vespertino"];
 
-function SelectorTurno({ turnos = TURNOS, onSeleccionar }) {
+function SelectorTurno({
+  turnos = TURNOS,
+  onSeleccionar,
+  mostrarSupervision = false,
+  onSeleccionarSupervision
+}) {
   const opciones = ORDEN_TURNOS.map((turnoId) => turnos[turnoId]).filter(Boolean);
 
   return (
@@ -35,6 +40,20 @@ function SelectorTurno({ turnos = TURNOS, onSeleccionar }) {
             </button>
           ))}
         </div>
+        {mostrarSupervision && (
+          <div className="mt-6 border-t border-slate-200 pt-6">
+            <button
+              type="button"
+              onClick={onSeleccionarSupervision}
+              className="min-h-24 w-full rounded-2xl border border-indigo-200 bg-indigo-50 p-5 text-left shadow-sm transition hover:border-indigo-300 hover:bg-indigo-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/30 sm:p-6"
+            >
+              <span className="block text-xl font-bold text-indigo-950">Supervisi&oacute;n</span>
+              <span className="mt-2 block text-sm font-medium text-indigo-700">
+                Vista general del servicio
+              </span>
+            </button>
+          </div>
+        )}
       </div>
     </main>
   );

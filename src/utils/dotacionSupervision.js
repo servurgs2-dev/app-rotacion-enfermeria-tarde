@@ -227,9 +227,7 @@ export const crearMetricasDotacionSupervision = ({
   baseDisponible,
   extrasRegistrados,
   extrasQueAportan,
-  asistenciaRegistrada: {
-    presentes: asistenciaRegistrada?.presentes,
-    ausentes: asistenciaRegistrada?.ausentes,
-    pendientes: asistenciaRegistrada?.pendientes
-  }
+  asistenciaRegistrada: asistenciaRegistrada == null
+    ? null
+    : structuredClone(asistenciaRegistrada)
 });

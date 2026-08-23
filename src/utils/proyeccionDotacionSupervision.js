@@ -21,6 +21,10 @@ import {
   resolverPersonaPermanenteParaExtra
 } from "./extrasPersonas.js";
 import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
+import {
+  ESTADOS_ASISTENCIA,
+  obtenerEstadoAsistencia
+} from "./asistenciaPersonas.js";
 import { resolverPersonaDeLicencia } from "./licenciasPersonas.js";
 import { resolverPersonaDeCertificacion } from "./certificacionesPersonas.js";
 import {
@@ -243,7 +247,8 @@ const metricasNoDisponibles = (cohorte) => ({
   baseDisponible: null,
   extrasRegistrados: null,
   extrasQueAportan: null,
-  dotacionPrevistaOperativa: null
+  dotacionPrevistaOperativa: null,
+  asistenciaRegistrada: null
 });
 
 export const proyectarDotacionDiaSupervision = ({
@@ -429,6 +434,42 @@ export const proyectarDotacionDiaSupervision = ({
   );
   const extrasRegistradosPresentacion = presentarExtras(extrasPorIdentidad);
   const extrasQueAportanPresentacion = presentarExtras(extrasQueAportanPorIdentidad);
+  const registrosAsistencia = calendarioCategoria?.asistenciaDia?.[fechaDia];
+  const asistenciaFecha = registrosAsistencia && typeof registrosAsistencia === "object" &&
+    !Array.isArray(registrosAsistencia)
+    ? registrosAsistencia
+    : {};
+  const personasConsideradas = [...dotacionPorIdentidad.values()];
+  const asistenciaPorEstado = {
+    [ESTADOS_ASISTENCIA.PRESENTE]: [],
+    [ESTADOS_ASISTENCIA.AUSENTE]: [],
+    [ESTADOS_ASISTENCIA.PENDIENTE]: []
+  };
+  personasConsideradas.forEach((persona) => {
+    const estado = obtenerEstadoAsistencia(asistenciaFecha, persona);
+    asistenciaPorEstado[estado].push(personaMinima(persona));
+  });
+  const identidadesConsideradas = new Set(
+    personasConsideradas.map(obtenerClaveIdentidadPersona).filter(Boolean)
+  );
+  const registrosFueraDeDotacion = Object.entries(asistenciaFecha)
+    .filter(([clave]) => !identidadesConsideradas.has(clave))
+    .map(([clave, registro]) => ({
+      clave,
+      estado: registro && typeof registro === "object" && !Array.isArray(registro)
+        ? registro.estado
+        : registro
+    }));
+  if (registrosFueraDeDotacion.length > 0) {
+    advertencias.push({
+      codigo: "ASISTENCIA_FUERA_DE_DOTACION",
+      cantidad: registrosFueraDeDotacion.length
+    });
+  }
+  const crearGrupoAsistencia = (personas) => ({
+    cantidad: personas.length,
+    personas
+  });
 
   return {
     ...cohorte,
@@ -448,6 +489,16 @@ export const proyectarDotacionDiaSupervision = ({
     dotacionPrevistaOperativa: {
       cantidad: dotacionPorIdentidad.size,
       personas: [...dotacionPorIdentidad.values()].map(personaMinima)
+    },
+    asistenciaRegistrada: {
+      personasConsideradas: crearGrupoAsistencia(personasConsideradas.map(personaMinima)),
+      presentes: crearGrupoAsistencia(asistenciaPorEstado[ESTADOS_ASISTENCIA.PRESENTE]),
+      ausentes: crearGrupoAsistencia(asistenciaPorEstado[ESTADOS_ASISTENCIA.AUSENTE]),
+      pendientes: crearGrupoAsistencia(asistenciaPorEstado[ESTADOS_ASISTENCIA.PENDIENTE]),
+      registrosFueraDeDotacion: {
+        cantidad: registrosFueraDeDotacion.length,
+        registros: registrosFueraDeDotacion
+      }
     },
     advertencias
   };

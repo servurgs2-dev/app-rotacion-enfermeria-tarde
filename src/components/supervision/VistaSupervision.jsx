@@ -6,6 +6,7 @@ import {
   TURNOS_AGREGADO_SUPERVISION
 } from "../../utils/agregadoSupervisionDia.js";
 import { keyDiaFromDate, parsearFechaLocal } from "../../utils/fechas.js";
+import DetalleCategoriaSupervision from "./DetalleCategoriaSupervision.jsx";
 
 const CATEGORIAS = Object.freeze([
   ["licenciado", "Licenciados"],
@@ -44,7 +45,7 @@ const RESUMEN = Object.freeze([
 
 const obtenerMesFecha = (fecha) => String(fecha || "").slice(0, 7);
 
-function CategoriaDotacion({ titulo, datos }) {
+function CategoriaDotacion({ titulo, datos, detalleId, abierto, onAlternar }) {
   const estado = datos?.estadoDotacion?.estado || "sin_datos";
   const presentacion = PRESENTACION_ESTADO[estado] || PRESENTACION_ESTADO.sin_datos;
   const cantidad = datos?.proyeccion?.dotacionPrevistaOperativa?.cantidad;
@@ -68,18 +69,45 @@ function CategoriaDotacion({ titulo, datos }) {
           M&iacute;n. {datos.umbral.minimo} &middot; &Oacute;pt. {datos.umbral.optimo}
         </p>
       )}
+      <button
+        type="button"
+        aria-expanded={abierto}
+        aria-controls={detalleId}
+        onClick={onAlternar}
+        className="mt-3 min-h-11 w-full rounded-lg border border-current/20 bg-white/70 px-3 py-2 text-sm font-bold focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-500/30"
+      >
+        {abierto ? "Ocultar detalle" : "Ver detalle"}
+      </button>
+      {abierto && (
+        <DetalleCategoriaSupervision
+          id={detalleId}
+          disponible={disponible}
+          proyeccion={datos?.proyeccion}
+        />
+      )}
     </section>
   );
 }
 
-function TarjetaTurno({ turnoId, datos }) {
+function TarjetaTurno({ turnoId, datos, detalleAbierto, onAlternarDetalle }) {
   return (
     <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <h2 className="text-lg font-extrabold text-slate-900">{TURNOS[turnoId]?.nombre || turnoId}</h2>
       <div className="mt-3 grid gap-3">
-        {CATEGORIAS.map(([categoria, titulo]) => (
-          <CategoriaDotacion key={categoria} titulo={titulo} datos={datos?.[categoria]} />
-        ))}
+        {CATEGORIAS.map(([categoria, titulo]) => {
+          const claveDetalle = `${turnoId}-${categoria}`;
+          const detalleId = `detalle-supervision-${claveDetalle}`;
+          return (
+            <CategoriaDotacion
+              key={categoria}
+              titulo={titulo}
+              datos={datos?.[categoria]}
+              detalleId={detalleId}
+              abierto={detalleAbierto === claveDetalle}
+              onAlternar={() => onAlternarDetalle(claveDetalle)}
+            />
+          );
+        })}
       </div>
     </article>
   );
@@ -93,6 +121,7 @@ function VistaSupervision({
   controlSesion = null
 }) {
   const [fecha, setFecha] = useState(() => keyDiaFromDate(new Date()));
+  const [detalleAbierto, setDetalleAbierto] = useState(null);
   const mes = obtenerMesFecha(fecha);
   const datos = useDatosSupervisionMes({
     mes,
@@ -110,10 +139,14 @@ function VistaSupervision({
   const errorTotal = Boolean(datos.errores?.estados) && !resultado.disponible;
   const erroresParciales = [datos.errores?.estados, datos.errores?.novedades]
     .filter(Boolean);
+  const cambiarFecha = (nuevaFecha) => {
+    setDetalleAbierto(null);
+    setFecha(nuevaFecha);
+  };
   const moverDia = (dias) => {
     const siguiente = parsearFechaLocal(fecha);
     siguiente.setDate(siguiente.getDate() + dias);
-    setFecha(keyDiaFromDate(siguiente));
+    cambiarFecha(keyDiaFromDate(siguiente));
   };
 
   return (
@@ -142,7 +175,7 @@ function VistaSupervision({
               type="date"
               aria-label={"Seleccionar fecha de Supervisi\u00f3n"}
               value={fecha}
-              onChange={(evento) => evento.target.value && setFecha(evento.target.value)}
+              onChange={(evento) => evento.target.value && cambiarFecha(evento.target.value)}
               className="min-h-11 min-w-0 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-800"
             />
             <button type="button" aria-label={"D\u00eda siguiente"} onClick={() => moverDia(1)} className="min-h-11 rounded-lg border border-slate-300 bg-white text-xl font-bold text-slate-700">&rsaquo;</button>
@@ -177,7 +210,13 @@ function VistaSupervision({
             </section>
             <section aria-label={"Dotaci\u00f3n por turno"} className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {TURNOS_AGREGADO_SUPERVISION.map((turnoId) => (
-                <TarjetaTurno key={turnoId} turnoId={turnoId} datos={resultado.turnos[turnoId]} />
+                <TarjetaTurno
+                  key={turnoId}
+                  turnoId={turnoId}
+                  datos={resultado.turnos[turnoId]}
+                  detalleAbierto={detalleAbierto}
+                  onAlternarDetalle={(clave) => setDetalleAbierto((actual) => actual === clave ? null : clave)}
+                />
               ))}
             </section>
           </>

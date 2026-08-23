@@ -5,6 +5,7 @@ import {
   resolverUmbralDotacion
 } from "./dotacionSupervision.js";
 import { proyectarDotacionDiaSupervision } from "./proyeccionDotacionSupervision.js";
+import { crearValidadorExtrasOrigenDia } from "./indisponibilidadesSupervision.js";
 
 export const TURNOS_AGREGADO_SUPERVISION = Object.freeze(Object.keys(TURNOS));
 
@@ -31,6 +32,11 @@ export const proyectarSupervisionDia = ({
   const advertencias = [];
   const errores = [];
   let disponibles = 0;
+  const validarExtraOrigen = crearValidadorExtrasOrigenDia({
+    estadosPorTurno,
+    novedadesModernas,
+    fecha
+  });
 
   const turnos = Object.fromEntries(TURNOS_AGREGADO_SUPERVISION.map((turno) => {
     const estadoMensual = estadosPorTurno?.[turno] ?? null;
@@ -41,7 +47,8 @@ export const proyectarSupervisionDia = ({
         fecha,
         turno,
         categoria,
-        mes
+        mes,
+        validarExtraOrigen
       });
       const umbral = resolverUmbralDotacion({
         configuracion: configuracionDotacion,

@@ -7,6 +7,7 @@ import {
 } from "../../utils/agregadoSupervisionDia.js";
 import { keyDiaFromDate, parsearFechaLocal } from "../../utils/fechas.js";
 import DetalleCategoriaSupervision from "./DetalleCategoriaSupervision.jsx";
+import NovedadesSupervisionDia from "./NovedadesSupervisionDia.jsx";
 
 const CATEGORIAS = Object.freeze([
   ["licenciado", "Licenciados"],
@@ -219,6 +220,13 @@ function VistaSupervision({
                 />
               ))}
             </section>
+            <NovedadesSupervisionDia
+              fecha={fecha}
+              estadosPorTurno={datos.estadosPorTurno}
+              novedadesModernas={datos.novedadesModernas}
+              cargando={datos.cargando}
+              errorModernas={datos.errores?.novedades}
+            />
           </>
         )}
       </div>

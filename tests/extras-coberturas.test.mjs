@@ -230,7 +230,10 @@ probar("35 funciona para Licenciados", () => {
 probar("36 funciona en Mañana sin depender del turno", () => assert.doesNotMatch(calendarioFuente, /tipoExtra.*manana/));
 probar("37 funciona en Vespertino sin depender del turno", () => assert.doesNotMatch(calendarioFuente, /tipoExtra.*vespertino/));
 probar("38 funciona en Noche semanal", () => assert.match(calendarioFuente, /periodoPlanilla/));
-probar("39 funciona en Noche cada tres días", () => assert.match(calendarioFuente, /obtenerBloqueParaFecha/));
+probar("39 funciona en Noche cada tres días", () => {
+  assert.match(calendarioFuente, /resolverPeriodoPlanillaDia/);
+  assert.match(leer("src/utils/periodoPlanillaDia.js"), /obtenerBloqueParaFecha/);
+});
 probar("40 no hay SQL en la implementación", () =>
   assert.doesNotMatch(calendarioFuente + panelFuente + leer("src/utils/extrasPersonas.js"), /supabase|\bSQL\b/i));
 probar("41 formulario usa cobertura por defecto", () => {

@@ -9,8 +9,25 @@ import {
   obtenerConfiguracionPlanillaEfectiva,
   obtenerFilasActivas
 } from "./configuracionPlanilla.js";
-import { esDiaLibre, estaDeLicencia, parsearFechaLocal } from "./fechas.js";
+import {
+  esDiaLibre,
+  estaCertificado,
+  estaDeLicencia,
+  parsearFechaLocal
+} from "./fechas.js";
+import {
+  asegurarIdExtraHistorico,
+  normalizarExtraCompatible,
+  resolverPersonaPermanenteParaExtra
+} from "./extrasPersonas.js";
 import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
+import { resolverPersonaDeLicencia } from "./licenciasPersonas.js";
+import { resolverPersonaDeCertificacion } from "./certificacionesPersonas.js";
+import {
+  novedadAfectaDisponibilidadEnFecha,
+  TIPOS_NOVEDAD_PERSONAL
+} from "./novedadesPersonal.js";
+import { MOTIVOS_NO_DISPONIBLE } from "./noDisponiblesMotivos.js";
 import {
   obtenerPlanillaCategoriaEstado,
   resolverPeriodoPlanillaDia
@@ -29,6 +46,29 @@ const personaMinima = (persona) => ({
   personaId: String(persona?.id ?? "").trim() || null,
   funcionario: String(persona?.funcionario ?? "").trim() || null,
   nombre: String(persona?.nombre ?? "").trim()
+});
+
+const CAUSAS_BAJA = Object.freeze([
+  "licencia",
+  "certificacion",
+  "suspension",
+  "adhesion_paro",
+  "no_disponible"
+]);
+
+const causaNovedad = (novedad) => {
+  if (novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.LICENCIA) return "licencia";
+  if (novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.CERTIFICACION) return "certificacion";
+  if (novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.SUSPENSION) return "suspension";
+  if (novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.ADHESION_PARO) return "adhesion_paro";
+  if (novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.OTRA) return "no_disponible";
+  return null;
+};
+
+const detalleExtra = (persona, extra) => ({
+  ...personaMinima(persona),
+  origenExtra: String(extra?.origenExtra ?? "").trim() || null,
+  turnoOrigen: String(extra?.turnoOrigen ?? "").trim() || null
 });
 
 const resolverReferencia = (referencia, personal) => {
@@ -194,5 +234,221 @@ export const resolverCohortePlanillaDia = ({
     previstosBase: { cantidad: previstos.length, personas: previstos.map(personaMinima) },
     advertencias,
     errores: []
+  };
+};
+
+const metricasNoDisponibles = (cohorte) => ({
+  ...cohorte,
+  bajasConocidas: null,
+  baseDisponible: null,
+  extrasRegistrados: null,
+  extrasQueAportan: null,
+  dotacionPrevistaOperativa: null
+});
+
+export const proyectarDotacionDiaSupervision = ({
+  estadoMensual,
+  novedadesModernas = [],
+  fecha,
+  turno,
+  categoria,
+  mes
+} = {}) => {
+  const cohorte = resolverCohortePlanillaDia({
+    estadoMensual,
+    fecha,
+    turno,
+    categoria,
+    mes
+  });
+  if (!cohorte.ok) return metricasNoDisponibles(cohorte);
+
+  const personal = Array.isArray(estadoMensual?.personal) ? estadoMensual.personal : [];
+  const fechaDia = cohorte.fecha;
+  const fechaLocal = parsearFechaLocal(fechaDia);
+  const advertencias = [...cohorte.advertencias];
+  const previstos = cohorte.previstosBase.personas
+    .map((referencia) => resolverPersonaDesdeReferencia(referencia, personal))
+    .filter(Boolean);
+  const previstosPorIdentidad = new Map(
+    previstos.map((persona) => [obtenerClaveIdentidadPersona(persona), persona])
+  );
+  const indisponibilidadesPorIdentidad = new Map();
+  const agregarIndisponibilidad = (persona, causa) => {
+    const identidad = obtenerClaveIdentidadPersona(persona);
+    if (!identidad || !CAUSAS_BAJA.includes(causa)) {
+      return;
+    }
+    if (!indisponibilidadesPorIdentidad.has(identidad)) {
+      indisponibilidadesPorIdentidad.set(identidad, { persona, causas: new Set() });
+    }
+    indisponibilidadesPorIdentidad.get(identidad).causas.add(causa);
+  };
+
+  personal.forEach((persona) => {
+    if (estaDeLicencia(estadoMensual?.licencias, persona, fechaLocal, personal)) {
+      agregarIndisponibilidad(persona, "licencia");
+    }
+    if (estaCertificado(estadoMensual?.certificaciones, persona, fechaLocal, personal)) {
+      agregarIndisponibilidad(persona, "certificacion");
+    }
+  });
+  (Array.isArray(estadoMensual?.licencias) ? estadoMensual.licencias : [])
+    .filter((registro) => registro?.desde <= fechaDia && fechaDia <= registro?.hasta)
+    .filter((registro) => !resolverPersonaDeLicencia(registro, personal))
+    .forEach(() => advertencias.push({ codigo: "LICENCIA_PERSONA_NO_RESUELTA" }));
+  (Array.isArray(estadoMensual?.certificaciones) ? estadoMensual.certificaciones : [])
+    .filter((registro) => registro?.desde <= fechaDia && fechaDia <= registro?.hasta)
+    .filter((registro) => !resolverPersonaDeCertificacion(registro, personal))
+    .forEach(() => advertencias.push({ codigo: "CERTIFICACION_PERSONA_NO_RESUELTA" }));
+
+  (Array.isArray(novedadesModernas) ? novedadesModernas : []).forEach((novedad) => {
+    if (novedad?.turno && novedad.turno !== turno) return;
+    if (novedad?.categoria && novedad.categoria !== categoria) return;
+    const persona = resolverPersonaDesdeReferencia(
+      { personaId: novedad?.personaId, nombre: novedad?.personaNombre },
+      personal
+    );
+    if (!persona) {
+      advertencias.push({ codigo: "NOVEDAD_PERSONA_NO_RESUELTA", novedadId: novedad?.id || null });
+      return;
+    }
+    if (!novedadAfectaDisponibilidadEnFecha(novedad, persona, fechaDia)) return;
+    const causa = causaNovedad(novedad);
+    if (causa) agregarIndisponibilidad(persona, causa);
+  });
+
+  const calendarioCategoria = estadoMensual?.calendario?.[
+    categoria === "enfermero" ? "enfermeros" : "licenciados"
+  ] || {};
+  const noDisponibles = Array.isArray(calendarioCategoria?.noDisponibles?.[fechaDia])
+    ? calendarioCategoria.noDisponibles[fechaDia]
+    : [];
+  noDisponibles.forEach((registro) => {
+    if (registro?.motivo === MOTIVOS_NO_DISPONIBLE.CERTIFICACION_DIA) return;
+    const persona = resolverPersonaDesdeReferencia(registro, personal);
+    if (!persona) {
+      advertencias.push({ codigo: "NO_DISPONIBLE_PERSONA_NO_RESUELTA" });
+      return;
+    }
+    agregarIndisponibilidad(
+      persona,
+      registro?.motivo === MOTIVOS_NO_DISPONIBLE.ADHESION_PARO
+        ? "adhesion_paro"
+        : "no_disponible"
+    );
+  });
+
+  const bajasPorIdentidad = new Map(
+    [...indisponibilidadesPorIdentidad].filter(([identidad]) =>
+      previstosPorIdentidad.has(identidad)
+    )
+  );
+  const bajas = [...bajasPorIdentidad.values()].map(({ persona, causas }) => ({
+    ...personaMinima(persona),
+    causas: [...causas]
+  }));
+  const porCausa = Object.fromEntries(CAUSAS_BAJA.map((causa) => [
+    causa,
+    bajas.filter((persona) => persona.causas.includes(causa)).length
+  ]));
+  const baseDisponible = previstos.filter(
+    (persona) => !bajasPorIdentidad.has(obtenerClaveIdentidadPersona(persona))
+  );
+  const baseDisponiblePorIdentidad = new Map(
+    baseDisponible.map((persona) => [obtenerClaveIdentidadPersona(persona), persona])
+  );
+
+  const extrasRegistrados = Array.isArray(calendarioCategoria?.extras?.[fechaDia])
+    ? calendarioCategoria.extras[fechaDia]
+    : [];
+  const extrasPorIdentidad = new Map();
+  extrasRegistrados.forEach((extraOriginal, indice) => {
+    const compatible = normalizarExtraCompatible(extraOriginal, {
+      fecha: fechaDia,
+      categoria,
+      indice
+    });
+    if (!compatible || typeof compatible !== "object") {
+      advertencias.push({ codigo: "EXTRA_SIN_IDENTIDAD", indice });
+      return;
+    }
+    if (compatible.categoria && compatible.categoria !== categoria) return;
+    const personaPermanente = resolverPersonaPermanenteParaExtra(compatible, personal);
+    const tieneDatoIdentidad = Boolean(
+      String(compatible.id ?? "").trim() ||
+      String(compatible.personaId ?? "").trim() ||
+      String(compatible.funcionario ?? "").trim() ||
+      String(compatible.nombre ?? "").trim()
+    );
+    if (!tieneDatoIdentidad) {
+      advertencias.push({ codigo: "EXTRA_SIN_IDENTIDAD", indice });
+      return;
+    }
+    const personaExtra = personaPermanente || (
+      String(compatible.id ?? "").trim()
+        ? compatible
+        : String(compatible.personaId ?? "").trim()
+          ? { ...compatible, id: String(compatible.personaId).trim() }
+          : String(compatible.funcionario ?? "").trim()
+            ? compatible
+            : asegurarIdExtraHistorico(
+                compatible,
+                { fecha: fechaDia, categoria, indice }
+              )
+    );
+    const identidad = obtenerClaveIdentidadPersona(personaExtra);
+    if (!identidad) {
+      advertencias.push({ codigo: "EXTRA_SIN_IDENTIDAD", indice });
+      return;
+    }
+    if (!extrasPorIdentidad.has(identidad)) {
+      extrasPorIdentidad.set(identidad, { persona: personaExtra, registro: compatible });
+    }
+    if (indisponibilidadesPorIdentidad.has(identidad)) {
+      advertencias.push({
+        codigo: "EXTRA_CON_INDISPONIBILIDAD_ACTIVA",
+        personaId: personaMinima(personaExtra).personaId,
+        causas: [...indisponibilidadesPorIdentidad.get(identidad).causas]
+      });
+    }
+  });
+
+  const extrasQueAportanPorIdentidad = new Map(
+    [...extrasPorIdentidad].filter(([identidad]) =>
+      !baseDisponiblePorIdentidad.has(identidad) &&
+      !indisponibilidadesPorIdentidad.has(identidad)
+    )
+  );
+  const dotacionPorIdentidad = new Map(baseDisponiblePorIdentidad);
+  extrasQueAportanPorIdentidad.forEach(({ persona }, identidad) => {
+    dotacionPorIdentidad.set(identidad, persona);
+  });
+  const presentarExtras = (mapa) => [...mapa.values()].map(({ persona, registro }) =>
+    detalleExtra(persona, registro)
+  );
+  const extrasRegistradosPresentacion = presentarExtras(extrasPorIdentidad);
+  const extrasQueAportanPresentacion = presentarExtras(extrasQueAportanPorIdentidad);
+
+  return {
+    ...cohorte,
+    bajasConocidas: { cantidad: bajas.length, personas: bajas, porCausa },
+    baseDisponible: {
+      cantidad: baseDisponible.length,
+      personas: baseDisponible.map(personaMinima)
+    },
+    extrasRegistrados: {
+      cantidad: extrasRegistradosPresentacion.length,
+      personas: extrasRegistradosPresentacion
+    },
+    extrasQueAportan: {
+      cantidad: extrasQueAportanPresentacion.length,
+      personas: extrasQueAportanPresentacion
+    },
+    dotacionPrevistaOperativa: {
+      cantidad: dotacionPorIdentidad.size,
+      personas: [...dotacionPorIdentidad.values()].map(personaMinima)
+    },
+    advertencias
   };
 };

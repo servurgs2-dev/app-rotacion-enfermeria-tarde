@@ -99,8 +99,8 @@ probar("34 admite overrides distintos para los cuatro turnos", () => {
   assert.deepEqual(Object.keys(TURNOS).map((turno) => umbral(configuracion, turno, "licenciado").minimo), [0, 1, 2, 3]);
 });
 probar("35 el modelo no contiene presenciaReal", () => {
-  const metricas = crearMetricasDotacionSupervision({ previstosBase: 12, bajasConocidas: 1, extras: 2, asistenciaRegistrada: { presentes: 10, ausentes: 1, pendientes: 1 } });
-  assert.deepEqual(metricas, { previstosBase: 12, dotacionPrevistaOperativa: 13, bajasConocidas: 1, extras: 2, asistenciaRegistrada: { presentes: 10, ausentes: 1, pendientes: 1 } });
+  const metricas = crearMetricasDotacionSupervision({ previstosBase: 12, bajasConocidas: 1, baseDisponible: 11, extrasRegistrados: 2, extrasQueAportan: 1, asistenciaRegistrada: { presentes: 10, ausentes: 1, pendientes: 1 } });
+  assert.deepEqual(metricas, { previstosBase: 12, dotacionPrevistaOperativa: 12, bajasConocidas: 1, baseDisponible: 11, extrasRegistrados: 2, extrasQueAportan: 1, asistenciaRegistrada: { presentes: 10, ausentes: 1, pendientes: 1 } });
   assert.equal(Object.hasOwn(metricas, "presenciaReal"), false);
 });
 probar("36 no hay excepción hardcodeada para Noche", () => {

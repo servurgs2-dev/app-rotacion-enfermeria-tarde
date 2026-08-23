@@ -208,21 +208,25 @@ export const resolverEstadoDotacion = ({ cantidad, minimo, optimo } = {}) => {
   };
 };
 
-// Contrato estructural: no representa presencia física. Sus valores deberán
-// provenir de Planilla, bajas conocidas, Extras y asistencia manual registrada.
+// Contrato numérico explicativo: la proyección por identidad debe decidir antes
+// qué Extras aportan. Esta función no es un segundo motor de headcount.
 export const crearMetricasDotacionSupervision = ({
   previstosBase,
   bajasConocidas,
-  extras,
+  baseDisponible,
+  extrasRegistrados,
+  extrasQueAportan,
   asistenciaRegistrada
 } = {}) => ({
   previstosBase,
   dotacionPrevistaOperativa:
-    Number.isInteger(previstosBase) && Number.isInteger(bajasConocidas) && Number.isInteger(extras)
-      ? previstosBase - bajasConocidas + extras
+    Number.isInteger(baseDisponible) && Number.isInteger(extrasQueAportan)
+      ? baseDisponible + extrasQueAportan
       : null,
   bajasConocidas,
-  extras,
+  baseDisponible,
+  extrasRegistrados,
+  extrasQueAportan,
   asistenciaRegistrada: {
     presentes: asistenciaRegistrada?.presentes,
     ausentes: asistenciaRegistrada?.ausentes,

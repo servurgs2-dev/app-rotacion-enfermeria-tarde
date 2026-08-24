@@ -50,6 +50,7 @@
     "test:agregado-supervision-dia": "node tests/agregado-supervision-dia.test.mjs",
     "test:proyeccion-supervision-mes": "node tests/proyeccion-supervision-mes.test.mjs",
     "test:estadisticas-supervision-mes": "node tests/estadisticas-supervision-mes.test.mjs",
+    "test:alertas-supervision-mes": "node tests/alertas-supervision-mes.test.mjs",
     "test:extras-supervision-entre-turnos": "node tests/extras-supervision-entre-turnos.test.mjs",
     "test:supervision-tablero": "node tests/supervision-tablero.test.mjs",
     "test:supervision-detalle": "node tests/supervision-detalle.test.mjs",

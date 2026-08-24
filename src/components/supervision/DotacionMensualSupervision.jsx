@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { TURNOS } from "../../config/turnos.js";
 import { parsearFechaLocal } from "../../utils/fechas.js";
+import { resumirEstadisticasSupervisionMes } from "../../utils/estadisticasSupervisionMes.js";
 import { proyectarSupervisionMes } from "../../utils/proyeccionSupervisionMes.js";
+import EstadisticasDotacionSupervision from "./EstadisticasDotacionSupervision.jsx";
 
 const TURNOS_MENSUALES = Object.freeze(Object.keys(TURNOS));
 const CATEGORIAS = Object.freeze([
@@ -62,6 +64,10 @@ function DotacionMensualSupervision({
     mes,
     configuracionDotacion
   }), [estadosPorTurno, novedadesModernas, mes, configuracionDotacion]);
+  const estadisticasMensuales = useMemo(
+    () => resumirEstadisticasSupervisionMes(resultadoMensual),
+    [resultadoMensual]
+  );
 
   if (cargando) {
     return (
@@ -106,6 +112,12 @@ function DotacionMensualSupervision({
           );
         })}
       </div>
+
+      <EstadisticasDotacionSupervision
+        estadisticas={estadisticasMensuales}
+        turnoSeleccionado={turnoSeleccionado}
+        categorias={CATEGORIAS}
+      />
 
       <div className="mt-4 max-w-3xl">
         <div className="grid grid-cols-[minmax(3.5rem,0.55fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-1 text-xs font-bold text-slate-600">

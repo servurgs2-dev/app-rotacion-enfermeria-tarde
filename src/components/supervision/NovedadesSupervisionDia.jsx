@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   construirNovedadesSupervisionDia,
   formatearPeriodoNovedadSupervision,
@@ -39,6 +39,7 @@ function NovedadesSupervisionDia({
   cargando = false,
   errorModernas = null
 }) {
+  const [expandido, setExpandido] = useState(false);
   const novedades = useMemo(() => construirNovedadesSupervisionDia({
     estadosPorTurno,
     novedadesModernas,
@@ -47,35 +48,50 @@ function NovedadesSupervisionDia({
   const resumen = useMemo(() => resumirNovedadesSupervisionDia(novedades), [novedades]);
 
   if (cargando) {
-    return <section aria-label="Novedades del d\u00eda" className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">Cargando novedades&hellip;</section>;
+    return <section aria-label="Novedades del día" className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">Cargando novedades&hellip;</section>;
   }
 
   return (
-    <section aria-label="Novedades del d\u00eda" className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-5">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <section aria-label="Novedades del día" className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-extrabold text-slate-900">Novedades del d&iacute;a</h2>
-          <p className="mt-1 text-sm text-slate-600">Todos los turnos · {resumen.total} registradas</p>
+          <h2 className="text-lg font-extrabold text-slate-900">Novedades del día</h2>
+          <p className="mt-1 text-sm text-slate-600">Todos los turnos · Total {resumen.total}</p>
         </div>
         <div className="flex flex-wrap gap-2 text-xs font-bold">
           <span className="rounded-full bg-red-100 px-2.5 py-1 text-red-800">Ausencias {resumen.ausencias}</span>
           <span className="rounded-full bg-cyan-100 px-2.5 py-1 text-cyan-800">Informativas {resumen.informativas}</span>
         </div>
       </div>
-      {errorModernas && (
-        <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Parte de las novedades no pudo cargarse. Se muestran Licencias y Certificaciones disponibles.
-        </p>
-      )}
-      {novedades.length === 0 ? (
-        <p className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-          Sin novedades registradas para este d&iacute;a.
-        </p>
-      ) : (
-        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {novedades.map((novedad) => (
-            <TarjetaNovedadSupervision key={novedad.idEstable} novedad={novedad} />
-          ))}
+
+      <button
+        type="button"
+        aria-expanded={expandido}
+        aria-controls="contenido-novedades-supervision-dia"
+        onClick={() => setExpandido((actual) => !actual)}
+        className="mt-3 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/30 sm:w-auto"
+      >
+        {expandido ? "Ocultar novedades" : "Ver novedades"}
+      </button>
+
+      {expandido && (
+        <div id="contenido-novedades-supervision-dia">
+          {errorModernas && (
+            <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Parte de las novedades no pudo cargarse. Se muestran Licencias y Certificaciones disponibles.
+            </p>
+          )}
+          {novedades.length === 0 ? (
+            <p className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+              Sin novedades registradas para este día.
+            </p>
+          ) : (
+            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {novedades.map((novedad) => (
+                <TarjetaNovedadSupervision key={novedad.idEstable} novedad={novedad} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>

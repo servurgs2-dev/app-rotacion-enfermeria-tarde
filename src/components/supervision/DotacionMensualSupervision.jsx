@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { TURNOS } from "../../config/turnos.js";
+import { construirAlertasSupervisionMes } from "../../utils/alertasSupervisionMes.js";
 import { parsearFechaLocal } from "../../utils/fechas.js";
 import { resumirEstadisticasSupervisionMes } from "../../utils/estadisticasSupervisionMes.js";
 import { proyectarSupervisionMes } from "../../utils/proyeccionSupervisionMes.js";
 import EstadisticasDotacionSupervision from "./EstadisticasDotacionSupervision.jsx";
+import CalidadDatosSupervision from "./CalidadDatosSupervision.jsx";
 
 const TURNOS_MENSUALES = Object.freeze(Object.keys(TURNOS));
 const CATEGORIAS = Object.freeze([
@@ -54,6 +56,7 @@ function DotacionMensualSupervision({
   estadosPorTurno,
   novedadesModernas,
   configuracionDotacion,
+  erroresCarga = {},
   cargando = false,
   errorTotal = false
 }) {
@@ -67,6 +70,10 @@ function DotacionMensualSupervision({
   const estadisticasMensuales = useMemo(
     () => resumirEstadisticasSupervisionMes(resultadoMensual),
     [resultadoMensual]
+  );
+  const alertasMensuales = useMemo(
+    () => construirAlertasSupervisionMes(resultadoMensual, erroresCarga),
+    [resultadoMensual, erroresCarga]
   );
 
   if (cargando) {
@@ -119,6 +126,11 @@ function DotacionMensualSupervision({
         categorias={CATEGORIAS}
       />
 
+      <CalidadDatosSupervision
+        key={alertasMensuales.mes}
+        resultado={alertasMensuales}
+      />
+
       <div className="mt-4 max-w-3xl">
         <div className="grid grid-cols-[minmax(3.5rem,0.55fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-1 text-xs font-bold text-slate-600">
           <span>D&iacute;a</span>
@@ -151,6 +163,7 @@ function DotacionMensualSupervision({
         <p><strong>Operativa:</strong> base planificada, menos bajas conocidas, m&aacute;s Extras que aportan.</p>
         <p><strong>Base:</strong> personal planificado menos libres programados.</p>
       </div>
+
     </section>
   );
 }

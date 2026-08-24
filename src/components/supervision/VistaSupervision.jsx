@@ -222,9 +222,11 @@ function VistaSupervision({
               ))}
             </section>
             <NovedadesSupervisionDia
+              key={fecha}
               fecha={fecha}
               estadosPorTurno={datos.estadosPorTurno}
               novedadesModernas={datos.novedadesModernas}
+              erroresCarga={datos.errores}
               cargando={datos.cargando}
               errorModernas={datos.errores?.novedades}
             />

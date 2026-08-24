@@ -55,7 +55,7 @@ probar("tarjeta muestra nombre",()=>assert.match(componente,/novedad\.personaNom
 probar("tarjeta muestra categoria",()=>assert.match(componente,/novedad\.categoriaEtiqueta/));
 probar("tarjeta muestra turno",()=>assert.match(componente,/novedad\.turnoNombre/));
 probar("tarjeta muestra tipo",()=>assert.match(componente,/novedad\.tipoEtiqueta/));
-probar("es read only",()=>assert.doesNotMatch(componente,/<button|<input|<select|<textarea/));
+probar("es read only",()=>assert.doesNotMatch(componente,/<input|<select|<textarea|onSubmit|guardar|eliminar/));
 probar("sin Supabase directo",()=>assert.doesNotMatch(`${componente}${vista}`,/supabase/i));
 probar("no modifica dotacion",()=>assert.doesNotMatch(componente,/proyectarSupervisionDia|dotacionPrevistaOperativa/));
 probar("no modifica Calendario",()=>assert.doesNotMatch(componente,/setCalendario|calendario\s*=/));

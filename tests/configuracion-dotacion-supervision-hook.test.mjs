@@ -1,0 +1,65 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const leer = (ruta) => readFile(new URL(ruta, import.meta.url), "utf8");
+const hook = await leer("../src/hooks/useConfiguracionDotacionSupervision.js");
+const wrapper = await leer("../src/services/configuracionDotacionSupervisionMes.js");
+const packageJson = JSON.parse(await leer("../package.json"));
+const repositorio = await leer("../src/services/repositorioConfiguracionDotacionSupervisionMes.js");
+const dominio = await leer("../src/utils/configuracionDotacionSupervisionMes.js");
+const migracion = await leer("../supabase/migrations/20260820_crear_configuracion_dotacion_supervision_mes.sql");
+
+let total = 0;
+const probar = (nombre, comprobacion) => {
+  comprobacion();
+  total += 1;
+  process.stdout.write(`OK ${total} ${nombre}\n`);
+};
+
+probar("hook existe", () => assert.match(hook, /export function useConfiguracionDotacionSupervision\(mes\)/));
+probar("wrapper usa supabase existente", () => assert.match(wrapper, /import \{ supabase \} from "\.\.\/supabase\.js"/));
+probar("wrapper crea una instancia de repositorio", () => assert.equal((wrapper.match(/crearRepositorioConfiguracionDotacionSupervisionMes\(supabase\)/g) || []).length, 1));
+probar("no crea cliente Supabase nuevo", () => assert.doesNotMatch(wrapper + hook, /createClient\s*\(/));
+probar("hook recibe mes", () => assert.match(hook, /useConfiguracionDotacionSupervision\(mes\)/));
+probar("hook no recibe turnoActivo", () => assert.doesNotMatch(hook, /turnoActivo/));
+probar("usa carga efectiva", () => assert.match(hook, /cargarConfiguracionDotacionSupervisionEfectiva\(mes\)/));
+probar("no consulta exacta directamente", () => assert.doesNotMatch(hook, /cargarConfiguracionDotacionSupervisionMes/));
+probar("no consulta anterior directamente", () => assert.doesNotMatch(hook, /cargarConfiguracionDotacionSupervisionAnterior/));
+probar("estado inicial usa fallback seguro", () => assert.match(hook, /useState\(\(\) => \([\s\S]*crearEstadoFallback\(mes\)/));
+probar("cargando durante carga", () => assert.match(hook, /cargando: mesValido && respuesta\.clave !== claveSolicitud/));
+probar("persistida se conserva desde resultado", () => assert.match(hook, /\.\.\.resultado/));
+probar("revisión persistida no se reescribe", () => assert.doesNotMatch(hook, /resultado\.revision\s*=/));
+probar("updatedAt se conserva", () => assert.match(hook, /\.\.\.resultado/));
+probar("updatedBy se conserva", () => assert.match(hook, /\.\.\.resultado/));
+probar("heredada se conserva", () => assert.doesNotMatch(hook, /origen\s*===\s*["']heredada/));
+probar("revisión destino heredada no se recalcula", () => assert.doesNotMatch(hook, /heredadaDesdeRevision[\s\S]*revision:/));
+probar("metadata heredada forma parte del fallback seguro", () => assert.match(hook, /heredadaDesdeMes: null[\s\S]*heredadaDesdeRevision: null/));
+probar("fallback normal no agrega error", () => assert.match(hook, /crearEstadoFallback\(mes\)[\s\S]*error: null/));
+probar("fallback reutiliza utilidad central", () => assert.match(hook, /crearConfiguracionDotacionFallback\(\)/));
+probar("error de carga usa fallback", () => assert.match(hook, /\.catch\([\s\S]*crearEstadoFallback\(mes/));
+probar("error de carga permanece visible", () => assert.match(hook, /error: normalizarErrorConfiguracionDotacion\(errorCarga\)/));
+probar("warning de carga", () => assert.match(hook, /CONFIGURACION_DOTACION_NO_CARGADA/));
+probar("error conserva message", () => assert.match(hook, /error\?\.message/));
+probar("error conserva code", () => assert.match(hook, /error\?\.code/));
+probar("RLS no se interpreta como ausencia", () => assert.doesNotMatch(hook, /RLS[\s\S]*(null|no existe)/i));
+probar("tabla inexistente no se interpreta como ausencia", () => assert.doesNotMatch(hook, /table|tabla inexistente/i));
+probar("mes inválido usa validador central", () => assert.match(hook, /esMesConfiguracionDotacionValido\(mes\)/));
+probar("mes inválido no carga repositorio", () => assert.match(hook, /if \(!mesValido\)[\s\S]*return \(\) =>[\s\S]*cargarConfiguracionDotacionSupervisionEfectiva/));
+probar("mes inválido usa fallback", () => assert.match(hook, /!mesValido[\s\S]*crearEstadoFallback\(mes[\s\S]*MES_INVALIDO/));
+probar("cambio de mes integra clave", () => assert.match(hook, /claveSolicitud = `\$\{String\(mes \|\| ""\)\}\|\$\{intento\}`/));
+probar("no conserva metadata de mes viejo", () => assert.match(hook, /respuesta\.datos\.mes === mes[\s\S]*crearEstadoFallback\(mes\)/));
+probar("stale guard verifica solicitud", () => assert.match(hook, /solicitudRef\.current !== solicitud/));
+probar("cleanup invalida solicitud", () => assert.match(hook, /return \(\) => \{[\s\S]*solicitudRef\.current === solicitud[\s\S]*\+= 1/));
+probar("recargar existe", () => assert.match(hook, /const recargar = useCallback/));
+probar("recargar usa intento actual", () => assert.match(hook, /setIntento\(\(actual\) => actual \+ 1\)/));
+probar("una sola carga efectiva por efecto", () => assert.equal((hook.match(/cargarConfiguracionDotacionSupervisionEfectiva\(mes\)/g) || []).length, 1));
+probar("no expone guardar", () => assert.doesNotMatch(hook, /guardarConfiguracion|\bguardar\b/));
+probar("no autosave", () => assert.doesNotMatch(hook, /autosave/i));
+probar("no actualizar", () => assert.doesNotMatch(hook, /actualizarConfiguracion/));
+probar("script registrado", () => assert.equal(packageJson.scripts["test:configuracion-dotacion-supervision-hook"], "node tests/configuracion-dotacion-supervision-hook.test.mjs"));
+probar("repositorio base conserva fábrica", () => assert.match(repositorio, /crearRepositorioConfiguracionDotacionSupervisionMes/));
+probar("dominio conserva resolver", () => assert.match(dominio, /resolverConfiguracionDotacionSupervisionMes/));
+probar("migración conserva RPC", () => assert.match(migracion, /guardar_configuracion_dotacion_supervision_mes/));
+probar("sin mojibake", () => assert.doesNotMatch(hook + wrapper, /Ã|Â|â/));
+
+process.stdout.write(`Hook configuración dotación Supervisión: ${total}/${total} comprobaciones OK.\n`);

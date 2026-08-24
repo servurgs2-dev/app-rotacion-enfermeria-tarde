@@ -49,7 +49,7 @@ probar("39 historico no revisa", () => assert.ok(sql.indexOf("MES_HISTORICO_PROT
 probar("40 historico no historial", () => assert.ok(sql.indexOf("MES_HISTORICO_PROTEGIDO") < sql.indexOf("insert into public.configuracion_dotacion_supervision_mes")));
 probar("41 security definer", () => assert.match(sql, /guardar_configuracion_dotacion_supervision_mes[\s\S]*security definer/));
 probar("42 search path seguro", () => assert.match(sql, /security definer\s+set search_path = ''/));
-probar("43 no frontend", () => assert.equal(fs.existsSync("src/hooks/useConfiguracionDotacionSupervision.js"), false));
+probar("43 no frontend", () => assert.doesNotMatch(sql, /useConfiguracionDotacionSupervision|React|src\/hooks/));
 probar("44 no motor", () => assert.doesNotMatch(sql, /proyectarSupervision|resolverEstadoDotacion/));
 probar("45 defaults no modificados", () => {
   const motor = fs.readFileSync("src/utils/dotacionSupervision.js", "utf8");

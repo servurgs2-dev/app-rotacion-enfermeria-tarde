@@ -76,6 +76,42 @@ const crearFilaTurnante = ({ tipo, etiqueta, orden }) => {
 
 const TURNANTE_ADICIONAL = Object.freeze({ enfermero: "T6", licenciado: "T3" });
 
+const reconciliarTurnanteAdicionalMensual = ({ filas, categoria, planilla }) => {
+  const etiqueta = TURNANTE_ADICIONAL[categoria];
+  if (!etiqueta) return filas;
+
+  const habilitado = Array.isArray(planilla?.posicionesMensualesAdicionales) &&
+    planilla.posicionesMensualesAdicionales.includes(etiqueta);
+  const tieneEstadoMensualExplicito = planilla &&
+    typeof planilla === "object" &&
+    Object.keys(planilla).length > 0;
+  const ordinal = Number(etiqueta.slice(1));
+  const esAdicional = (fila) =>
+    fila?.tipo === TIPOS_FILA_PLANILLA.TURNANTE &&
+    (fila.turnanteId === `turnante_${ordinal}` || fila.etiqueta === etiqueta);
+  const sinAdicional = filas.filter((fila) => !esAdicional(fila));
+
+  if (!habilitado && tieneEstadoMensualExplicito) {
+    return sinAdicional;
+  }
+
+  if (!habilitado) return filas;
+
+  const existente = filas.find(esAdicional);
+  const ultimoOrden = sinAdicional.reduce(
+    (maximo, fila) => Number.isInteger(fila.orden) ? Math.max(maximo, fila.orden) : maximo,
+    -1
+  );
+  const adicional = existente
+    ? { ...existente, etiqueta, activo: true }
+    : copiarFilaSnapshot(crearFilaTurnante({
+      tipo: categoria,
+      etiqueta,
+      orden: ultimoOrden + 1
+    }));
+  return [...sinAdicional, adicional];
+};
+
 export const SCHEMA_VERSION_CONFIGURACION_PLANILLA = 1;
 
 const CAMPOS_FILA_SNAPSHOT = Object.freeze([
@@ -239,6 +275,12 @@ export const obtenerConfiguracionPlanillaEfectiva = ({
     snapshot.mes === mes.trim()
   ) {
     const copia = copiarSnapshotConfiguracionPlanilla(snapshot);
+    const clavePlanilla = categoria.trim() === "enfermero" ? "enfermeros" : "licenciados";
+    copia.filas = reconciliarTurnanteAdicionalMensual({
+      filas: copia.filas,
+      categoria: categoria.trim(),
+      planilla: estadoMensual?.planillas?.[clavePlanilla]
+    });
     if (copia.prioridadCoberturaSectorIds.length === 0) {
       copia.prioridadCoberturaSectorIds = obtenerPrioridadCoberturaEfectiva({
         filas: copia.filas,

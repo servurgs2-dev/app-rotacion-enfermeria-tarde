@@ -64,6 +64,7 @@
     "test:supervision-configuracion-integracion": "node tests/supervision-configuracion-integracion.test.mjs",
     "test:supervision-editor-umbrales": "node tests/supervision-editor-umbrales.test.mjs",
     "test:supervision-editor-persistencia": "node tests/supervision-editor-persistencia.test.mjs",
+    "test:permisos-roles-turnos": "node tests/permisos-roles-turnos.test.mjs",
     "test:resumen-asistencia-calendario": "node tests/resumen-asistencia-calendario.test.mjs",
     "test:correo-pdf": "node tests/correo-pdf.test.mjs",
     "test:configuracion-planilla": "node tests/configuracion-planilla.test.mjs",

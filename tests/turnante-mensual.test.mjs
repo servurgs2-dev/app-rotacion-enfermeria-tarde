@@ -114,7 +114,7 @@ probar("30 no elimina con asignación parcial", () => {
 probar("31 elimina cuando está vacía", () => {
   const resultado = eliminarTurnanteMensual({ ...enfHabilitada, semana1: { T6: "" } }, "enfermero");
   assert.equal(resultado.ok, true);
-  assert.equal(Object.hasOwn(resultado.planilla, "posicionesMensualesAdicionales"), false);
+  assert.deepEqual(resultado.planilla.posicionesMensualesAdicionales, []);
   assert.equal(Object.hasOwn(resultado.planilla.semana1, "T6"), false);
 });
 probar("32 Vaciar planilla conserva posición habilitada", () => {

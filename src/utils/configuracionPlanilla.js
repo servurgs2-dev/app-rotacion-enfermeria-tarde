@@ -82,16 +82,16 @@ const reconciliarTurnanteAdicionalMensual = ({ filas, categoria, planilla }) => 
 
   const habilitado = Array.isArray(planilla?.posicionesMensualesAdicionales) &&
     planilla.posicionesMensualesAdicionales.includes(etiqueta);
-  const tieneEstadoMensualExplicito = planilla &&
+  const tieneDecisionMensualExplicita = planilla &&
     typeof planilla === "object" &&
-    Object.keys(planilla).length > 0;
+    Object.hasOwn(planilla, "posicionesMensualesAdicionales");
   const ordinal = Number(etiqueta.slice(1));
   const esAdicional = (fila) =>
     fila?.tipo === TIPOS_FILA_PLANILLA.TURNANTE &&
     (fila.turnanteId === `turnante_${ordinal}` || fila.etiqueta === etiqueta);
   const sinAdicional = filas.filter((fila) => !esAdicional(fila));
 
-  if (!habilitado && tieneEstadoMensualExplicito) {
+  if (!habilitado && tieneDecisionMensualExplicita) {
     return sinAdicional;
   }
 

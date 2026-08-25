@@ -122,6 +122,88 @@ probar("mes preparado con snapshot adicional permite desactivarlo", () => {
   assert.equal(etiquetas({ estado, turno: "tarde", categoria: "enfermero", mes }).includes("T6"), false);
 });
 
+for (const categoria of ["enfermero", "licenciado"]) {
+  const etiqueta = adicional(categoria);
+  const clave = clavePlanilla(categoria);
+  const mes = "2027-03";
+
+  probar(`snapshot ${etiqueta} y marcador ausente conserva el adicional`, () => {
+    const estado = crearMes({ mes, preparado: true });
+    estado.configuracionPlanilla[categoria] = crearSnapshotConfiguracionPlanilla({
+      turno: "tarde",
+      categoria,
+      mes,
+      posicionesMensualesAdicionales: [etiqueta]
+    });
+    assert.equal(etiquetas({ estado, turno: "tarde", categoria, mes }).includes(etiqueta), true);
+  });
+
+  probar(`snapshot ${etiqueta} y desactivación explícita elimina el adicional`, () => {
+    const estado = crearMes({ mes, preparado: true });
+    estado.configuracionPlanilla[categoria] = crearSnapshotConfiguracionPlanilla({
+      turno: "tarde",
+      categoria,
+      mes,
+      posicionesMensualesAdicionales: [etiqueta]
+    });
+    estado.planillas[clave].posicionesMensualesAdicionales = [];
+    assert.equal(etiquetas({ estado, turno: "tarde", categoria, mes }).includes(etiqueta), false);
+  });
+
+  probar(`snapshot sin ${etiqueta} y activación explícita agrega el adicional`, () => {
+    const estado = crearMes({ mes, preparado: true });
+    estado.planillas[clave].posicionesMensualesAdicionales = [etiqueta];
+    assert.equal(etiquetas({ estado, turno: "tarde", categoria, mes }).includes(etiqueta), true);
+  });
+
+  probar(`snapshot sin ${etiqueta} y marcador ausente permanece sin adicional`, () => {
+    const estado = crearMes({ mes, preparado: true });
+    assert.equal(etiquetas({ estado, turno: "tarde", categoria, mes }).includes(etiqueta), false);
+  });
+}
+
+probar("normalizar y recargar conserva ausencia de decisión legacy", () => {
+  const mes = "2027-03";
+  const estado = crearMes({ mes, preparado: true });
+  estado.configuracionPlanilla.enfermero = crearSnapshotConfiguracionPlanilla({
+    turno: "tarde",
+    categoria: "enfermero",
+    mes,
+    posicionesMensualesAdicionales: ["T6"]
+  });
+  const recargado = normalizarEstadoMensual(estado);
+  assert.equal(Object.hasOwn(
+    recargado.planillas.enfermeros,
+    "posicionesMensualesAdicionales"
+  ), false);
+  assert.equal(etiquetas({
+    estado: recargado,
+    turno: "tarde",
+    categoria: "enfermero",
+    mes
+  }).includes("T6"), true);
+});
+
+probar("normalizar y recargar conserva desactivación explícita", () => {
+  const mes = "2027-03";
+  const estado = crearMes({ mes, preparado: true });
+  estado.configuracionPlanilla.licenciado = crearSnapshotConfiguracionPlanilla({
+    turno: "tarde",
+    categoria: "licenciado",
+    mes,
+    posicionesMensualesAdicionales: ["T3"]
+  });
+  estado.planillas.licenciados.posicionesMensualesAdicionales = [];
+  const recargado = normalizarEstadoMensual(estado);
+  assert.deepEqual(recargado.planillas.licenciados.posicionesMensualesAdicionales, []);
+  assert.equal(etiquetas({
+    estado: recargado,
+    turno: "tarde",
+    categoria: "licenciado",
+    mes
+  }).includes("T3"), false);
+});
+
 probar("un mes futuro genérico reconoce ambos adicionales", () => {
   let estado = crearMes({ mes: "2027-02", preparado: true });
   estado = activar(activar(estado, "enfermero"), "licenciado");

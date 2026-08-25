@@ -201,11 +201,7 @@ export const eliminarTurnanteMensual = (planilla, tipo) => {
       : {})
   };
 
-  if (posiciones.length) {
-    resultado.posicionesMensualesAdicionales = posiciones;
-  } else {
-    delete resultado.posicionesMensualesAdicionales;
-  }
+  resultado.posicionesMensualesAdicionales = posiciones;
   return { ok: true, posicion, usos: [], planilla: resultado };
 };
 

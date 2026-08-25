@@ -37,6 +37,7 @@
     "test:reintegros-planilla": "node tests/reintegros-asignaciones-parciales.test.mjs",
     "test:turnante-mensual": "node tests/turnante-mensual.test.mjs",
     "test:turnante-mes-preparado": "node tests/turnante-mes-preparado.test.mjs",
+    "test:vigencias-turno-personal": "node tests/vigencias-turno-personal.test.mjs",
     "test:turnantes-cobertura-vacantes": "node tests/turnantes-cobertura-vacantes.test.mjs",
     "test:asignaciones-fijas-mensuales": "node tests/asignaciones-fijas-mensuales.test.mjs",
     "test:asignaciones-fijas-preparacion": "node tests/asignaciones-fijas-preparacion.test.mjs",

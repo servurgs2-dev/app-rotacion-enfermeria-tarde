@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { TURNOS } from "../../config/turnos.js";
+import { useConfiguracionDotacionSupervision } from "../../hooks/useConfiguracionDotacionSupervision.js";
 import { useDatosSupervisionMes } from "../../hooks/useDatosSupervisionMes.js";
 import {
   proyectarSupervisionDia,
@@ -8,6 +9,7 @@ import {
 import { keyDiaFromDate, parsearFechaLocal } from "../../utils/fechas.js";
 import DetalleCategoriaSupervision from "./DetalleCategoriaSupervision.jsx";
 import DotacionMensualSupervision from "./DotacionMensualSupervision.jsx";
+import EditorConfiguracionDotacionSupervision from "./EditorConfiguracionDotacionSupervision.jsx";
 import NovedadesSupervisionDia from "./NovedadesSupervisionDia.jsx";
 
 const CATEGORIAS = Object.freeze([
@@ -132,12 +134,15 @@ function VistaSupervision({
     mesActivo,
     estadoActivo
   });
+  const configuracionMes = useConfiguracionDotacionSupervision(mes);
   const resultado = useMemo(() => proyectarSupervisionDia({
     estadosPorTurno: datos.estadosPorTurno,
     novedadesModernas: datos.novedadesModernas,
     fecha,
-    mes
-  }), [datos.estadosPorTurno, datos.novedadesModernas, fecha, mes]);
+    mes,
+    configuracionDotacion: configuracionMes.configuracion
+  }), [datos.estadosPorTurno, datos.novedadesModernas, fecha, mes, configuracionMes.configuracion]);
+  const cargandoPanel = datos.cargando || configuracionMes.cargaInicial;
   const errorTotal = Boolean(datos.errores?.estados) && !resultado.disponible;
   const erroresParciales = [datos.errores?.estados, datos.errores?.novedades]
     .filter(Boolean);
@@ -184,7 +189,7 @@ function VistaSupervision({
           </div>
         </header>
 
-        {datos.cargando ? (
+        {cargandoPanel ? (
           <section role="status" className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm font-medium text-slate-600 shadow-sm">
             Cargando informaci&oacute;n de Supervisi&oacute;n&hellip;
           </section>
@@ -197,6 +202,10 @@ function VistaSupervision({
           </section>
         ) : (
           <>
+            <EditorConfiguracionDotacionSupervision
+              key={configuracionMes.mes}
+              configuracionMes={configuracionMes}
+            />
             {erroresParciales.length > 0 && (
               <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                 Parte de la informaci&oacute;n no pudo cargarse. Se muestran los datos disponibles.
@@ -227,7 +236,7 @@ function VistaSupervision({
               estadosPorTurno={datos.estadosPorTurno}
               novedadesModernas={datos.novedadesModernas}
               erroresCarga={datos.errores}
-              cargando={datos.cargando}
+              cargando={cargandoPanel}
               errorModernas={datos.errores?.novedades}
             />
             <DotacionMensualSupervision
@@ -235,7 +244,9 @@ function VistaSupervision({
               fechaSeleccionada={fecha}
               estadosPorTurno={datos.estadosPorTurno}
               novedadesModernas={datos.novedadesModernas}
-              cargando={datos.cargando}
+              configuracionDotacion={configuracionMes.configuracion}
+              erroresCarga={datos.errores}
+              cargando={cargandoPanel}
               errorTotal={errorTotal}
             />
           </>

@@ -5,5 +5,6 @@ const repositorioConfiguracionDotacionSupervisionMes =
   crearRepositorioConfiguracionDotacionSupervisionMes(supabase);
 
 export const {
-  cargarConfiguracionDotacionSupervisionEfectiva
+  cargarConfiguracionDotacionSupervisionEfectiva,
+  guardarConfiguracionDotacionSupervisionMes
 } = repositorioConfiguracionDotacionSupervisionMes;

@@ -46,10 +46,19 @@ export function useConfiguracionDotacionSupervision(mes) {
     clave: "",
     datos: crearEstadoFallback(mes)
   }));
-  const [intento, setIntento] = useState(0);
+  const [mesRecargando, setMesRecargando] = useState(null);
   const solicitudRef = useRef(0);
+  const montadoRef = useRef(true);
   const mesValido = esMesConfiguracionDotacionValido(mes);
-  const claveSolicitud = `${String(mes || "")}|${intento}`;
+  const claveSolicitud = String(mes || "");
+
+  useEffect(() => {
+    montadoRef.current = true;
+    return () => {
+      montadoRef.current = false;
+      solicitudRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     const solicitud = solicitudRef.current + 1;
@@ -85,8 +94,41 @@ export function useConfiguracionDotacionSupervision(mes) {
     };
   }, [claveSolicitud, mes, mesValido]);
 
-  const recargar = useCallback(() => setIntento((actual) => actual + 1), []);
+  const recargar = useCallback(async () => {
+    if (!esMesConfiguracionDotacionValido(mes)) {
+      throw new TypeError("El mes de configuración no es válido.");
+    }
+    const solicitud = solicitudRef.current + 1;
+    solicitudRef.current = solicitud;
+    setMesRecargando(claveSolicitud);
+    try {
+      const resultado = await cargarConfiguracionDotacionSupervisionEfectiva(mes);
+      const datosRecargados = normalizarResultadoCarga(resultado, mes);
+      if (montadoRef.current && solicitudRef.current === solicitud) {
+        setRespuesta({ clave: claveSolicitud, datos: datosRecargados });
+      }
+      return datosRecargados;
+    } catch (errorCarga) {
+      if (montadoRef.current && solicitudRef.current === solicitud) {
+        setRespuesta({
+          clave: claveSolicitud,
+          datos: crearEstadoFallback(mes, {
+            error: normalizarErrorConfiguracionDotacion(errorCarga),
+            advertencias: [{ codigo: CODIGO_CONFIGURACION_DOTACION_NO_CARGADA }]
+          })
+        });
+      }
+      throw errorCarga;
+    } finally {
+      if (montadoRef.current && solicitudRef.current === solicitud) {
+        setMesRecargando(null);
+      }
+    }
+  }, [claveSolicitud, mes]);
   const coincideMes = respuesta.datos.mes === mes;
+  const tieneResultadoMes = coincideMes && respuesta.clave !== "";
+  const cargaInicial = mesValido && respuesta.clave !== claveSolicitud;
+  const recargando = mesRecargando === claveSolicitud;
   const datos = !mesValido
     ? crearEstadoFallback(mes, {
       error: { message: "El mes de configuración no es válido.", code: "MES_INVALIDO" },
@@ -96,7 +138,9 @@ export function useConfiguracionDotacionSupervision(mes) {
 
   return {
     ...datos,
-    cargando: mesValido && respuesta.clave !== claveSolicitud,
+    cargando: cargaInicial || recargando,
+    cargaInicial,
+    recargando: recargando && tieneResultadoMes,
     recargar
   };
 }

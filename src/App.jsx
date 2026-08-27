@@ -58,6 +58,7 @@ import {
   cargarEstadoTurnoMesConRevision,
   guardarEstadoTurnoMesConRevision
 } from "./services/estadoTurnos";
+import { cargarPadronPersonalEfectivoMes } from "./services/padronVigenciasTurnoPersonal.js";
 import { crearClaveTurnoMes } from "./utils/claveTurnoMes";
 import {
   buscarPersonaEnEstadosDeTurnos,
@@ -91,9 +92,11 @@ import {
 } from "./utils/permisos.js";
 import {
   analizarPreparacionMesNuevo,
+  aplicarOmisionesPersonalEstadoPreparado,
   clasificarEstadoMesDestino,
   construirEstadoMesNuevo,
   formatearContenidoMes,
+  reconciliarPersonalPreparacionMes,
   validarContextoPreparacion
 } from "./utils/preparacionMesNuevo.js";
 import {
@@ -132,6 +135,11 @@ import {
   actualizarPrioridadCoberturaEnEstadoMensual,
   copiarPrioridadCoberturaMensual
 } from "./utils/prioridadCoberturaMensual.js";
+import { usePadronVigenciasPersonalMes } from "./hooks/usePadronVigenciasPersonalMes.js";
+import { resolverPersonalEfectivoPorTurnoFecha } from "./utils/padronVigenciasTurnoPersonal.js";
+import { analizarDependenciasMovimientoPadronBase } from "./utils/dependenciasMovimientoPadronBase.js";
+import { moverPersonaPadronBaseTurnoMes } from "./services/movimientoPadronBase.js";
+import { obtenerMensajeMovimientoPadronBase } from "./services/servicioMovimientoPadronBase.js";
 
 const crearInstantanea = (data) => JSON.parse(JSON.stringify(data));
 
@@ -247,6 +255,26 @@ const getMesData = (mes, turnoId = turnoActivo) => {
 
 const mesData = getMesData(mesActivo);
 const personal = mesData.personal;
+const periodoMesActivoVisible = new Intl.DateTimeFormat("es-UY", {
+  month: "long",
+  year: "numeric"
+}).format(new Date(`${mesActivo}-01T12:00:00`));
+const vigenciasPersonal = usePadronVigenciasPersonalMes({
+  mes: mesActivo,
+  turnoActivo,
+  estadoActivo: mesData,
+  habilitado: (vistaActiva === "mas" && subvistaMas === "personal") ||
+    vistaActiva === "calendario" || vistaActiva === "planilla"
+});
+const personalCalendario = useMemo(() => resolverPersonalEfectivoPorTurnoFecha({
+  padron: vigenciasPersonal.error || vigenciasPersonal.cargando
+    ? null
+    : vigenciasPersonal.padron,
+  turno: turnoActivo,
+  fecha: keyDiaFromDate(fecha),
+  personalFisico: personal
+}).personas, [fecha, personal, turnoActivo, vigenciasPersonal.cargando, vigenciasPersonal.error, vigenciasPersonal.padron]);
+const estadosVigenciasCalendario = vigenciasPersonal.estadosPorTurno;
 const diasParo = mesData.calendario?.diasParo || {};
 const keyDiaActual = keyDiaFromDate(fecha);
 const esDiaParoActual = Boolean(diasParo[keyDiaActual]);
@@ -277,7 +305,20 @@ const planillaLicenciados = mesData.planillas.licenciados;
 // 🔹 LICENCIAS
 
 const licenciasMes = mesData.licencias;
-const certificacionesMes = mesData.certificaciones || [];
+const certificacionesMes = useMemo(
+  () => mesData.certificaciones || [],
+  [mesData.certificaciones]
+);
+const licenciasCalendarioLectura = useMemo(() => estadosVigenciasCalendario
+  ? Object.values(estadosVigenciasCalendario).flatMap((estado) =>
+      Array.isArray(estado?.licencias) ? estado.licencias : []
+    )
+  : licenciasMes, [estadosVigenciasCalendario, licenciasMes]);
+const certificacionesCalendarioLectura = useMemo(() => estadosVigenciasCalendario
+  ? Object.values(estadosVigenciasCalendario).flatMap((estado) =>
+      Array.isArray(estado?.certificaciones) ? estado.certificaciones : []
+    )
+  : certificacionesMes, [certificacionesMes, estadosVigenciasCalendario]);
 const resumenInicio = useMemo(() => crearResumenInicioTurno({
   enfermeros: dataPDFEnf.keyDia === keyDiaActual
     ? dataPDFEnf.resumenInicio
@@ -1843,30 +1884,60 @@ const iniciarPreparacionMes = async () => {
     return;
   }
 
-  let exclusividad;
+  let estadosDestinoPorTurno;
+  let padronOrigen;
   try {
-    exclusividad = await validarPersonasDisponiblesEnOtrosTurnos(
-      origen.estado.personal || []
-    );
+    const [destinos, otrosOrigen] = await Promise.all([
+      obtenerEstadosDeOtrosTurnos({
+        turnoActual: turnoId,
+        mes: mesDestino,
+        turnosIds: Object.keys(TURNOS),
+        estadosPorTurnoMes: estadoPorTurnoMesRef.current,
+        crearClave: crearClaveTurnoMes,
+        cargarEstado: cargarEstadoTurnoMesConRevision
+      }),
+      obtenerEstadosDeOtrosTurnos({
+        turnoActual: turnoId,
+        mes: mesOrigen,
+        turnosIds: Object.keys(TURNOS),
+        estadosPorTurnoMes: estadoPorTurnoMesRef.current,
+        crearClave: crearClaveTurnoMes,
+        cargarEstado: cargarEstadoTurnoMesConRevision
+      })
+    ]);
+    estadosDestinoPorTurno = destinos;
+    padronOrigen = await cargarPadronPersonalEfectivoMes({
+      mes: mesOrigen,
+      estadosPorTurno: { ...otrosOrigen, [turnoId]: origen.estado }
+    });
   } catch {
     if (!contextoSigueVigente()) return;
     setPreparacionMes({
       estado: "error",
       contexto,
-      error: "No se pudo validar la pertenencia del Personal."
+      error: "No se pudo validar el padrón transversal del mes origen."
     });
     return;
   }
   if (!contextoSigueVigente()) return;
-  if (exclusividad.cancelada) {
-    setPreparacionMes(null);
-    return;
-  }
-  if (exclusividad.existeEnOtroTurno) {
+  if (!padronOrigen?.ok) {
     setPreparacionMes({
       estado: "error",
       contexto,
-      error: `${exclusividad.personaValidada.nombre} ya pertenece al Turno ${exclusividad.turnoNombre}.`
+      error: "El padrón del mes origen contiene identidades o vigencias que requieren revisión."
+    });
+    return;
+  }
+  const reconciliacionPersonal = reconciliarPersonalPreparacionMes({
+    estadoOrigen: origen.estado,
+    turnoDestino: turnoId,
+    estadosDestinoPorTurno
+  });
+  if (!reconciliacionPersonal.ok) {
+    setPreparacionMes({
+      estado: "error",
+      contexto,
+      error: reconciliacionPersonal.mensaje
     });
     return;
   }
@@ -1876,6 +1947,7 @@ const iniciarPreparacionMes = async () => {
     mesOrigen,
     mesDestino,
     estadoOrigen: origen.estado,
+    personalCanonicoOrigen: padronOrigen.personas.map((entrada) => entrada.persona),
     estadoDestino: destinoActual,
     existeDestinoRemoto: metadatosDestino?.existeRemoto === true,
     revisionDestino
@@ -1890,6 +1962,8 @@ const iniciarPreparacionMes = async () => {
     borradoresConfiguracionPlanilla: analisis.borradoresConfiguracionPlanilla,
     analisis: {
       ...analisis,
+      personasOmitidas: reconciliacionPersonal.personasOmitidas,
+      personaIdsOmitidos: reconciliacionPersonal.personaIdsOmitidos,
       turnoNombre: TURNOS[turnoId]?.nombre || turnoId
     },
     error: ""
@@ -1942,6 +2016,10 @@ const confirmarPreparacionMes = () => {
     setPreparacionMes((actual) => ({ ...actual, error: construccion.mensaje }));
     return;
   }
+  const estadoPreparado = aplicarOmisionesPersonalEstadoPreparado({
+    estadoPreparado: construccion.estado,
+    personaIdsOmitidos: preparacionMes.analisis.personaIdsOmitidos
+  });
 
   setEstadoPorTurnoMes((prev) => {
     const actual = prev[claveActiva] || crearEstadoMensualVacio();
@@ -1950,10 +2028,129 @@ const confirmarPreparacionMes = () => {
       estado: actual
     });
     if (!clasificacion.permitido) return prev;
-    return { ...prev, [claveActiva]: construccion.estado };
+    return { ...prev, [claveActiva]: estadoPreparado };
   });
-  setPreparacionMes(null);
+  const personasOmitidas = preparacionMes.analisis.personasOmitidas || [];
+  setPreparacionMes(personasOmitidas.length > 0
+    ? {
+        estado: "exito",
+        contexto: preparacionMes.contexto,
+        personasOmitidas
+      }
+    : null);
   setEstadoGuardado("pending");
+};
+
+const cargarEstadoFrescoMovimiento = async ({ turno, mes, personaId, esOrigen }) => {
+  const carga = await cargarEstadoTurnoMesConRevision(turno, mes);
+  if (carga?.existeRemoto !== true || !carga.estado || !/^\d+$/.test(String(carga.revision ?? ""))) {
+    throw new Error(`No existe el estado mensual del turno de ${esOrigen ? "origen" : "destino"}.`);
+  }
+  const coincidencias = (Array.isArray(carga.estado.personal) ? carga.estado.personal : [])
+    .filter((persona) => String(persona?.id ?? "").trim() === personaId);
+  if (esOrigen && coincidencias.length !== 1) {
+    throw new Error(coincidencias.length > 1
+      ? "La persona está duplicada en su turno base. Revisá el padrón antes de continuar."
+      : "La persona ya no pertenece al turno base indicado. Recargá los datos.");
+  }
+  if (!esOrigen && coincidencias.length > 0) {
+    throw new Error("La persona ya pertenece físicamente al turno de destino.");
+  }
+  return { ...carga, persona: coincidencias[0] || null };
+};
+
+const analizarMovimientoPadronBaseUI = async ({
+  personaId,
+  turnoOrigen,
+  turnoDestino,
+  mes
+}) => {
+  if (!esPerfilSupervision(perfil) || mes < mesActual) {
+    throw new Error("No tenés permiso para cambiar el turno base en este mes.");
+  }
+  const claveOrigen = crearClaveTurnoMes(turnoOrigen, mes);
+  if (hayPendientesEnClave(claveOrigen)) {
+    throw new Error("Esperá a que terminen de guardarse los cambios del turno base.");
+  }
+  const origen = await cargarEstadoFrescoMovimiento({
+    turno: turnoOrigen,
+    mes,
+    personaId,
+    esOrigen: true
+  });
+  return analizarDependenciasMovimientoPadronBase({
+    estadoOrigen: origen.estado,
+    personaId,
+    categoria: origen.persona.categoria,
+    turnoOrigen,
+    turnoDestino,
+    mes
+  });
+};
+
+const ejecutarMovimientoPadronBase = async ({
+  personaId,
+  turnoOrigen,
+  turnoDestino,
+  mes
+}) => {
+  if (!esPerfilSupervision(perfil) || mes < mesActual) {
+    throw new Error("No tenés permiso para cambiar el turno base en este mes.");
+  }
+  const claveOrigen = crearClaveTurnoMes(turnoOrigen, mes);
+  const claveDestino = crearClaveTurnoMes(turnoDestino, mes);
+  if (hayPendientesEnClave(claveOrigen) || hayPendientesEnClave(claveDestino)) {
+    throw new Error("Hay cambios pendientes de guardar. Esperá y volvé a intentarlo.");
+  }
+  const [origen, destino] = await Promise.all([
+    cargarEstadoFrescoMovimiento({ turno: turnoOrigen, mes, personaId, esOrigen: true }),
+    cargarEstadoFrescoMovimiento({ turno: turnoDestino, mes, personaId, esOrigen: false })
+  ]);
+  if (hayPendientesEnClave(claveOrigen) || hayPendientesEnClave(claveDestino)) {
+    throw new Error("Los datos cambiaron mientras realizabas la operación. Recargá e intentá nuevamente.");
+  }
+  const preflight = analizarDependenciasMovimientoPadronBase({
+    estadoOrigen: origen.estado,
+    personaId,
+    categoria: origen.persona.categoria,
+    turnoOrigen,
+    turnoDestino,
+    mes
+  });
+  if (!preflight.ok || preflight.tieneBloqueos) {
+    const codigo = preflight.bloqueos?.[0]?.codigo;
+    const error = new Error(codigo
+      ? obtenerMensajeMovimientoPadronBase(codigo)
+      : "No se puede cambiar el turno base con seguridad.");
+    error.codigo = codigo || preflight.codigo;
+    throw error;
+  }
+  const resultado = await moverPersonaPadronBaseTurnoMes({
+    mes,
+    personaId,
+    turnoOrigen,
+    turnoDestino,
+    revisionOrigenEsperada: origen.revision,
+    revisionDestinoEsperada: destino.revision
+  });
+  adoptarCargaServidorClave(claveOrigen, {
+    existe: true,
+    existeRemoto: true,
+    estado: resultado.estadoOrigen,
+    revision: resultado.revisionOrigen,
+    updatedAt: null,
+    origen: "turno_mes"
+  });
+  adoptarCargaServidorClave(claveDestino, {
+    existe: true,
+    existeRemoto: true,
+    estado: resultado.estadoDestino,
+    revision: resultado.revisionDestino,
+    updatedAt: null,
+    origen: "turno_mes"
+  });
+  vigenciasPersonal.recargar();
+  return resultado;
 };
 
 const abrirEdicionPrioridadCobertura = () => {
@@ -2235,6 +2432,11 @@ return (
           onEliminarPersona={eliminarPersona}
           onLimpiarPersonal={limpiarPersonal}
           onValidarExclusividadTurno={validarPersonaDisponibleEnOtrosTurnos}
+          vigenciasPersonal={vigenciasPersonal}
+          onAnalizarMovimientoPadronBase={analizarMovimientoPadronBaseUI}
+          onMoverPadronBase={ejecutarMovimientoPadronBase}
+          perfil={perfil}
+          modoHistorico={mesActivo < mesActual}
           setPersonal={(nuevo) => {
             setEstadoPorTurnoMes(prev => {
               if (!puedeEditarActivo || !claveActiva || erroresCargaRef.current.has(claveActiva)) return prev;
@@ -2370,6 +2572,11 @@ return (
       licencias={licenciasMes}
       mesActivo={mesActivo}
       turnoId={turnoActivo}
+      padronVigencias={vigenciasPersonal.padron}
+      estadoCargaVigencias={{
+        cargando: vigenciasPersonal.cargando,
+        error: vigenciasPersonal.error
+      }}
     />
   )}
 
@@ -2384,6 +2591,11 @@ return (
       licencias={licenciasMes}
       mesActivo={mesActivo}
       turnoId={turnoActivo}
+      padronVigencias={vigenciasPersonal.padron}
+      estadoCargaVigencias={{
+        cargando: vigenciasPersonal.cargando,
+        error: vigenciasPersonal.error
+      }}
     />
   )}
 
@@ -2523,6 +2735,26 @@ return (
             <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
               <p role="alert" className="text-sm text-rose-700">{preparacionMes.error}</p>
               <button type="button" onClick={() => setPreparacionMes(null)} className="mt-2 text-sm underline">
+                Cerrar
+              </button>
+            </div>
+          )}
+          {preparacionMes?.estado === "exito" && (
+            <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3" role="status" aria-live="polite">
+              <p className="text-sm font-semibold text-emerald-900">Mes preparado correctamente.</p>
+              {preparacionMes.personasOmitidas.length > 0 && (
+                <div className="mt-2 text-sm text-emerald-900">
+                  <p>
+                    {preparacionMes.personasOmitidas.length} {preparacionMes.personasOmitidas.length === 1 ? "persona no fue copiada" : "personas no fueron copiadas"} porque ya {preparacionMes.personasOmitidas.length === 1 ? "pertenece" : "pertenecen"} a otro turno en {periodoMesActivoVisible}:
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {preparacionMes.personasOmitidas.map((persona) => (
+                      <li key={persona.personaId}>• {persona.nombre} → {persona.turnoNombre}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <button type="button" onClick={() => setPreparacionMes(null)} className="mt-2 text-sm font-medium text-emerald-900 underline">
                 Cerrar
               </button>
             </div>
@@ -2689,13 +2921,19 @@ return (
     usuarioActual={perfil.usuario}
     puedeReabrirCierre={esPerfilSupervision(perfil)}
   key={`enfermeros|${turnoActivo}|${mesActivo}|${keyDiaFromDate(fecha)}|${modoSoloLecturaEfectiva}`}
-    personal={personal}
+    personal={personalCalendario}
     estadoMensual={mesData}
     planilla={planillaEnfermeros}
     tipo="enfermero"
     mesActivo={mesActivo}
     licencias={licenciasMes}
     certificaciones={certificacionesMes}
+    licenciasLectura={licenciasCalendarioLectura}
+    certificacionesLectura={certificacionesCalendarioLectura}
+    estadoCargaVigencias={{
+      cargando: vigenciasPersonal.cargando,
+      error: vigenciasPersonal.error
+    }}
     novedades={novedadesPersonal}
     setCertificaciones={actualizarCertificacionesMes}
     obtenerCertificacionesActuales={obtenerCertificacionesActuales}
@@ -2744,13 +2982,19 @@ return (
     usuarioActual={perfil.usuario}
     puedeReabrirCierre={esPerfilSupervision(perfil)}
   key={`licenciados|${turnoActivo}|${mesActivo}|${keyDiaFromDate(fecha)}|${modoSoloLecturaEfectiva}`}
-    personal={personal}
+    personal={personalCalendario}
     estadoMensual={mesData}
     planilla={planillaLicenciados}
     tipo="licenciado"
     mesActivo={mesActivo}
     licencias={licenciasMes}
     certificaciones={certificacionesMes}
+    licenciasLectura={licenciasCalendarioLectura}
+    certificacionesLectura={certificacionesCalendarioLectura}
+    estadoCargaVigencias={{
+      cargando: vigenciasPersonal.cargando,
+      error: vigenciasPersonal.error
+    }}
     novedades={novedadesPersonal}
     setCertificaciones={actualizarCertificacionesMes}
     obtenerCertificacionesActuales={obtenerCertificacionesActuales}

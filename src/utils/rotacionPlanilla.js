@@ -1,7 +1,13 @@
 import {
   aplicarAsignacionesFijasADistribucion,
-  ErrorGeneracionAsignacionesFijas
+  ErrorGeneracionAsignacionesFijas,
+  validarAsignacionesFijasMensuales
 } from "./asignacionesFijasMensuales.js";
+import {
+  crearReferenciaPersona,
+  resolverPersonaDesdeReferencia
+} from "./referenciasPersonas.js";
+import { resolverClaveDistribucionParaFila } from "./resolucionIdentidadesPlanilla.js";
 
 const clonarAsignacion = (referencia) =>
   referencia && typeof referencia === "object"
@@ -134,20 +140,67 @@ export const tieneAsignacionesUtiles = (distribucion) =>
 export const obtenerPrimerBloqueReferencia = ({
   rotacion3Dias,
   periodos
+} = {}) => obtenerBloquesReferenciaUtiles({ rotacion3Dias, periodos })[0] || null;
+
+export const obtenerBloquesReferenciaUtiles = ({
+  rotacion3Dias,
+  periodos
 } = {}) => {
   const bloques = rotacion3Dias?.bloques && typeof rotacion3Dias.bloques === "object"
     ? rotacion3Dias.bloques
     : {};
-
-  for (const periodo of Array.isArray(periodos) ? periodos : []) {
+  return (Array.isArray(periodos) ? periodos : []).flatMap((periodo) => {
     const bloque = bloques[periodo?.clave];
-    if (periodo?.clave && Number.isInteger(periodo.indice) && tieneAsignacionesUtiles(bloque)) {
-      return { periodo, bloque: clonarDistribucion(bloque) };
-    }
-  }
-
-  return null;
+    return periodo?.clave && Number.isInteger(periodo.indice) && tieneAsignacionesUtiles(bloque)
+      ? [{ periodo, bloque: clonarDistribucion(bloque) }]
+      : [];
+  });
 };
+
+const obtenerFilasConReferenciasNoResolubles = ({
+  distribucion,
+  personal,
+  categoria
+} = {}) => {
+  if (!Array.isArray(personal) || personal.length === 0) return [];
+  const idsValidos = new Set(
+    (Array.isArray(personal) ? personal : [])
+      .filter((persona) => !categoria || String(persona?.categoria ?? "").trim() === categoria)
+      .map((persona) => String(persona?.id ?? "").trim())
+      .filter(Boolean)
+  );
+  return Object.entries(distribucion || {}).flatMap(([fila, referencia]) => {
+    if (!esReferenciaUtil(referencia)) return [];
+    const personaId = obtenerIdReferencia(referencia);
+    return personaId && idsValidos.has(personaId) ? [] : [fila];
+  });
+};
+
+export const filtrarDistribucionPorCohorteEfectiva = ({
+  distribucion,
+  personalCanonico = [],
+  personalPeriodo = []
+} = {}) => {
+  const idsPeriodo = new Set(
+    (Array.isArray(personalPeriodo) ? personalPeriodo : [])
+      .map((persona) => String(persona?.id ?? "").trim())
+      .filter(Boolean)
+  );
+  return Object.fromEntries(
+    Object.entries(distribucion || {}).map(([fila, referencia]) => {
+      if (!esReferenciaUtil(referencia)) return [fila, clonarAsignacion(referencia)];
+      const persona = resolverPersonaDesdeReferencia(referencia, personalCanonico);
+      return [fila, persona && idsPeriodo.has(String(persona.id))
+        ? clonarAsignacion(referencia)
+        : ""];
+    })
+  );
+};
+
+const obtenerPersonalPeriodo = ({ personalPorPeriodo, periodo, personalCanonico }) =>
+  personalPorPeriodo && Array.isArray(personalPorPeriodo[periodo?.clave])
+    ? personalPorPeriodo[periodo.clave]
+    : personalCanonico;
 
 export const derivarAsignacionBaseDesdeBloque = ({
   bloqueReferencia,
@@ -167,6 +220,112 @@ export const derivarAsignacionBaseDesdeBloque = ({
     posicionesNoAplicables,
     indice: -indiceReferencia
   });
+};
+
+export const resolverAsignacionBaseRotacion3DiasEfectiva = ({
+  rotacion3Dias,
+  periodos,
+  filas,
+  filasFijas = [],
+  asignacionesFijas = [],
+  filasConfiguracion = [],
+  personal = [],
+  categoria = "",
+  posicionesNoAplicables = []
+} = {}) => {
+  const rotacion = rotacion3Dias && typeof rotacion3Dias === "object"
+    ? rotacion3Dias
+    : {};
+  let asignacionBase = tieneAsignacionesUtiles(rotacion.asignacionBase)
+    ? clonarDistribucion(rotacion.asignacionBase)
+    : null;
+  let bloqueReferencia = null;
+
+  if (!asignacionBase) {
+    const candidatos = obtenerBloquesReferenciaUtiles({
+      rotacion3Dias: rotacion,
+      periodos
+    });
+    if (candidatos.length === 0) {
+      return { ok: false, codigo: "BLOQUE_REFERENCIA_AUSENTE" };
+    }
+    const candidatosNoResolubles = [];
+    for (const candidato of candidatos) {
+      const referenciaConFijas = aplicarAsignacionesFijasADistribucion({
+        distribucion: candidato.bloque,
+        asignacionesFijas,
+        filas: filasConfiguracion,
+        personal,
+        categoria
+      });
+      if (!referenciaConFijas.ok) {
+        return {
+          ok: false,
+          codigo: referenciaConFijas.codigo,
+          errores: referenciaConFijas.errores
+        };
+      }
+      const candidatoPreparado = {
+        ...candidato,
+        bloque: referenciaConFijas.distribucion
+      };
+      const baseCandidata = derivarAsignacionBaseDesdeBloque({
+        bloqueReferencia: candidatoPreparado.bloque,
+        indiceReferencia: candidatoPreparado.periodo.indice,
+        filas,
+        filasFijas,
+        posicionesNoAplicables
+      });
+      if (!baseCandidata) {
+        return { ok: false, codigo: "BLOQUE_REFERENCIA_INVALIDO" };
+      }
+      const filasNoResolubles = obtenerFilasConReferenciasNoResolubles({
+        distribucion: baseCandidata,
+        personal,
+        categoria
+      });
+      if (filasNoResolubles.length > 0) {
+        candidatosNoResolubles.push({
+          clave: candidatoPreparado.periodo.clave,
+          filas: filasNoResolubles
+        });
+        continue;
+      }
+      bloqueReferencia = candidatoPreparado;
+      asignacionBase = baseCandidata;
+      break;
+    }
+    if (!asignacionBase) {
+      return {
+        ok: false,
+        codigo: "REFERENCIAS_BLOQUES_NO_RESOLUBLES",
+        candidatos: candidatosNoResolubles
+      };
+    }
+  } else {
+    const baseConFijas = aplicarAsignacionesFijasADistribucion({
+      distribucion: asignacionBase,
+      asignacionesFijas,
+      filas: filasConfiguracion,
+      personal,
+      categoria
+    });
+    if (!baseConFijas.ok) {
+      return {
+        ok: false,
+        codigo: baseConFijas.codigo,
+        errores: baseConFijas.errores
+      };
+    }
+    asignacionBase = baseConFijas.distribucion;
+  }
+
+  return {
+    ok: true,
+    origen: bloqueReferencia ? "bloque_legacy" : "asignacion_base",
+    bloqueReferencia,
+    asignacionBase
+  };
 };
 
 export const existenBloquesPosterioresUtiles = ({
@@ -194,6 +353,8 @@ export const regenerarRotacion3DiasDesdePrimerBloque = ({
   asignacionesFijas = [],
   filasConfiguracion = [],
   personal = [],
+  personalCanonico = personal,
+  personalPorPeriodo = null,
   categoria = "",
   posicionesNoAplicables = [],
   estrategia
@@ -203,45 +364,23 @@ export const regenerarRotacion3DiasDesdePrimerBloque = ({
     : {};
   const periodosValidos = (Array.isArray(periodos) ? periodos : [])
     .filter((periodo) => periodo?.clave && Number.isInteger(periodo.indice));
-  const bloqueReferencia = obtenerPrimerBloqueReferencia({
-    rotacion3Dias: rotacion,
-    periodos: periodosValidos
-  });
-  if (!bloqueReferencia) {
-    return { ok: false, codigo: "BLOQUE_REFERENCIA_AUSENTE", rotacion3Dias: rotacion };
-  }
-
-  const referenciaConFijas = aplicarAsignacionesFijasADistribucion({
-    distribucion: bloqueReferencia.bloque,
-    asignacionesFijas,
-    filas: filasConfiguracion,
-    personal,
-    categoria
-  });
-  if (!referenciaConFijas.ok) {
-    return {
-      ok: false,
-      codigo: referenciaConFijas.codigo,
-      errores: referenciaConFijas.errores,
-      rotacion3Dias: rotacion
-    };
-  }
-  const bloqueReferenciaPreparado = {
-    ...bloqueReferencia,
-    bloque: referenciaConFijas.distribucion
-  };
-
-  const asignacionBase = derivarAsignacionBaseDesdeBloque({
-    bloqueReferencia: bloqueReferenciaPreparado.bloque,
-    indiceReferencia: bloqueReferenciaPreparado.periodo.indice,
+  const baseEfectiva = resolverAsignacionBaseRotacion3DiasEfectiva({
+    rotacion3Dias: { ...rotacion, asignacionBase: {} },
+    periodos: periodosValidos,
     filas,
     filasFijas,
+    asignacionesFijas,
+    filasConfiguracion,
+    personal: personalCanonico,
+    categoria,
     posicionesNoAplicables
   });
+  if (!baseEfectiva.ok) return { ...baseEfectiva, rotacion3Dias: rotacion };
+  const bloqueReferenciaPreparado = baseEfectiva.bloqueReferencia;
+  const asignacionBase = baseEfectiva.asignacionBase;
   const bloques = Object.fromEntries(
-    periodosValidos.map((periodo) => [
-      periodo.clave,
-      periodo.clave === bloqueReferenciaPreparado.periodo.clave
+    periodosValidos.map((periodo) => {
+      const generada = periodo.clave === bloqueReferenciaPreparado.periodo.clave
         ? clonarDistribucion(bloqueReferenciaPreparado.bloque)
         : generarDistribucionParaIndice({
             distribucionBase: asignacionBase,
@@ -249,8 +388,19 @@ export const regenerarRotacion3DiasDesdePrimerBloque = ({
             filasFijas,
             posicionesNoAplicables,
             indice: periodo.indice
+          });
+      return [periodo.clave, personalPorPeriodo
+        ? filtrarDistribucionPorCohorteEfectiva({
+            distribucion: generada,
+            personalCanonico,
+            personalPeriodo: obtenerPersonalPeriodo({
+              personalPorPeriodo,
+              periodo,
+              personalCanonico
+            })
           })
-    ])
+        : generada];
+    })
   );
 
   return {
@@ -276,6 +426,8 @@ export const prepararRotacion3DiasParaGenerar = ({
   asignacionesFijas = [],
   filasConfiguracion = [],
   personal = [],
+  personalCanonico = personal,
+  personalPorPeriodo = null,
   categoria = "",
   posicionesNoAplicables = [],
   estrategia
@@ -283,60 +435,21 @@ export const prepararRotacion3DiasParaGenerar = ({
   const rotacion = rotacion3Dias && typeof rotacion3Dias === "object"
     ? rotacion3Dias
     : {};
-  let asignacionBase = tieneAsignacionesUtiles(rotacion.asignacionBase)
-    ? clonarDistribucion(rotacion.asignacionBase)
-    : null;
-  let bloqueReferencia = null;
-
-  if (asignacionBase) {
-    const baseConFijas = aplicarAsignacionesFijasADistribucion({
-      distribucion: asignacionBase,
-      asignacionesFijas,
-      filas: filasConfiguracion,
-      personal,
-      categoria
-    });
-    if (!baseConFijas.ok) {
-      return {
-        ok: false,
-        codigo: baseConFijas.codigo,
-        errores: baseConFijas.errores,
-        rotacion3Dias: rotacion
-      };
-    }
-    asignacionBase = baseConFijas.distribucion;
+  const baseEfectiva = resolverAsignacionBaseRotacion3DiasEfectiva({
+    rotacion3Dias: rotacion,
+    periodos,
+    filas,
+    filasFijas,
+    asignacionesFijas,
+    filasConfiguracion,
+    personal: personalCanonico,
+    categoria,
+    posicionesNoAplicables
+  });
+  if (!baseEfectiva.ok) {
+    return { ...baseEfectiva, rotacion3Dias: rotacion };
   }
-
-  if (!asignacionBase) {
-    bloqueReferencia = obtenerPrimerBloqueReferencia({ rotacion3Dias: rotacion, periodos });
-    if (!bloqueReferencia) {
-      return { ok: false, codigo: "BLOQUE_REFERENCIA_AUSENTE", rotacion3Dias: rotacion };
-    }
-
-    const referenciaConFijas = aplicarAsignacionesFijasADistribucion({
-      distribucion: bloqueReferencia.bloque,
-      asignacionesFijas,
-      filas: filasConfiguracion,
-      personal,
-      categoria
-    });
-    if (!referenciaConFijas.ok) {
-      return {
-        ok: false,
-        codigo: referenciaConFijas.codigo,
-        errores: referenciaConFijas.errores,
-        rotacion3Dias: rotacion
-      };
-    }
-    bloqueReferencia = { ...bloqueReferencia, bloque: referenciaConFijas.distribucion };
-    asignacionBase = derivarAsignacionBaseDesdeBloque({
-      bloqueReferencia: bloqueReferencia.bloque,
-      indiceReferencia: bloqueReferencia.periodo.indice,
-      filas,
-      filasFijas,
-      posicionesNoAplicables
-    });
-  }
+  const { asignacionBase, bloqueReferencia } = baseEfectiva;
 
   const bloquesPreparados = {};
   for (const [clave, bloque] of Object.entries(rotacion.bloques || {})) {
@@ -348,7 +461,7 @@ export const prepararRotacion3DiasParaGenerar = ({
       distribucion: bloque,
       asignacionesFijas,
       filas: filasConfiguracion,
-      personal,
+      personal: personalCanonico,
       categoria
     });
     if (!bloqueConFijas.ok) {
@@ -359,7 +472,19 @@ export const prepararRotacion3DiasParaGenerar = ({
         rotacion3Dias: rotacion
       };
     }
-    bloquesPreparados[clave] = bloqueConFijas.distribucion;
+    const periodo = (Array.isArray(periodos) ? periodos : [])
+      .find((actual) => actual?.clave === clave);
+    bloquesPreparados[clave] = personalPorPeriodo
+      ? filtrarDistribucionPorCohorteEfectiva({
+          distribucion: bloqueConFijas.distribucion,
+          personalCanonico,
+          personalPeriodo: obtenerPersonalPeriodo({
+            personalPorPeriodo,
+            periodo,
+            personalCanonico
+          })
+        })
+      : bloqueConFijas.distribucion;
   }
 
   const preparada = {
@@ -380,7 +505,9 @@ export const prepararRotacion3DiasParaGenerar = ({
       periodos,
       filas,
       filasFijas,
-      posicionesNoAplicables
+      posicionesNoAplicables,
+      personalCanonico,
+      personalPorPeriodo
     })
   };
 };
@@ -390,7 +517,9 @@ export const generarBloquesFaltantes = ({
   periodos,
   filas,
   filasFijas = [],
-  posicionesNoAplicables = []
+  posicionesNoAplicables = [],
+  personalCanonico = null,
+  personalPorPeriodo = null
 } = {}) => {
   const rotacion = rotacion3Dias && typeof rotacion3Dias === "object"
     ? rotacion3Dias
@@ -407,13 +536,24 @@ export const generarBloquesFaltantes = ({
 
   (Array.isArray(periodos) ? periodos : []).forEach((periodo) => {
     if (!periodo?.clave || Object.hasOwn(bloquesExistentes, periodo.clave)) return;
-    bloques[periodo.clave] = generarDistribucionParaIndice({
+    const generada = generarDistribucionParaIndice({
       distribucionBase: rotacion.asignacionBase,
       filas,
       filasFijas,
       posicionesNoAplicables,
       indice: periodo.indice
     });
+    bloques[periodo.clave] = personalCanonico && personalPorPeriodo
+      ? filtrarDistribucionPorCohorteEfectiva({
+          distribucion: generada,
+          personalCanonico,
+          personalPeriodo: obtenerPersonalPeriodo({
+            personalPorPeriodo,
+            periodo,
+            personalCanonico
+          })
+        })
+      : generada;
   });
 
   return {
@@ -479,8 +619,106 @@ export const generarRotacionMensual = ({
   filasConfiguracion = [],
   categoria = "",
   personal,
-  posicionesNoAplicables = []
+  posicionesNoAplicables = [],
+  personalPorPeriodo = null,
+  personalCanonico = personal
 }) => {
+  const cohortes = personalPorPeriodo && typeof personalPorPeriodo === "object"
+    ? personalPorPeriodo
+    : null;
+  const ids = (lista) => (Array.isArray(lista) ? lista : [])
+    .map((persona) => String(persona?.id || ""))
+    .filter(Boolean)
+    .sort()
+    .join("\u0000");
+  const cohorteEstable = !cohortes || semanas.every(
+    (semana) => ids(cohortes[semana.clave]) === ids(personal)
+  );
+
+  if (!cohorteEstable) {
+    const validacionGlobal = validarAsignacionesFijasMensuales({
+      asignaciones: asignacionesFijas,
+      personal: personalCanonico,
+      categoria,
+      filas: filasConfiguracion
+    });
+    if (!validacionGlobal.valido) {
+      throw new ErrorGeneracionAsignacionesFijas({
+        codigo: "ASIGNACIONES_FIJAS_INVALIDAS",
+        errores: validacionGlobal.errores
+      });
+    }
+
+    const excluidas = new Set(
+      Array.isArray(posicionesNoAplicables) ? posicionesNoAplicables : []
+    );
+    const filasFijasEfectivas = [...new Set([
+      ...(Array.isArray(filasFijas) ? filasFijas : []),
+      ...(typeof filaFija === "string" && filaFija ? [filaFija] : [])
+    ])];
+    const base = clonarDistribucion(planilla?.semana1 || {});
+    const nuevaPlanilla = {
+      ...planilla,
+      semana6: planilla?.semana6 || {}
+    };
+
+    semanas.forEach((semana, indiceSemana) => {
+      const cohorte = Array.isArray(cohortes[semana.clave])
+        ? cohortes[semana.clave]
+        : [];
+      const idsCohorte = new Set(cohorte.map((persona) => String(persona?.id || "")));
+      const rotada = generarDistribucionParaIndice({
+        distribucionBase: base,
+        filas,
+        filasFijas: filasFijasEfectivas,
+        posicionesNoAplicables: [...excluidas],
+        indice: indiceSemana
+      });
+      let distribucion = Object.fromEntries(
+        Object.entries(rotada).map(([fila, referencia]) => {
+          const persona = resolverPersonaDesdeReferencia(referencia, personalCanonico);
+          return [fila, persona && idsCohorte.has(String(persona.id))
+            ? clonarAsignacion(referencia)
+            : ""];
+        })
+      );
+      const fijasActivas = validacionGlobal.asignaciones.filter(
+        ({ personaId }) => idsCohorte.has(String(personaId))
+      );
+      const fijasPresentes = fijasActivas.filter(({ personaId }) =>
+        Object.values(distribucion).some((referencia) =>
+          String(resolverPersonaDesdeReferencia(referencia, cohorte)?.id || "") ===
+          String(personaId)
+        )
+      );
+      const aplicacion = aplicarAsignacionesFijasADistribucion({
+        distribucion,
+        asignacionesFijas: fijasPresentes,
+        filas: filasConfiguracion,
+        personal: cohorte,
+        categoria
+      });
+      if (!aplicacion.ok) throw new ErrorGeneracionAsignacionesFijas(aplicacion);
+      distribucion = aplicacion.distribucion;
+
+      fijasActivas
+        .filter(({ personaId }) => !fijasPresentes.some(
+          (actual) => actual.personaId === personaId
+        ))
+        .forEach(({ sectorId, personaId }) => {
+          const fila = filasConfiguracion.find(
+            (actual) => actual?.tipo === "sector" && actual.sectorId === sectorId
+          );
+          const clave = resolverClaveDistribucionParaFila({ distribucion, fila });
+          const persona = cohorte.find((actual) => String(actual?.id) === String(personaId));
+          if (clave !== null && persona) distribucion[clave] = crearReferenciaPersona(persona);
+        });
+
+      nuevaPlanilla[semana.clave] = distribucion;
+    });
+    return nuevaPlanilla;
+  }
+
   const preparacionBase = aplicarAsignacionesFijasADistribucion({
     distribucion: planilla?.semana1 || {},
     asignacionesFijas,

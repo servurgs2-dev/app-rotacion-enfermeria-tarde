@@ -9,11 +9,14 @@ export const CODIGOS_VIGENCIA_TURNO = Object.freeze({
   FECHA_HASTA_INVALIDA: "FECHA_HASTA_INVALIDA",
   FECHA_FUERA_DE_MES: "FECHA_FUERA_DE_MES",
   RANGO_INVERTIDO: "RANGO_INVERTIDO",
+  RANGOS_PROPIOS_INVALIDOS: "RANGOS_PROPIOS_INVALIDOS",
   SOLAPAMIENTO_VIGENCIAS: "SOLAPAMIENTO_VIGENCIAS",
   SIN_VIGENCIA_EN_FECHA: "SIN_VIGENCIA_EN_FECHA",
   CONFLICTO_TURNOS_LEGACY: "CONFLICTO_TURNOS_LEGACY",
   CATEGORIA_LEGACY_INCOMPATIBLE: "CATEGORIA_LEGACY_INCOMPATIBLE"
 });
+
+const CLAVES_RANGO_TURNO_PROPIO = ["desde", "hasta"];
 
 const texto = (valor) => String(valor ?? "").trim();
 
@@ -140,6 +143,60 @@ export const validarVigenciasPersonaMes = ({ personaId, mes, vigencias = [] } = 
     personaId: identidad,
     mes: periodo,
     vigencias: ordenadas.map((vigencia) => ({ ...vigencia })),
+    errores
+  };
+};
+
+export const validarRangosTurnoPropio = ({ mes, rangos } = {}) => {
+  const periodo = texto(mes);
+  const errores = [];
+  if (!Array.isArray(rangos)) {
+    return {
+      valido: false,
+      mes: periodo,
+      rangos: [],
+      errores: [crearError(CODIGOS_VIGENCIA_TURNO.RANGOS_PROPIOS_INVALIDOS, "rangos")]
+    };
+  }
+
+  const copias = rangos.map((rango, indice) => {
+    const esObjeto = rango && typeof rango === "object" && !Array.isArray(rango);
+    const claves = esObjeto ? Object.keys(rango).sort() : [];
+    const contratoValido = esObjeto &&
+      claves.length === CLAVES_RANGO_TURNO_PROPIO.length &&
+      claves.every((clave, posicion) => clave === CLAVES_RANGO_TURNO_PROPIO[posicion]) &&
+      typeof rango.desde === "string" &&
+      typeof rango.hasta === "string";
+    if (!contratoValido) {
+      errores.push(crearError(
+        CODIGOS_VIGENCIA_TURNO.RANGOS_PROPIOS_INVALIDOS,
+        "rangos",
+        { indice }
+      ));
+      return null;
+    }
+    return { desde: rango.desde.trim(), hasta: rango.hasta.trim() };
+  }).filter(Boolean);
+
+  const expandidas = copias.map((rango) => ({
+    personaId: "__turno_propio__",
+    mes: periodo,
+    turno: "manana",
+    ...rango
+  }));
+  const validacion = validarVigenciasPersonaMes({
+    personaId: "__turno_propio__",
+    mes: periodo,
+    vigencias: expandidas
+  });
+  errores.push(...validacion.errores.map((error) => ({ ...error })));
+
+  return {
+    valido: errores.length === 0,
+    mes: periodo,
+    rangos: validacion.valido
+      ? validacion.vigencias.map(({ desde, hasta }) => ({ desde, hasta }))
+      : copias.map((rango) => ({ ...rango })),
     errores
   };
 };

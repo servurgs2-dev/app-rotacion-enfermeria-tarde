@@ -1,5 +1,5 @@
 import { configuracionSectores } from "../data/sectores.js";
-import { obtenerEstrategiaRotacionPlanilla } from "../config/turnos.js";
+import { TURNOS, obtenerEstrategiaRotacionPlanilla } from "../config/turnos.js";
 import {
   crearEstadoMensualVacio,
   crearPlanillaMensualVacia,
@@ -8,9 +8,9 @@ import {
 import { obtenerSemanasDelMes } from "./fechas.js";
 import { obtenerBloquesQueIntersectanMes } from "./periodosRotacionPlanilla.js";
 import {
-  tieneAsignacionBaseRotacion3Dias
-} from "./continuidadRotacionPlanilla.js";
-import { tieneAsignacionesUtiles } from "./rotacionPlanilla.js";
+  resolverAsignacionBaseRotacion3DiasEfectiva,
+  tieneAsignacionesUtiles
+} from "./rotacionPlanilla.js";
 import {
   analizarDistribucionBaseEnfermeros
 } from "./generacionFlexiblePlanilla.js";
@@ -30,6 +30,8 @@ import {
   validarBorradoresConfiguracionPlanilla
 } from "./plantillasConfiguracionPlanilla.js";
 import { validarAsignacionesFijasMensuales } from "./asignacionesFijasMensuales.js";
+import { asegurarIdPersona } from "./identidadPersonas.js";
+import { limpiarReferenciasDePersona } from "./integridadPersonas.js";
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -40,6 +42,111 @@ const clonar = (valor) => {
   return Object.fromEntries(
     Object.entries(valor).map(([clave, contenido]) => [clave, clonar(contenido)])
   );
+};
+
+const obtenerPersonaIdCanonico = (persona) =>
+  String(asegurarIdPersona(persona)?.id ?? "").trim();
+
+export const reconciliarPersonalPreparacionMes = ({
+  estadoOrigen,
+  turnoDestino,
+  estadosDestinoPorTurno
+} = {}) => {
+  if (!esObjeto(estadoOrigen)) {
+    return { ok: false, codigo: "ORIGEN_AUSENTE", mensaje: "No existe el mes origen." };
+  }
+  const personalOrigen = Array.isArray(estadoOrigen.personal) ? estadoOrigen.personal : [];
+  const origenPorId = new Map();
+  for (const persona of personalOrigen) {
+    const personaId = obtenerPersonaIdCanonico(persona);
+    if (!personaId) {
+      return {
+        ok: false,
+        codigo: "PERSONA_ORIGEN_NO_IDENTIFICABLE",
+        mensaje: "Una persona del mes origen no puede identificarse con seguridad."
+      };
+    }
+    const existentes = origenPorId.get(personaId) || [];
+    existentes.push(persona);
+    origenPorId.set(personaId, existentes);
+  }
+  const duplicadaOrigen = [...origenPorId.entries()].find(([, personas]) => personas.length > 1);
+  if (duplicadaOrigen) {
+    return {
+      ok: false,
+      codigo: "PERSONA_DUPLICADA_EN_ORIGEN",
+      personaId: duplicadaOrigen[0],
+      mensaje: "El mes origen contiene una identidad duplicada y debe revisarse antes de preparar."
+    };
+  }
+
+  const destinoPorId = new Map();
+  for (const [turnoId, estado] of Object.entries(estadosDestinoPorTurno || {})) {
+    if (turnoId === turnoDestino || !estado) continue;
+    for (const persona of Array.isArray(estado.personal) ? estado.personal : []) {
+      const personaId = obtenerPersonaIdCanonico(persona);
+      if (!personaId) {
+        return {
+          ok: false,
+          codigo: "PERSONA_DESTINO_NO_IDENTIFICABLE",
+          mensaje: "Una persona del mes destino no puede identificarse con seguridad."
+        };
+      }
+      const existentes = destinoPorId.get(personaId) || [];
+      existentes.push({ turnoId, persona });
+      destinoPorId.set(personaId, existentes);
+    }
+  }
+  const duplicadaDestino = [...destinoPorId.entries()].find(([, apariciones]) =>
+    apariciones.length > 1
+  );
+  if (duplicadaDestino) {
+    return {
+      ok: false,
+      codigo: "PERSONA_DUPLICADA_EN_DESTINO",
+      personaId: duplicadaDestino[0],
+      turnos: duplicadaDestino[1].map(({ turnoId }) => turnoId),
+      mensaje: "El mes destino contiene una identidad duplicada y debe revisarse antes de preparar."
+    };
+  }
+
+  const personasOmitidas = [];
+  for (const [personaId, [persona]] of origenPorId.entries()) {
+    const [aparicionDestino] = destinoPorId.get(personaId) || [];
+    if (!aparicionDestino) continue;
+    personasOmitidas.push({
+      personaId,
+      nombre: String(aparicionDestino.persona?.nombre || persona?.nombre || "").trim(),
+      turnoId: aparicionDestino.turnoId,
+      turnoNombre: TURNOS[aparicionDestino.turnoId]?.nombre || aparicionDestino.turnoId
+    });
+  }
+
+  return {
+    ok: true,
+    personasOmitidas: personasOmitidas.sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
+    personaIdsOmitidos: personasOmitidas.map(({ personaId }) => personaId)
+  };
+};
+
+export const aplicarOmisionesPersonalEstadoPreparado = ({
+  estadoPreparado,
+  personaIdsOmitidos
+} = {}) => {
+  if (!esObjeto(estadoPreparado)) return estadoPreparado;
+  const ids = new Set(
+    (Array.isArray(personaIdsOmitidos) ? personaIdsOmitidos : [])
+      .map((personaId) => String(personaId ?? "").trim())
+      .filter(Boolean)
+  );
+  let resultado = clonar(estadoPreparado);
+  for (const persona of Array.isArray(resultado.personal) ? resultado.personal : []) {
+    const personaId = obtenerPersonaIdCanonico(persona);
+    if (ids.has(personaId)) {
+      resultado = limpiarReferenciasDePersona(resultado, persona);
+    }
+  }
+  return resultado;
 };
 
 export const obtenerFilasPlanilla = (configuracion, tipo = "") =>
@@ -326,6 +433,7 @@ export const analizarPreparacionMesNuevo = ({
   mesOrigen,
   mesDestino,
   estadoOrigen,
+  personalCanonicoOrigen,
   estadoDestino,
   existeDestinoRemoto = false,
   revisionDestino = "0"
@@ -346,7 +454,15 @@ export const analizarPreparacionMesNuevo = ({
     return { ok: false, codigo: "ORIGEN_AUSENTE", mensaje: "No existe el mes origen." };
   }
   const personal = clonar(Array.isArray(estadoOrigen.personal) ? estadoOrigen.personal : []);
-  const filasEnfermeros = obtenerFilasPlanilla(configuracionSectores.enfermero, "enfermero");
+  const personalCanonico = clonar(
+    Array.isArray(personalCanonicoOrigen) ? personalCanonicoOrigen : personal
+  );
+  const borradoresConfiguracionPlanilla = crearBorradoresConfiguracionPlanilla({
+    estadoMensual: estadoOrigen,
+    turno: turnoId,
+    mes: mesOrigen
+  });
+  let filasEnfermeros = obtenerFilasPlanilla(configuracionSectores.enfermero, "enfermero");
   const filasLicenciados = obtenerFilasPlanilla(configuracionSectores.licenciado, "licenciado");
   const estrategiaEnfermeros = obtenerEstrategiaRotacionPlanilla({
     turnoId,
@@ -362,13 +478,49 @@ export const analizarPreparacionMesNuevo = ({
   let baseEnfermeros;
   let claveBaseEnfermeros;
   let bloquesDestino = [];
+  let rotacionEnfermerosOrigen = clonar(
+    estadoOrigen.planillas?.enfermeros?.rotacion3Dias || {}
+  );
   if (estrategiaEnfermeros.tipo === "cada_3_dias") {
     const rotacion = estadoOrigen.planillas?.enfermeros?.rotacion3Dias;
-    if (!tieneAsignacionBaseRotacion3Dias(rotacion)) {
+    const configuracionEnfermeros = borradoresConfiguracionPlanilla.enfermero;
+    const filasConfiguracion = [...(configuracionEnfermeros?.filas || [])]
+      .sort((a, b) => a.orden - b.orden);
+    const filasActivas = filasConfiguracion.filter((fila) => fila.activo !== false);
+    filasEnfermeros = filasActivas.map((fila) => fila.etiqueta);
+    const asignacionesFijas = configuracionEnfermeros?.asignacionesFijas || [];
+    const sectoresFijos = new Set(asignacionesFijas.map(({ sectorId }) => sectorId));
+    const filasFijas = filasActivas
+      .filter((fila) => fila.tipo === "sector" && (
+        sectoresFijos.has(fila.sectorId) ||
+        (fila.sectorId === "salud_mental" && !sectoresFijos.has("salud_mental"))
+      ))
+      .map((fila) => fila.etiqueta);
+    const periodosOrigen = obtenerBloquesQueIntersectanMes({
+      mesActivo: mesOrigen,
+      fechaBase: estrategiaEnfermeros.fechaBase,
+      duracionDias: estrategiaEnfermeros.duracionDias
+    });
+    const baseEfectiva = resolverAsignacionBaseRotacion3DiasEfectiva({
+      rotacion3Dias: rotacion,
+      periodos: periodosOrigen,
+      filas: filasEnfermeros,
+      filasFijas,
+      asignacionesFijas,
+      filasConfiguracion,
+      personal: personalCanonico,
+      categoria: "enfermero",
+      posicionesNoAplicables: []
+    });
+    if (!baseEfectiva.ok) {
       return { ok: false, codigo: "BASE_ENFERMEROS", mensaje: "Falta la asignación base de Enfermeros." };
     }
-    baseEnfermeros = rotacion.asignacionBase;
+    baseEnfermeros = baseEfectiva.asignacionBase;
     claveBaseEnfermeros = "asignacionBase";
+    rotacionEnfermerosOrigen = {
+      ...clonar(rotacion || {}),
+      asignacionBase: clonar(baseEfectiva.asignacionBase)
+    };
     bloquesDestino = obtenerBloquesQueIntersectanMes({
       mesActivo: mesDestino,
       fechaBase: estrategiaEnfermeros.fechaBase,
@@ -398,7 +550,7 @@ export const analizarPreparacionMesNuevo = ({
   const validacionLic = validarDistribucionCategoria({
     distribucion: baseLic.distribucion,
     filas: filasLicenciados,
-    personal,
+    personal: personalCanonico,
     categoria: "licenciado"
   });
   if (!validacionLic.ok) return { ...validacionLic, codigo: "BASE_LICENCIADOS" };
@@ -406,7 +558,7 @@ export const analizarPreparacionMesNuevo = ({
   const analisisEnfermeros = analizarDistribucionBaseEnfermeros({
     distribucionBase: baseEnfermeros,
     filas: filasEnfermeros,
-    personal
+    personal: personalCanonico
   });
   if (!analisisEnfermeros.ok) {
     return { ...analisisEnfermeros, codigo: "BASE_ENFERMEROS" };
@@ -439,6 +591,7 @@ export const analizarPreparacionMesNuevo = ({
     revisionDestino: String(revisionDestino),
     destino,
     personal,
+    personalCanonicoOrigen: personalCanonico,
     conteosPersonal: {
       total: personal.length,
       enfermeros: personal.filter((persona) => persona.categoria === "enfermero").length,
@@ -450,11 +603,7 @@ export const analizarPreparacionMesNuevo = ({
       enfermero: copiarSnapshotDestinoValido("enfermero"),
       licenciado: copiarSnapshotDestinoValido("licenciado")
     },
-    borradoresConfiguracionPlanilla: crearBorradoresConfiguracionPlanilla({
-      estadoMensual: estadoOrigen,
-      turno: turnoId,
-      mes: mesOrigen
-    }),
+    borradoresConfiguracionPlanilla,
     enfermeros: {
       estrategia: estrategiaEnfermeros,
       filas: filasEnfermeros,
@@ -475,9 +624,7 @@ export const analizarPreparacionMesNuevo = ({
       posicionesMensualesAdicionales:
         obtenerPosicionesMensualesAdicionales("licenciados")
     },
-    rotacionEnfermerosOrigen: clonar(
-      estadoOrigen.planillas?.enfermeros?.rotacion3Dias || {}
-    ),
+    rotacionEnfermerosOrigen,
     coberturaEnfermerosBase: clonar(
       obtenerCoberturaBase(
         estadoOrigen.planillas?.enfermeros,
@@ -493,6 +640,34 @@ export const analizarPreparacionMesNuevo = ({
   };
 };
 
+const filtrarReferenciaParaPadronDestino = ({
+  referencia,
+  personalDestino,
+  personalCanonicoOrigen
+}) => {
+  if (referencia === "" || referencia === null || referencia === undefined) return referencia;
+  const personaOrigen = resolverPersonaDesdeReferencia(referencia, personalCanonicoOrigen);
+  if (!personaOrigen) return "";
+  return (personalDestino || []).some(
+    (persona) => String(persona?.id || "") === String(personaOrigen.id)
+  ) ? clonar(referencia) : "";
+};
+
+const filtrarDistribucionParaPadronDestino = ({
+  distribucion,
+  personalDestino,
+  personalCanonicoOrigen
+}) => Object.fromEntries(
+  Object.entries(esObjeto(distribucion) ? distribucion : {}).map(([fila, referencia]) => [
+    fila,
+    filtrarReferenciaParaPadronDestino({
+      referencia,
+      personalDestino,
+      personalCanonicoOrigen
+    })
+  ])
+);
+
 export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlanilla } = {}) => {
   if (!analisis?.ok) {
     return { ok: false, mensaje: "La preparación del mes no es válida." };
@@ -507,7 +682,7 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
     const borrador = validacionBorradores.borradores[categoria];
     const validacionFijas = validarAsignacionesFijasMensuales({
       asignaciones: borrador.asignacionesFijas,
-      personal: analisis.personal,
+      personal: analisis.personalCanonicoOrigen || analisis.personal,
       categoria,
       filas: borrador.filas
     });
@@ -523,6 +698,9 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
       };
     }
   }
+  const personaIdsDestino = new Set(
+    analisis.personal.map((persona) => obtenerPersonaIdCanonico(persona)).filter(Boolean)
+  );
   const configuracionPlanilla = Object.fromEntries(
     ["enfermero", "licenciado"].map((categoria) => [
       categoria,
@@ -534,7 +712,9 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
           categoria,
           mes: analisis.mesDestino,
           filas: destinoExistente?.filas || borrador.filas,
-          asignacionesFijas: borrador.asignacionesFijas,
+          asignacionesFijas: borrador.asignacionesFijas.filter(
+            ({ personaId }) => personaIdsDestino.has(String(personaId ?? "").trim())
+          ),
           prioridadCoberturaSectorIds: borrador.prioridadCoberturaSectorIds
         });
       })()
@@ -546,10 +726,20 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
     ) ? [etiqueta] : [];
   const posicionesEnfermeros = posicionAdicionalActiva("enfermero", "T6");
   const posicionesLicenciados = posicionAdicionalActiva("licenciado", "T3");
+  const filtrarBaseSemanal = (distribucion) => filtrarDistribucionParaPadronDestino({
+    distribucion,
+    personalDestino: analisis.personal,
+    personalCanonicoOrigen: analisis.personalCanonicoOrigen || analisis.personal
+  });
+  const filtrarCoberturaSemanal = (referencia) => filtrarReferenciaParaPadronDestino({
+    referencia,
+    personalDestino: analisis.personal,
+    personalCanonicoOrigen: analisis.personalCanonicoOrigen || analisis.personal
+  });
   const planillaLicBase = {
     ...crearPlanillaMensualVacia(),
     semana1: quitarTurnanteMensualDeDistribucion(
-      clonar(analisis.licenciados.base),
+      filtrarBaseSemanal(analisis.licenciados.base),
       "licenciado"
     ),
     coberturaLibreSM: {}
@@ -558,7 +748,9 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
     planillaLicBase.posicionesMensualesAdicionales = posicionesLicenciados;
   }
   const coberturaLic = analisis.coberturaLicenciadosBase;
-  if (coberturaLic) planillaLicBase.coberturaLibreSM.semana1 = clonar(coberturaLic);
+  if (coberturaLic) {
+    planillaLicBase.coberturaLibreSM.semana1 = filtrarCoberturaSemanal(coberturaLic);
+  }
 
   let planillaEnfermeros;
   if (analisis.enfermeros.estrategia.tipo === "cada_3_dias") {
@@ -570,7 +762,7 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
       Object.entries(rotacionOrigen.bloques || {}).flatMap(([clave, bloque]) =>
         clavesDestino.has(clave)
           ? [[clave, quitarTurnanteMensualDeDistribucion(
-              clonar(bloque),
+              filtrarBaseSemanal(bloque),
               "enfermero"
             )]]
           : []
@@ -579,7 +771,9 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
     const coberturasCompartidas = Object.fromEntries(
       Object.entries(rotacionOrigen.coberturaLibreSM || {}).flatMap(
         ([clave, cobertura]) =>
-          clavesDestino.has(clave) ? [[clave, clonar(cobertura)]] : []
+          clavesDestino.has(clave)
+            ? [[clave, filtrarCoberturaSemanal(cobertura)]]
+            : []
       )
     );
     const rotacion = {
@@ -591,7 +785,7 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
         rotacionOrigen.duracionDias ||
         analisis.enfermeros.estrategia.duracionDias,
       asignacionBase: quitarTurnanteMensualDeDistribucion(
-        clonar(analisis.enfermeros.base),
+        filtrarBaseSemanal(analisis.enfermeros.base),
         "enfermero"
       ),
       bloques: bloquesCompartidos,
@@ -605,14 +799,14 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
     planillaEnfermeros = {
       ...crearPlanillaMensualVacia(),
       semana1: quitarTurnanteMensualDeDistribucion(
-        clonar(analisis.enfermeros.base),
+        filtrarBaseSemanal(analisis.enfermeros.base),
         "enfermero"
       ),
       coberturaLibreSM: {}
     };
     const cobertura = analisis.coberturaEnfermerosBase;
     if (cobertura) {
-      planillaEnfermeros.coberturaLibreSM.semana1 = clonar(cobertura);
+      planillaEnfermeros.coberturaLibreSM.semana1 = filtrarCoberturaSemanal(cobertura);
     }
   }
 

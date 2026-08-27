@@ -5,7 +5,7 @@ import {
   normalizarMaternal,
   obtenerEtiquetaMaternal
 } from "../../utils/maternal.js";
-import { crearIdPersonaNueva } from "../../utils/identidadPersonas.js";
+import { asegurarIdPersona, crearIdPersonaNueva } from "../../utils/identidadPersonas.js";
 import {
   existeNombrePersona,
   limpiarNombrePersona,
@@ -17,6 +17,13 @@ import {
   obtenerIdsPersonalDuplicados
 } from "../../utils/validacionPersonal.js";
 import PanelConfirmacionLimpieza from "../ui/PanelConfirmacionLimpieza.jsx";
+import EstadoVigenciasTurnoPersona from "./EstadoVigenciasTurnoPersona.jsx";
+import EditorVigenciasTurnoPropio from "./EditorVigenciasTurnoPropio.jsx";
+import EditorVigenciasSupervision from "./EditorVigenciasSupervision.jsx";
+import MoverTurnoBaseSupervision from "./MoverTurnoBaseSupervision.jsx";
+import { ROLES_APLICACION, validarPerfil } from "../../utils/permisos.js";
+import { resolverPersonalMensualPorTurno } from "../../utils/padronVigenciasTurnoPersonal.js";
+import { TURNOS } from "../../config/turnos.js";
 
 const MENSAJE_NOMBRE_DUPLICADO =
   "Ya existe una persona con ese nombre. Agregá el segundo apellido para poder diferenciarla.";
@@ -35,6 +42,11 @@ function ListaPersonal({
   onEliminarPersona,
   onLimpiarPersonal,
   onValidarExclusividadTurno,
+  vigenciasPersonal,
+  onAnalizarMovimientoPadronBase,
+  onMoverPadronBase,
+  perfil,
+  modoHistorico = false,
   soloLectura = false
 }) {
   const [nombre, setNombre] = useState("");
@@ -52,8 +64,18 @@ function ListaPersonal({
   const [errorEdicion, setErrorEdicion] = useState("");
   const [verificandoExclusividad, setVerificandoExclusividad] = useState(false);
   const [limpiezaPersonal, setLimpiezaPersonal] = useState(null);
+  const [editorVigencias, setEditorVigencias] = useState(null);
+  const [editorVigenciasSupervision, setEditorVigenciasSupervision] = useState(null);
+  const [movimientoPadronBase, setMovimientoPadronBase] = useState(null);
   const validacionNombreIdRef = useRef(0);
   const validacionEnCursoRef = useRef(false);
+  const perfilValido = validarPerfil(perfil);
+  const puedeEditarVigenciasPropias = Boolean(
+    perfilValido?.activo && perfilValido.rol === ROLES_APLICACION.LICENCIADO
+  );
+  const puedeEditarVigenciasCompletas = Boolean(
+    perfilValido?.activo && perfilValido.rol === ROLES_APLICACION.SUPERVISION
+  );
 
   const formatearDias = (dias) => {
     if (dias.length === 0) return "Sin días";
@@ -268,7 +290,16 @@ function ListaPersonal({
     cancelarEdicionNombre();
   };
 
-  const filtrados = personal.filter((p) =>
+  const personalVisible = resolverPersonalMensualPorTurno({
+    padron: vigenciasPersonal?.padron,
+    turno: configTurno.id,
+    personalFisico: personal
+  });
+  const personalFisicoPorId = new Map(personal.map((personaFisica) => [
+    String(asegurarIdPersona(personaFisica)?.id ?? "").trim(),
+    personaFisica
+  ]));
+  const filtrados = personalVisible.filter(({ persona: p }) =>
     p.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
   const hayNombresDuplicados = obtenerNombresDuplicados(personal).size > 0;
@@ -389,6 +420,24 @@ function ListaPersonal({
         </p>
       )}
 
+      {vigenciasPersonal?.cargando && (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600" role="status">
+          Cargando información de turnos del mes…
+        </p>
+      )}
+      {vigenciasPersonal?.error && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="status">
+          {vigenciasPersonal.error}
+        </p>
+      )}
+      {!vigenciasPersonal?.error && vigenciasPersonal?.padron?.diagnosticos?.some(
+        (diagnostico) => !diagnostico.personaId
+      ) && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="status">
+          Hay problemas en la información mensual de turnos. No se aplicarán automáticamente.
+        </p>
+      )}
+
       {limpiezaPersonal?.contextoClave === claveContextoLimpieza && (
         <PanelConfirmacionLimpieza
           titulo="¿Eliminar todo el Personal?"
@@ -398,6 +447,53 @@ function ListaPersonal({
           textoConfirmar="Sí, eliminar todo el Personal"
           onCancelar={() => setLimpiezaPersonal(null)}
           onConfirmar={confirmarLimpiezaPersonal}
+        />
+      )}
+
+      {editorVigencias && (
+        <EditorVigenciasTurnoPropio
+          key={`${mesActivo}|${editorVigencias.personaId}`}
+          persona={editorVigencias.persona}
+          personaId={editorVigencias.personaId}
+          mes={mesActivo}
+          turnoPerfil={perfilValido.turno}
+          entrada={vigenciasPersonal?.padron?.porPersonaId?.[editorVigencias.personaId]}
+          tieneDiagnostico={vigenciasPersonal?.padron?.diagnosticos?.some(
+            (diagnostico) => diagnostico.personaId === editorVigencias.personaId
+          )}
+          historico={modoHistorico}
+          onCerrar={() => setEditorVigencias(null)}
+          onRecargar={vigenciasPersonal.recargar}
+        />
+      )}
+
+      {editorVigenciasSupervision && (
+        <EditorVigenciasSupervision
+          key={`${mesActivo}|${editorVigenciasSupervision.personaId}`}
+          persona={editorVigenciasSupervision.persona}
+          personaId={editorVigenciasSupervision.personaId}
+          mes={mesActivo}
+          entrada={vigenciasPersonal?.padron?.porPersonaId?.[editorVigenciasSupervision.personaId]}
+          tieneDiagnostico={vigenciasPersonal?.padron?.diagnosticos?.some(
+            (diagnostico) => diagnostico.personaId === editorVigenciasSupervision.personaId
+          )}
+          historico={modoHistorico}
+          onCerrar={() => setEditorVigenciasSupervision(null)}
+          onRecargar={vigenciasPersonal.recargar}
+        />
+      )}
+
+      {movimientoPadronBase && (
+        <MoverTurnoBaseSupervision
+          key={`${mesActivo}|${movimientoPadronBase.personaId}|${movimientoPadronBase.turnoOrigen}`}
+          persona={movimientoPadronBase.persona}
+          personaId={movimientoPadronBase.personaId}
+          mes={mesActivo}
+          turnoOrigen={movimientoPadronBase.turnoOrigen}
+          historico={modoHistorico}
+          onAnalizar={onAnalizarMovimientoPadronBase}
+          onMover={onMoverPadronBase}
+          onCerrar={() => setMovimientoPadronBase(null)}
         />
       )}
 
@@ -418,11 +514,18 @@ function ListaPersonal({
     </thead>
 
     <tbody className="divide-y divide-slate-100">
-      {filtrados.map((p) => {
-        const indicePersonal = personal.indexOf(p);
+      {filtrados.map((entradaVisible) => {
+        const p = entradaVisible.persona;
+        const personaIdVigencias = entradaVisible.personaId;
+        const personaFisica = personalFisicoPorId.get(personaIdVigencias);
+        const esFisicaEnTurnoVisualizado = Boolean(personaFisica);
+        const personaOperacion = personaFisica || p;
+        const indicePersonal = personaFisica ? personal.indexOf(personaFisica) : -1;
         return (
         <tr
-          key={obtenerClaveRenderPersona(p, indicePersonal, idsDuplicados)}
+          key={esFisicaEnTurnoVisualizado
+            ? obtenerClaveRenderPersona(personaOperacion, indicePersonal, idsDuplicados)
+            : `vigencia-${personaIdVigencias}`}
           className="hover:bg-slate-50 transition"
         >
           <td className="px-3 py-2 font-medium text-slate-700">
@@ -446,7 +549,61 @@ function ListaPersonal({
     <>
       {p.nombre}
       <span className="text-slate-400 text-xs ml-1">({textoHorario(p.horario)})</span>
-      <button type="button" disabled={soloLectura} className="ml-2 text-xs text-blue-600 hover:text-blue-800" onClick={() => iniciarEdicionNombre(p)}>Editar</button>
+      <button type="button" disabled={soloLectura || !esFisicaEnTurnoVisualizado} className="ml-2 text-xs text-blue-600 hover:text-blue-800 disabled:text-slate-400" onClick={() => iniciarEdicionNombre(personaOperacion)}>Editar</button>
+      <EstadoVigenciasTurnoPersona
+        mes={mesActivo}
+        entrada={vigenciasPersonal?.padron?.porPersonaId?.[personaIdVigencias]}
+        tieneDiagnostico={vigenciasPersonal?.padron?.diagnosticos?.some(
+          (diagnostico) => diagnostico.personaId === personaIdVigencias
+        )}
+      />
+      {!esFisicaEnTurnoVisualizado && (
+        <p className="mt-1 text-xs text-slate-500">
+          Esta persona pertenece al padrón base de {TURNOS[entradaVisible.turnoFuente]?.nombre || "otro turno"}.
+        </p>
+      )}
+      {puedeEditarVigenciasPropias && (
+        <button
+          type="button"
+          disabled={modoHistorico || vigenciasPersonal?.cargando || Boolean(vigenciasPersonal?.error)}
+          className="ml-2 mt-1 rounded-md border border-blue-200 px-2 py-1 text-xs font-medium text-blue-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+          onClick={() => setEditorVigencias({ persona: asegurarIdPersona(p), personaId: personaIdVigencias })}
+        >
+          Editar mi turno
+        </button>
+      )}
+      {puedeEditarVigenciasCompletas && (
+        <>
+          <button
+            type="button"
+            disabled={modoHistorico || vigenciasPersonal?.cargando || Boolean(vigenciasPersonal?.error)}
+            className="ml-2 mt-1 rounded-md border border-violet-200 px-2 py-1 text-xs font-medium text-violet-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+            onClick={() => setEditorVigenciasSupervision({
+              persona: asegurarIdPersona(p),
+              personaId: personaIdVigencias
+            })}
+          >
+            Editar vigencias
+          </button>
+          <button
+            type="button"
+            disabled={
+              modoHistorico || vigenciasPersonal?.cargando || Boolean(vigenciasPersonal?.error) ||
+              !TURNOS[entradaVisible.turnoFuente] || entradaVisible.invalida === true ||
+              typeof onAnalizarMovimientoPadronBase !== "function" ||
+              typeof onMoverPadronBase !== "function"
+            }
+            className="ml-2 mt-1 rounded-md border border-teal-200 px-2 py-1 text-xs font-medium text-teal-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+            onClick={() => setMovimientoPadronBase({
+              persona: asegurarIdPersona(p),
+              personaId: personaIdVigencias,
+              turnoOrigen: entradaVisible.turnoFuente
+            })}
+          >
+            Cambiar turno base
+          </button>
+        </>
+      )}
     </>
   )}
 </td>
@@ -454,10 +611,10 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <select
     className="border border-slate-200 rounded px-2 py-1 text-xs"
-    disabled={soloLectura}
+    disabled={soloLectura || !esFisicaEnTurnoVisualizado}
     value={p.categoria}
     onChange={(e) => {
-      actualizarPersona(p, { categoria: e.target.value });
+      actualizarPersona(personaOperacion, { categoria: e.target.value });
     }}
   >
     <option value="enfermero">Enfermero</option>
@@ -468,10 +625,10 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <select
     className="border border-slate-200 rounded px-2 py-1 text-xs"
-    disabled={soloLectura}
+    disabled={soloLectura || !esFisicaEnTurnoVisualizado}
     value={p.rol}
     onChange={(e) => {
-      actualizarPersona(p, { rol: e.target.value });
+      actualizarPersona(personaOperacion, { rol: e.target.value });
     }}
   >
     <option value="titular">Titular</option>
@@ -482,10 +639,10 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <select
     className="border border-slate-200 rounded px-2 py-1 text-xs"
-    disabled={soloLectura}
+    disabled={soloLectura || !esFisicaEnTurnoVisualizado}
     value={p.libre}
     onChange={(e) => {
-      actualizarPersona(p, { libre: Number(e.target.value) });
+      actualizarPersona(personaOperacion, { libre: Number(e.target.value) });
     }}
   >
     {[1,2,3,4,5].map(n => (
@@ -500,10 +657,10 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <select
     className="border border-slate-200 rounded px-2 py-1 text-xs"
-    disabled={soloLectura}
+    disabled={soloLectura || !esFisicaEnTurnoVisualizado}
     value={p.horario}
     onChange={(e) => {
-      actualizarPersona(p, { horario: e.target.value });
+      actualizarPersona(personaOperacion, { horario: e.target.value });
     }}
   >
     {opcionesHorario.map((opcion) => (
@@ -517,10 +674,10 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <select
     className="border border-slate-200 rounded px-2 py-1 text-xs"
-    disabled={soloLectura}
+    disabled={soloLectura || !esFisicaEnTurnoVisualizado}
     value={normalizarMaternal(p.maternal)}
     onChange={(e) => {
-      actualizarPersona(p, { maternal: normalizarMaternal(e.target.value) });
+      actualizarPersona(personaOperacion, { maternal: normalizarMaternal(e.target.value) });
     }}
   >
     {Object.values(TIPOS_MATERNAL).map((tipoMaternal) => (
@@ -534,24 +691,25 @@ function ListaPersonal({
 <td className="px-3 py-2">
   <input
     className="w-20 border border-slate-200 rounded px-2 py-1 text-xs"
-    disabled={soloLectura}
+    disabled={soloLectura || !esFisicaEnTurnoVisualizado}
     value={p.funcionario || ""}
     onChange={(e) => {
-      actualizarPersona(p, { funcionario: e.target.value });
+      actualizarPersona(personaOperacion, { funcionario: e.target.value });
     }}
   />
 </td>
 
 <td className="px-3 py-2">
   <button
-    disabled={soloLectura}
+    disabled={soloLectura || !esFisicaEnTurnoVisualizado}
     className="text-red-500 hover:text-red-700 transition"
     onClick={() => {
-      if (idsDuplicados.has(String(p?.id ?? "").trim())) {
+      if (!esFisicaEnTurnoVisualizado) return;
+      if (idsDuplicados.has(String(personaOperacion?.id ?? "").trim())) {
         setErrorIdentidad(MENSAJE_IDENTIDAD_DUPLICADA);
         return;
       }
-      onEliminarPersona(p);
+      onEliminarPersona(personaOperacion);
     }}
   >
     ❌

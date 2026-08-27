@@ -69,7 +69,9 @@ export const continuarRotacion3DiasEntreMeses = ({
   filas,
   filasFijas = [],
   posicionesNoAplicables = [],
-  estrategia
+  estrategia,
+  personalCanonico = null,
+  personalPorPeriodo = null
 } = {}) => {
   if (!tieneAsignacionBaseRotacion3Dias(rotacionAnterior)) {
     throw new ErrorContinuidadRotacionPlanilla(
@@ -130,7 +132,9 @@ export const continuarRotacion3DiasEntreMeses = ({
     periodos,
     filas,
     filasFijas,
-    posicionesNoAplicables
+    posicionesNoAplicables,
+    personalCanonico,
+    personalPorPeriodo
   });
 
   return {

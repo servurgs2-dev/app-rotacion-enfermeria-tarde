@@ -27,6 +27,22 @@ export const limpiarPersonaDePlanilla = (planilla, persona, personal = []) => {
   let huboCambios = false;
   const planillaLimpia = {};
 
+  const limpiarDistribucion = (distribucion) => {
+    if (!esObjetoPlano(distribucion)) return distribucion;
+    let cambio = false;
+    const resultado = Object.fromEntries(
+      Object.entries(distribucion).map(([fila, referencia]) => {
+        if (referenciaCorrespondeAPersona(referencia, persona, personal)) {
+          cambio = true;
+          return [fila, ""];
+        }
+        return [fila, referencia];
+      })
+    );
+    if (cambio) huboCambios = true;
+    return cambio ? resultado : distribucion;
+  };
+
   Object.entries(planilla).forEach(([clave, semana]) => {
     if (clave === "asignacionesParciales" && esObjetoPlano(semana)) {
       const parcialesLimpias = Object.fromEntries(
@@ -48,6 +64,29 @@ export const limpiarPersonaDePlanilla = (planilla, persona, personal = []) => {
         huboCambios = true;
       }
       planillaLimpia[clave] = parcialesLimpias;
+      return;
+    }
+    if (clave === "rotacion3Dias" && esObjetoPlano(semana)) {
+      const asignacionBase = limpiarDistribucion(semana.asignacionBase);
+      const bloques = esObjetoPlano(semana.bloques)
+        ? Object.fromEntries(
+            Object.entries(semana.bloques).map(([fecha, distribucion]) => [
+              fecha,
+              limpiarDistribucion(distribucion)
+            ])
+          )
+        : semana.bloques;
+      const cambioRotacion = asignacionBase !== semana.asignacionBase ||
+        Object.entries(semana.bloques || {}).some(
+          ([fecha, distribucion]) => bloques?.[fecha] !== distribucion
+        );
+      planillaLimpia[clave] = cambioRotacion
+        ? { ...semana, asignacionBase, bloques }
+        : semana;
+      return;
+    }
+    if (clave === "coberturaLibreSM" && esObjetoPlano(semana)) {
+      planillaLimpia[clave] = limpiarDistribucion(semana);
       return;
     }
     if (!clave.startsWith("semana") || !esObjetoPlano(semana)) {

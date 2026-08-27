@@ -181,6 +181,9 @@ function CalendarioDiario({
   mesActivo = "",
   licencias,
   certificaciones,
+  licenciasLectura = licencias,
+  certificacionesLectura = certificaciones,
+  estadoCargaVigencias = null,
   novedades = [],
   setCertificaciones,
   obtenerCertificacionesActuales,
@@ -376,13 +379,13 @@ const estaLibre = (e) => {
   };
 
 const estaDeLicenciaHoy = useCallback(
-  (e) => e && estaDeLicencia(licencias, e, fecha, personal),
-  [fecha, licencias, personal]
+  (e) => e && estaDeLicencia(licenciasLectura, e, fecha, personal),
+  [fecha, licenciasLectura, personal]
 );
 
 const estaCertificadoHoy = useCallback(
-  (e) => e && estaCertificado(certificaciones, e, fecha, personal),
-  [certificaciones, fecha, personal]
+  (e) => e && estaCertificado(certificacionesLectura, e, fecha, personal),
+  [certificacionesLectura, fecha, personal]
 );
 
 const certificados = useMemo(
@@ -1168,7 +1171,7 @@ const obtenerSectorOrigenPersona = (persona) => {
 
 const noDisponiblesPresentacion = obtenerNoDisponiblesDelDia({
   registros: noDisponibles[keyDia],
-  certificaciones,
+  certificaciones: certificacionesLectura,
   novedades,
   personal,
   fecha: keyDia,
@@ -2214,6 +2217,16 @@ useEffect(() => {
       <h2 className="text-xl font-semibold text-slate-800">
   Distribución diaria
 </h2>
+      {estadoCargaVigencias?.cargando && (
+        <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Cargando pertenencia de turnos del día. Mientras tanto se muestra el padrón base.
+        </p>
+      )}
+      {estadoCargaVigencias?.error && (
+        <p role="alert" className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          No se pudo cargar la pertenencia de turnos del día. Se muestra el padrón base sin asumir que no existen vigencias.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
       <input

@@ -248,7 +248,7 @@ probar("un Extra conceptual no modifica el turno base", () => {
   assert.equal(resolverTurnoPersonaEnFecha({ personaId: extra.personaId, fecha: extra.fecha, vigencias: base }).turno, "manana");
 });
 
-probar("el módulo no está integrado en producción", () => {
+probar("el dominio no se importa directamente desde consumidores productivos", () => {
   const productivos = [
     "src/App.jsx",
     "src/components/personal/ListaPersonal.jsx",

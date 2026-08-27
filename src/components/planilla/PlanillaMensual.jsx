@@ -80,6 +80,11 @@ import {
   obtenerReferenciaSaludMental
 } from "../../utils/saludMentalGeneracion.js";
 import { ErrorGeneracionAsignacionesFijas } from "../../utils/asignacionesFijasMensuales.js";
+import {
+  obtenerPersonasSinAsignarPlanillaSemanal,
+  resolverPersonalPlanificablePeriodo,
+  resolverReferenciaPlanillaSemanal
+} from "../../utils/planillaVigenciasSemanales.js";
 
 function PlanillaMensual({
   personal,
@@ -90,6 +95,8 @@ function PlanillaMensual({
   licencias,
   mesActivo,
   turnoId,
+  padronVigencias,
+  estadoCargaVigencias,
   soloLectura = false,
   versionHistoricaActiva = false
 }) {
@@ -106,6 +113,15 @@ function PlanillaMensual({
   };
   const personalSeguro = Array.isArray(personal) ? personal : [];
   const personalFiltrado = personalSeguro.filter((p) => p.categoria === tipo);
+  const padronVigenciasDisponible = Boolean(
+    padronVigencias && !estadoCargaVigencias?.cargando && !estadoCargaVigencias?.error
+  );
+  const personalCanonico = padronVigenciasDisponible
+    ? padronVigencias.personas.map((entrada) => entrada.persona).filter(Boolean)
+    : personalSeguro;
+  const personalCanonicoFiltrado = personalCanonico.filter(
+    (persona) => persona?.categoria === tipo
+  );
   const idsDuplicados = obtenerIdsPersonalDuplicados(personalSeguro);
   const sectoresCriticos = configuracionSectores[tipo]?.sectoresCriticos || [];
   const estrategia = obtenerEstrategiaRotacionPlanilla({
@@ -121,6 +137,16 @@ function PlanillaMensual({
         duracionDias: estrategia.duracionDias
       })
     : obtenerSemanasDelMes(mesActivo);
+  const obtenerCohortePeriodo = (periodo) => resolverPersonalPlanificablePeriodo({
+    padron: padronVigencias,
+    estadoCargaVigencias,
+    turno: turnoId,
+    periodo,
+    mes: mesActivo,
+    personalFisico: personalSeguro,
+    categoria: tipo,
+    licencias
+  }).personas;
   const evaluacionGeneracion = evaluarPreparacionRotacion3Dias({
     estrategia,
     mesActivo,
@@ -176,6 +202,10 @@ function PlanillaMensual({
   const posicionTurnanteMensual = obtenerPosicionTurnanteMensual(tipo);
   const turnanteMensualHabilitado = filas.includes(posicionTurnanteMensual);
   const capacidadNormal = obtenerCapacidadNormalPlanilla(tipo);
+  const picoPersonalPlanificable = Math.max(
+    0,
+    ...periodos.map((periodo) => obtenerCohortePeriodo(periodo).length)
+  );
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -288,7 +318,11 @@ function PlanillaMensual({
             filasFijas: filasFijasGeneracion,
             asignacionesFijas,
             filasConfiguracion,
-            personal: personalFiltrado,
+            personal: personalCanonicoFiltrado,
+            personalCanonico: personalCanonicoFiltrado,
+            personalPorPeriodo: Object.fromEntries(
+              periodos.map((periodo) => [periodo.clave, obtenerCohortePeriodo(periodo)])
+            ),
             categoria: tipo,
             posicionesNoAplicables,
             estrategia
@@ -300,7 +334,11 @@ function PlanillaMensual({
             filasFijas: filasFijasGeneracion,
             asignacionesFijas,
             filasConfiguracion,
-            personal: personalFiltrado,
+            personal: personalCanonicoFiltrado,
+            personalCanonico: personalCanonicoFiltrado,
+            personalPorPeriodo: Object.fromEntries(
+              periodos.map((periodo) => [periodo.clave, obtenerCohortePeriodo(periodo)])
+            ),
             categoria: tipo,
             posicionesNoAplicables,
             estrategia
@@ -331,7 +369,11 @@ function PlanillaMensual({
           asignacionesFijas,
           filasConfiguracion,
           categoria: tipo,
-          personal: personalFiltrado,
+          personal: obtenerCohortePeriodo(periodos[0]),
+          personalCanonico,
+          personalPorPeriodo: Object.fromEntries(
+            periodos.map((periodo) => [periodo.clave, obtenerCohortePeriodo(periodo)])
+          ),
           posicionesNoAplicables
         });
       if (!generada) return;
@@ -355,7 +397,9 @@ function PlanillaMensual({
     const analisis = analizarDistribucionBaseEnfermeros({
       distribucionBase: contexto.distribucionBase,
       filas,
-      personal: personalFiltrado,
+      personal: usaRotacionTresDias
+        ? personalCanonicoFiltrado
+        : obtenerCohortePeriodo(periodos[0]),
       cantidadEsperada: filas.length
     });
     if (!analisis.ok) {
@@ -434,7 +478,11 @@ function PlanillaMensual({
             filasFijas: filasFijasGeneracion,
             asignacionesFijas,
             filasConfiguracion,
-            personal: personalFiltrado,
+            personal: personalCanonicoFiltrado,
+            personalCanonico: personalCanonicoFiltrado,
+            personalPorPeriodo: Object.fromEntries(
+              periodos.map((periodo) => [periodo.clave, obtenerCohortePeriodo(periodo)])
+            ),
             categoria: tipo,
             estrategia
           })
@@ -445,7 +493,11 @@ function PlanillaMensual({
             filasFijas: filasFijasGeneracion,
             asignacionesFijas,
             filasConfiguracion,
-            personal: personalFiltrado,
+            personal: personalCanonicoFiltrado,
+            personalCanonico: personalCanonicoFiltrado,
+            personalPorPeriodo: Object.fromEntries(
+              periodos.map((periodo) => [periodo.clave, obtenerCohortePeriodo(periodo)])
+            ),
             categoria: tipo,
             estrategia
           });
@@ -494,14 +546,22 @@ function PlanillaMensual({
       asignacionesFijas,
       filasConfiguracion,
       categoria: tipo,
-      personal: personalFiltrado
+      personal: usaRotacionTresDias
+        ? personalCanonicoFiltrado
+        : obtenerCohortePeriodo(periodos[0]),
+      personalCanonico,
+      personalPorPeriodo: Object.fromEntries(
+        periodos.map((periodo) => [periodo.clave, obtenerCohortePeriodo(periodo)])
+      )
     });
     if (generada) setPlanilla(generada);
   }
 
   function actualizarCelda(periodo, sector, personaId) {
     if (soloLectura) return;
-    const persona = personalFiltrado.find((item) => item.id === personaId);
+    const periodoActual = periodos.find((item) => item.clave === periodo);
+    const personalPeriodo = obtenerCohortePeriodo(periodoActual);
+    const persona = personalPeriodo.find((item) => item.id === personaId);
     const valor = personaId ? crearReferenciaPersona(persona) : "";
     if (personaId && !valor) return;
 
@@ -556,7 +616,9 @@ function PlanillaMensual({
 
   function actualizarCoberturaLibreSM(periodo, personaId) {
     if (soloLectura) return;
-    const persona = personalFiltrado.find((item) => item.id === personaId);
+    const periodoActual = periodos.find((item) => item.clave === periodo);
+    const personalPeriodo = obtenerCohortePeriodo(periodoActual);
+    const persona = personalPeriodo.find((item) => item.id === personaId);
     const valor = personaId ? crearReferenciaPersona(persona) : "";
     if (personaId && !valor) return;
 
@@ -617,7 +679,7 @@ function PlanillaMensual({
 
   function actualizarAsignacionBaseNocturna(sector, personaId) {
     if (soloLectura || !usaRotacionTresDias || tipo !== "enfermero") return;
-    const persona = personalFiltrado.find((item) => item.id === personaId);
+    const persona = personalCanonicoFiltrado.find((item) => item.id === personaId);
     const valor = personaId ? crearReferenciaPersona(persona) : "";
     if (personaId && !valor) return;
 
@@ -644,13 +706,16 @@ function PlanillaMensual({
   const periodoReintegroActivo = periodos.find(
     (periodo) => periodo.clave === periodoReintegros
   ) || periodos[0];
+  const personalReintegroActivo = periodoReintegroActivo
+    ? obtenerCohortePeriodo(periodoReintegroActivo)
+    : personalFiltrado;
   const asignacionesParcialesActivas = obtenerAsignacionesParcialesPeriodo(
     planilla,
     periodoReintegroActivo?.clave
   );
   const reintegrosActivos = periodoReintegroActivo
     ? detectarDisponiblesPorReintegro({
-        personal,
+        personal: personalReintegroActivo,
         licencias,
         distribucionBase: obtenerValoresPeriodo(periodoReintegroActivo),
         asignacionesParciales: asignacionesParcialesActivas,
@@ -669,7 +734,7 @@ function PlanillaMensual({
           filas,
           distribucionBase: obtenerValoresPeriodo(periodoReintegroActivo),
           asignacionesExistentes: asignacionesParcialesActivas,
-          personal,
+          personal: personalReintegroActivo,
           licencias,
           categoria: tipo
         });
@@ -706,7 +771,7 @@ function PlanillaMensual({
         planillaActual,
         periodoReintegroActivo.clave
       ),
-      personal,
+      personal: personalReintegroActivo,
       licencias,
       categoria: tipo
     });
@@ -758,7 +823,9 @@ function PlanillaMensual({
         planilla,
         periodoClave: intercambio.periodoClave,
         filas,
-        personal,
+        personal: obtenerCohortePeriodo(
+          periodos.find((periodo) => periodo.clave === intercambio.periodoClave)
+        ),
         categoria: tipo,
         usaRotacionTresDias
       })
@@ -771,7 +838,9 @@ function PlanillaMensual({
         filaOrigen: intercambio.filaOrigen,
         filaDestino: intercambio.filaDestino,
         filas,
-        personal: personalFiltrado,
+        personal: obtenerCohortePeriodo(
+          periodos.find((periodo) => periodo.clave === intercambio.periodoClave)
+        ),
         categoria: tipo,
         usaRotacionTresDias,
         personaIdOrigenEsperada: intercambio.personaIdOrigenEsperada,
@@ -850,6 +919,9 @@ function PlanillaMensual({
         : actual);
       return;
     }
+    const personal = obtenerCohortePeriodo(
+      periodos.find((periodo) => periodo.clave === intercambio.periodoClave)
+    );
     const validacion = validarIntercambioPlanilla({
       planilla,
       periodoClave: intercambio.periodoClave,
@@ -912,6 +984,17 @@ function PlanillaMensual({
         )}
       </div>
 
+      {estadoCargaVigencias?.cargando && (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Cargando pertenencia por período. Mientras tanto se muestra el padrón base.
+        </p>
+      )}
+      {estadoCargaVigencias?.error && (
+        <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          No se pudo cargar la pertenencia por turnos. Se conserva el padrón base.
+        </p>
+      )}
+
       <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -920,9 +1003,9 @@ function PlanillaMensual({
                 ? `${posicionTurnanteMensual} mensual habilitado`
                 : "Turnante mensual adicional"}
             </p>
-            {personalFiltrado.length > capacidadNormal && !turnanteMensualHabilitado && (
+            {picoPersonalPlanificable > capacidadNormal && !turnanteMensualHabilitado && (
               <p className="mt-1 text-sm text-slate-600">
-                Hay {personalFiltrado.length} {nombreCategoria} y {capacidadNormal} posiciones normales.
+                Hay hasta {picoPersonalPlanificable} {nombreCategoria} planificables por período y {capacidadNormal} posiciones normales.
                 Podés agregar {posicionTurnanteMensual} para este mes.
               </p>
             )}
@@ -972,7 +1055,7 @@ function PlanillaMensual({
               );
               const nombreHistorico = obtenerNombreDesdeReferencia(
                 referenciaActual,
-                personalFiltrado
+                personalCanonicoFiltrado
               );
               const valor = personaActual?.id ||
                 (nombreHistorico ? "__REFERENCIA_NO_RESUELTA__" : "");
@@ -993,7 +1076,7 @@ function PlanillaMensual({
                         {nombreHistorico}
                       </option>
                     )}
-                    {personalFiltrado
+                    {personalCanonicoFiltrado
                       .filter((persona) =>
                         !Object.entries(distribucion).some(
                           ([otraFila, referencia]) =>
@@ -1029,12 +1112,24 @@ function PlanillaMensual({
                 Sector
               </th>
               {periodos.map((periodo) => (
-                <th
-                  key={periodo.clave}
-                  className="px-4 py-3 text-left font-semibold min-w-[140px] whitespace-nowrap"
-                >
-                  {obtenerEtiquetaPeriodo(periodo)}
-                </th>
+                (() => {
+                  const personalPeriodo = obtenerCohortePeriodo(periodo);
+                  const sinAsignar = obtenerPersonasSinAsignarPlanillaSemanal({
+                    personalPeriodo,
+                    distribucion: obtenerValoresPeriodo(periodo)
+                  });
+                  return (
+                    <th
+                      key={periodo.clave}
+                      className="px-4 py-3 text-left font-semibold min-w-[140px] whitespace-nowrap"
+                    >
+                      <span className="block">{obtenerEtiquetaPeriodo(periodo)}</span>
+                      <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                        {sinAsignar.length} sin asignar
+                      </span>
+                    </th>
+                  );
+                })()
               ))}
             </tr>
           </thead>
@@ -1047,21 +1142,27 @@ function PlanillaMensual({
                 </td>
 
                 {periodos.map((periodo) => {
+                  const personalPeriodo = obtenerCohortePeriodo(periodo);
+                  const personalCategoriaPeriodo = personalPeriodo.filter(
+                    (persona) => persona?.categoria === tipo
+                  );
                   const valoresPeriodo = obtenerValoresPeriodo(periodo);
                   const referenciaActual = valoresPeriodo[sector] || "";
-                  const personaActual = resolverPersonaDesdeReferencia(
-                    referenciaActual,
-                    personal
-                  );
-                  const nombreHistorico = obtenerNombreDesdeReferencia(
-                    referenciaActual,
-                    personalFiltrado
-                  );
+                  const estadoReferencia = resolverReferenciaPlanillaSemanal({
+                    referencia: referenciaActual,
+                    personalPeriodo: personalCategoriaPeriodo,
+                    marcarFueraDeVigencia: Boolean(
+                      padronVigencias &&
+                      !estadoCargaVigencias?.cargando && !estadoCargaVigencias?.error
+                    )
+                  });
+                  const personaActual = estadoReferencia.persona;
+                  const nombreHistorico = estadoReferencia.nombre;
                   const valorSelect = personaActual?.id ||
                     (nombreHistorico ? "__REFERENCIA_NO_RESUELTA__" : "");
                   const opcionesSelector = obtenerOpcionesSelectorPlanilla({
-                    personalCategoria: personalFiltrado,
-                    personal,
+                    personalCategoria: personalCategoriaPeriodo,
+                    personal: personalPeriodo,
                     distribucion: valoresPeriodo,
                     sector,
                     referenciaActual,
@@ -1083,6 +1184,7 @@ function PlanillaMensual({
                         {!personaActual && nombreHistorico && (
                           <option value="__REFERENCIA_NO_RESUELTA__" disabled>
                             {nombreHistorico}
+                            {estadoReferencia.fueraDeVigencia ? " · fuera de vigencia" : ""}
                           </option>
                         )}
                         {opcionesSelector
@@ -1091,7 +1193,7 @@ function PlanillaMensual({
                               key={obtenerClaveRenderPersona(persona, indice, idsDuplicados)}
                               value={persona.id}
                             >
-                              {obtenerEtiquetaPersona(persona, personal)}
+                              {obtenerEtiquetaPersona(persona, personalPeriodo)}
                               {etiquetaEstado ? ` — ${etiquetaEstado}` : ""}
                             </option>
                           ))}
@@ -1108,21 +1210,30 @@ function PlanillaMensual({
                   : "Cubre libre de Salud Mental"}
               </td>
               {periodos.map((periodo) => {
+                const personalPeriodo = obtenerCohortePeriodo(periodo);
                 const valoresPeriodo = obtenerValoresPeriodo(periodo);
                 const titular = resolverPersonaDesdeReferencia(
                   obtenerReferenciaSaludMental({
                     distribucion: valoresPeriodo,
                     fila: filaSaludMental
                   }),
-                  personalFiltrado
+                  personalPeriodo
                 );
                 const referencia = usaRotacionTresDias
                   ? planilla?.rotacion3Dias?.coberturaLibreSM?.[periodo.clave] || ""
                   : planilla?.coberturaLibreSM?.[periodo.clave] || "";
-                const cobertura = resolverPersonaDesdeReferencia(referencia, personalFiltrado);
-                const nombreHistorico = obtenerNombreDesdeReferencia(referencia, personalFiltrado);
+                const estadoReferencia = resolverReferenciaPlanillaSemanal({
+                  referencia,
+                  personalPeriodo,
+                  marcarFueraDeVigencia: Boolean(
+                    padronVigencias &&
+                    !estadoCargaVigencias?.cargando && !estadoCargaVigencias?.error
+                  )
+                });
+                const cobertura = estadoReferencia.persona;
+                const nombreHistorico = estadoReferencia.nombre;
                 const valor = cobertura?.id || (nombreHistorico ? "__REFERENCIA_NO_RESUELTA__" : "");
-                const opciones = [...personalFiltrado]
+                const opciones = [...personalPeriodo]
                   .filter((persona) => persona.id !== titular?.id)
                   .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 
@@ -1140,6 +1251,7 @@ function PlanillaMensual({
                       {!cobertura && nombreHistorico && (
                         <option value="__REFERENCIA_NO_RESUELTA__" disabled>
                           {nombreHistorico}
+                          {estadoReferencia.fueraDeVigencia ? " · fuera de vigencia" : ""}
                         </option>
                       )}
                       {opciones.map((persona, indice) => (
@@ -1147,7 +1259,7 @@ function PlanillaMensual({
                           key={obtenerClaveRenderPersona(persona, indice, idsDuplicados)}
                           value={persona.id}
                         >
-                          {obtenerEtiquetaPersona(persona, personal)}
+                          {obtenerEtiquetaPersona(persona, personalPeriodo)}
                         </option>
                       ))}
                     </select>

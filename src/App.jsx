@@ -1970,7 +1970,7 @@ const iniciarPreparacionMes = async () => {
   });
 };
 
-const confirmarPreparacionMes = ({ transicionLicenciadosV2 } = {}) => {
+const confirmarPreparacionMes = ({ configuracionLicenciadosV2 } = {}) => {
   if (preparacionMes?.estado !== "lista") return;
   const metadatosDestino = metadatosPorClaveRef.current.get(claveActiva);
   const contextoActual = {
@@ -2011,7 +2011,7 @@ const confirmarPreparacionMes = ({ transicionLicenciadosV2 } = {}) => {
   const construccion = construirEstadoMesNuevo({
     analisis: preparacionMes.analisis,
     borradoresConfiguracionPlanilla: validacionBorradores.borradores,
-    ...(transicionLicenciadosV2 ? { transicionLicenciadosV2 } : {})
+    configuracionLicenciadosV2
   });
   if (!construccion.ok) {
     setPreparacionMes((actual) => ({ ...actual, error: construccion.mensaje }));

@@ -3,19 +3,34 @@ import { readFileSync } from "node:fs";
 import { configuracionSectores } from "../src/data/sectores.js";
 import {
   crearSnapshotConfiguracionPlanilla,
+  crearConfiguracionPlanillaLicenciadosV2,
   obtenerFilasActivas
 } from "../src/utils/configuracionPlanilla.js";
 import { crearEstadoMensualVacio } from "../src/utils/estadoMensual.js";
 import {
   analizarPreparacionMesNuevo,
-  construirEstadoMesNuevo,
+  construirEstadoMesNuevo as construirEstadoMesNuevoBase,
   obtenerFilasPlanilla
 } from "../src/utils/preparacionMesNuevo.js";
 import { generarRotacionMensual } from "../src/utils/rotacionPlanilla.js";
+import { CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2 } from "../src/utils/prioridadCoberturaLicenciadosDinamica.js";
 
 const clonar = (valor) => structuredClone(valor);
 const filasEnfermeros = obtenerFilasPlanilla(configuracionSectores.enfermero, "enfermero");
 const filasLicenciados = obtenerFilasPlanilla(configuracionSectores.licenciado, "licenciado");
+const prioridadV2 = CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2.map(({ id }) => id);
+const filasV2 = crearConfiguracionPlanillaLicenciadosV2({
+  prioridadCoberturaSectorIds: prioridadV2
+}).configuracion.filas;
+const construirEstadoMesNuevo = (entrada = {}) => construirEstadoMesNuevoBase({
+  ...entrada,
+  configuracionLicenciadosV2: {
+    estructuraLicenciadosVersion: 2,
+    filas: filasV2,
+    prioridadCoberturaSectorIds: prioridadV2,
+    asignacionesFijas: entrada.borradoresConfiguracionPlanilla?.licenciado?.asignacionesFijas || []
+  }
+});
 const personal = [
   ...filasEnfermeros.map((_, indice) => ({
     id: `enf-${indice}`, nombre: `Enfermero ${indice}`, categoria: "enfermero", turno: "tarde"

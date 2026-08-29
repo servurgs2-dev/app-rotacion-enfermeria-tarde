@@ -4,6 +4,7 @@ import test from "node:test";
 import { configuracionSectores } from "../src/data/sectores.js";
 import {
   crearSnapshotConfiguracionPlanilla,
+  crearConfiguracionPlanillaLicenciadosV2,
   obtenerFilasActivas
 } from "../src/utils/configuracionPlanilla.js";
 import { crearEstadoMensualVacio } from "../src/utils/estadoMensual.js";
@@ -11,10 +12,25 @@ import { generarRotacionMensual } from "../src/utils/rotacionPlanilla.js";
 import {
   analizarPreparacionMesNuevo,
   aplicarOmisionesPersonalEstadoPreparado,
-  construirEstadoMesNuevo,
+  construirEstadoMesNuevo as construirEstadoMesNuevoBase,
   obtenerFilasPlanilla,
   reconciliarPersonalPreparacionMes
 } from "../src/utils/preparacionMesNuevo.js";
+import { CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2 } from "../src/utils/prioridadCoberturaLicenciadosDinamica.js";
+
+const prioridadV2 = CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2.map(({ id }) => id);
+const configuracionV2Base = crearConfiguracionPlanillaLicenciadosV2({
+  prioridadCoberturaSectorIds: prioridadV2
+}).configuracion;
+const construirEstadoMesNuevo = (entrada = {}) => construirEstadoMesNuevoBase({
+  ...entrada,
+  configuracionLicenciadosV2: {
+    ...configuracionV2Base,
+    asignacionesFijas: (
+      entrada.borradoresConfiguracionPlanilla || entrada.analisis?.borradoresConfiguracionPlanilla
+    )?.licenciado?.asignacionesFijas || []
+  }
+});
 
 const filasEnfermeros = obtenerFilasPlanilla(configuracionSectores.enfermero, "enfermero");
 const filasLicenciados = obtenerFilasPlanilla(configuracionSectores.licenciado, "licenciado");

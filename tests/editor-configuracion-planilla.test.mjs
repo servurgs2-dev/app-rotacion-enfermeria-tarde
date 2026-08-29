@@ -396,13 +396,14 @@ await probar("24 cancelar descarta el estado transitorio completo", async () => 
   assert.match(app, /onCancelar=\{\(\) => setPreparacionMes\(null\)\}/);
 });
 
-await probar("25 confirmación Licenciados v2 exige preflight válido y payload limpio", async () => {
+await probar("25 Licenciados v2 es obligatorio y exige preflight válido", async () => {
   const panel = await readFile(new URL(
     "../src/components/mes/PanelPrepararMes.jsx", import.meta.url
   ), "utf8");
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
-  assert.match(panel, /useState\(false\)/);
-  assert.match(panel, /Usar nueva estructura de Licenciados/);
+  assert.doesNotMatch(panel, /Usar nueva estructura de Licenciados|type="checkbox"|previsualizarLicenciadosV2/);
+  assert.match(panel, /Estructura de Licenciados v2/);
+  assert.match(panel, /Se aplicará automáticamente al preparar el nuevo mes/);
   assert.match(panel, /crearConfiguracionPlanillaLicenciadosV2/);
   assert.match(panel, /prepararTransicionLicenciadosV1aV2/);
   assert.match(panel, /borradoresVisibles/);
@@ -412,22 +413,22 @@ await probar("25 confirmación Licenciados v2 exige preflight válido y payload 
   assert.match(panel, /T3 adicional → T4/);
   assert.match(panel, /Reanimación \+ Sillones no se trasladará automáticamente/);
   assert.match(panel, /Quedarán Sin asignar/);
-  assert.match(panel, /const transicionV2Lista = previsualizarLicenciadosV2[\s\S]*?resultadoTransicion\?\.finalizable !== false[\s\S]*?fijasLegacyPendientes\.length === 0/);
-  assert.match(panel, /disabled=\{previsualizarLicenciadosV2 && !transicionV2Lista\}/);
-  assert.match(panel, /if \(!previsualizarLicenciadosV2\) \{[\s\S]*?onConfirmar\?\.\(\)/);
-  assert.match(panel, /if \(!transicionV2Lista\) return/);
-  const payload = panel.match(/onConfirmar\?\.\(\{[\s\S]*?transicionLicenciadosV2:[\s\S]*?\n\s*\}\);/)?.[0] || "";
-  assert.match(payload, /activar: true/);
+  assert.match(panel, /const configuracionV2Lista = validacionConfiguracionV2\.ok[\s\S]*?fijasLegacyPendientes\.length === 0/);
+  assert.match(panel, /disabled=\{!configuracionV2Lista\}/);
+  assert.match(panel, /if \(!configuracionV2Lista\) return/);
+  const payload = panel.match(/onConfirmar\?\.\(\{[\s\S]*?configuracionLicenciadosV2:[\s\S]*?\n\s*\}\);/)?.[0] || "";
+  assert.doesNotMatch(payload, /activar:/);
+  assert.match(payload, /estructuraLicenciadosVersion: VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA/);
   assert.match(payload, /filas: borradorLicenciadosV2\.filas/);
   assert.match(payload, /prioridadCoberturaSectorIds: borradorLicenciadosV2\.prioridadCoberturaSectorIds/);
   assert.match(payload, /asignacionesFijas: borradorLicenciadosV2\.asignacionesFijas/);
   assert.doesNotMatch(payload, /fijasLegacyPendientes|personasSinAsignar|resultadoTransicion|referenciasTransformadas|referenciasOmitidas/);
-  assert.match(app, /const confirmarPreparacionMes = \(\{ transicionLicenciadosV2 \} = \{\}\) =>/);
-  assert.match(app, /construirEstadoMesNuevo\(\{[\s\S]*?\.\.\.\(transicionLicenciadosV2 \? \{ transicionLicenciadosV2 \} : \{\}\)/);
+  assert.match(app, /const confirmarPreparacionMes = \(\{ configuracionLicenciadosV2 \} = \{\}\) =>/);
+  assert.match(app, /construirEstadoMesNuevo\(\{[\s\S]*?configuracionLicenciadosV2/);
   assert.doesNotMatch(app, /TRANSICION_EXPLORA_A_T3|TRANSICION_T3_ADICIONAL_A_T4/);
 });
 
-await probar("26 editor de fijas usa el borrador visible v1 o local v2", async () => {
+await probar("26 editor de fijas usa siempre el borrador local v2 para Licenciados", async () => {
   const panel = await readFile(new URL(
     "../src/components/mes/PanelPrepararMes.jsx", import.meta.url
   ), "utf8");
@@ -436,9 +437,9 @@ await probar("26 editor de fijas usa el borrador visible v1 o local v2", async (
   ), "utf8");
   assert.match(editorFijas, /function AsignacionesFijasMes\(\{ borradores = \{\}, personal = \[\], onActualizarBorrador \}\)/);
   assert.match(editorFijas, /borradores\?\.\[categoriaFormulario\]/);
-  assert.match(panel, /previsualizarLicenciadosV2 && borradorLicenciadosV2[\s\S]*?licenciado: borradorLicenciadosV2[\s\S]*?: borradoresConfiguracionPlanilla/);
+  assert.match(panel, /const borradoresVisibles = \{[\s\S]*?licenciado: borradorLicenciadosV2/);
   assert.match(panel, /<AsignacionesFijasMes[\s\S]*?borradores=\{borradoresVisibles\}[\s\S]*?onActualizarBorrador=\{actualizarBorradorVisible\}/);
-  assert.match(panel, /previsualizarLicenciadosV2 && categoria === "licenciado"[\s\S]*?setBorradorLicenciadosV2/);
+  assert.match(panel, /if \(categoria === "licenciado"\)[\s\S]*?setBorradorLicenciadosV2/);
   assert.match(panel, /onActualizarBorradorConfiguracionPlanilla\?\.\(categoria, actualizador\)/);
   assert.match(panel, /Fijas que requieren revisión/);
   assert.match(panel, /setFijasLegacyPendientes/);
@@ -451,7 +452,7 @@ await probar("27 Panel consume Sin asignar de C7B sin filtro cosmético", async 
   assert.match(panel, /resultadoTransicion\?\.personasSinAsignar\?\.length/);
   assert.match(panel, /resultadoTransicion\.personasSinAsignar\.map\(\(persona\)/);
   assert.doesNotMatch(panel, /personasSinAsignar\.(?:filter|reduce)/);
-  assert.match(panel, /personalDestino: analisis\.personal\.filter\(\(persona\) => persona\?\.categoria === "licenciado"\)/);
+  assert.match(panel, /personalDestino: \(analisis\.personal \|\| \[\]\)\.filter\([\s\S]*?persona\?\.categoria === "licenciado"/);
   assert.match(panel, /No hay una persona Licenciada elegible asignada a Explora en \{analisis\.licenciados\.claveBase\}/);
 });
 

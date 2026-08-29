@@ -2,11 +2,19 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { configuracionSectores } from "../src/data/sectores.js";
-import { crearSnapshotConfiguracionPlanilla } from "../src/utils/configuracionPlanilla.js";
+import { crearConfiguracionPlanillaLicenciadosV2, crearSnapshotConfiguracionPlanilla } from "../src/utils/configuracionPlanilla.js";
 import { crearEstadoMensualVacio } from "../src/utils/estadoMensual.js";
 import { obtenerBloquesQueIntersectanMes } from "../src/utils/periodosRotacionPlanilla.js";
 import { derivarAsignacionBaseDesdeBloque } from "../src/utils/rotacionPlanilla.js";
-import { analizarPreparacionMesNuevo, construirEstadoMesNuevo, obtenerFilasPlanilla } from "../src/utils/preparacionMesNuevo.js";
+import { analizarPreparacionMesNuevo, construirEstadoMesNuevo as construirEstadoMesNuevoBase, obtenerFilasPlanilla } from "../src/utils/preparacionMesNuevo.js";
+import { CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2 } from "../src/utils/prioridadCoberturaLicenciadosDinamica.js";
+
+const prioridadV2 = CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2.map(({ id }) => id);
+const configuracionV2Base = crearConfiguracionPlanillaLicenciadosV2({ prioridadCoberturaSectorIds: prioridadV2 }).configuracion;
+const construirEstadoMesNuevo = (entrada = {}) => construirEstadoMesNuevoBase({
+  ...entrada,
+  configuracionLicenciadosV2: configuracionV2Base
+});
 
 const filasEnfermeros = obtenerFilasPlanilla(configuracionSectores.enfermero, "enfermero");
 const filasLicenciados = obtenerFilasPlanilla(configuracionSectores.licenciado, "licenciado");

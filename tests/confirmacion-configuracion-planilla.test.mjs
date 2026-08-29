@@ -3,9 +3,11 @@ import { readFile } from "node:fs/promises";
 import { configuracionSectores } from "../src/data/sectores.js";
 import {
   crearSnapshotConfiguracionPlanilla,
+  crearSnapshotConfiguracionPlanillaLicenciadosV2,
   obtenerConfiguracionPlanillaEfectiva,
   obtenerFilasActivas
 } from "../src/utils/configuracionPlanilla.js";
+import { CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2 } from "../src/utils/prioridadCoberturaLicenciadosDinamica.js";
 import { resolverEstructuraCalendario } from "../src/utils/estructuraCalendario.js";
 import { obtenerFilasPlanillaPDF } from "../src/utils/exportPDF.js";
 import { crearEstadoMensualVacio } from "../src/utils/estadoMensual.js";
@@ -24,6 +26,11 @@ const clonar = (valor) => JSON.parse(JSON.stringify(valor));
 const firma = (valor) => JSON.stringify(valor);
 const filasEnf = obtenerFilasPlanilla(configuracionSectores.enfermero, "enfermero");
 const filasLic = obtenerFilasPlanilla(configuracionSectores.licenciado, "licenciado");
+const configuracionLicenciadosV2 = crearSnapshotConfiguracionPlanillaLicenciadosV2({
+  turno: "tarde",
+  mes: "2026-09",
+  prioridadCoberturaSectorIds: CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2.map(({ id }) => id)
+}).snapshot;
 const personas = [
   ...filasEnf.map((_, indice) => ({ id: `e${indice}`, nombre: `E ${indice}`, categoria: "enfermero", turno: "tarde" })),
   ...filasLic.map((_, indice) => ({ id: `l${indice}`, nombre: `L ${indice}`, categoria: "licenciado", turno: "tarde" }))
@@ -60,7 +67,11 @@ const analizar = (origen, destino = crearEstadoMensualVacio()) => {
   return analisis;
 };
 const construir = (analisis, borradores = analisis.borradoresConfiguracionPlanilla) =>
-  construirEstadoMesNuevo({ analisis, borradoresConfiguracionPlanilla: borradores });
+  construirEstadoMesNuevo({
+    analisis,
+    borradoresConfiguracionPlanilla: borradores,
+    configuracionLicenciadosV2
+  });
 let total = 0;
 const probar = (nombre, prueba) => { prueba(); total += 1; console.log(`✓ ${nombre}`); };
 
@@ -170,11 +181,11 @@ probar("25 T6 activo sincroniza posición mensual", () => assert.deepEqual(
 probar("26 T6 inactivo no queda habilitado", () => assert.equal(
   prepararAdicional({ categoria:"enfermero", etiqueta:"T6", activo:false }).planillas.enfermeros.posicionesMensualesAdicionales, undefined
 ));
-probar("27 T3 activo sincroniza posición mensual", () => assert.deepEqual(
-  prepararAdicional({ categoria:"licenciado", etiqueta:"T3", activo:true }).planillas.licenciados.posicionesMensualesAdicionales, ["T3"]
+probar("27 T3 adicional legacy activo se convierte en T4", () => assert.deepEqual(
+  prepararAdicional({ categoria:"licenciado", etiqueta:"T3", activo:true }).planillas.licenciados.posicionesMensualesAdicionales, ["T4"]
 ));
-probar("28 T3 inactivo no queda habilitado", () => assert.equal(
-  prepararAdicional({ categoria:"licenciado", etiqueta:"T3", activo:false }).planillas.licenciados.posicionesMensualesAdicionales, undefined
+probar("28 el marcador mensual legacy es autoridad para convertir T3 en T4", () => assert.deepEqual(
+  prepararAdicional({ categoria:"licenciado", etiqueta:"T3", activo:false }).planillas.licenciados.posicionesMensualesAdicionales, ["T4"]
 ));
 probar("29 Cancelar no crea snapshot", () => {
   const origen = crearOrigen(); analizar(origen); assert.equal(Object.hasOwn(origen, "configuracionPlanilla"), false);

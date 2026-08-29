@@ -4,10 +4,20 @@ import { crearEstadoMensualVacio } from "../src/utils/estadoMensual.js";
 import {
   analizarPreparacionMesNuevo,
   aplicarOmisionesPersonalEstadoPreparado,
-  construirEstadoMesNuevo,
+  construirEstadoMesNuevo as construirEstadoMesNuevoBase,
   obtenerFilasPlanilla,
   reconciliarPersonalPreparacionMes
 } from "../src/utils/preparacionMesNuevo.js";
+import { crearConfiguracionPlanillaLicenciadosV2 } from "../src/utils/configuracionPlanilla.js";
+import { CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2 } from "../src/utils/prioridadCoberturaLicenciadosDinamica.js";
+
+const configuracionV2Base = crearConfiguracionPlanillaLicenciadosV2({
+  prioridadCoberturaSectorIds: CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2.map(({ id }) => id)
+}).configuracion;
+const construirEstadoMesNuevo = (entrada = {}) => construirEstadoMesNuevoBase({
+  ...entrada,
+  configuracionLicenciadosV2: configuracionV2Base
+});
 import { configuracionSectores } from "../src/data/sectores.js";
 import { obtenerBloquesQueIntersectanMes } from "../src/utils/periodosRotacionPlanilla.js";
 import {

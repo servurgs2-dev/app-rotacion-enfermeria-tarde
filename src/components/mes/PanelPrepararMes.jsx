@@ -2,8 +2,15 @@ import { useMemo, useState } from "react";
 import ConfiguracionPlanilla from "../configuracion/ConfiguracionPlanilla.jsx";
 import AsignacionesFijasMes from "./AsignacionesFijasMes.jsx";
 import PrioridadCoberturaMes from "./PrioridadCoberturaMes.jsx";
-import { crearConfiguracionPlanillaLicenciadosV2 } from "../../utils/configuracionPlanilla.js";
+import {
+  crearConfiguracionPlanillaLicenciadosV2,
+  validarConfiguracionPlanillaLicenciadosV2
+} from "../../utils/configuracionPlanilla.js";
 import { prepararTransicionLicenciadosV1aV2 } from "../../utils/transicionLicenciadosV1aV2.js";
+import {
+  resolverVersionEstructuraLicenciados,
+  VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+} from "../../utils/estructuraLicenciadosDinamica.js";
 
 const CATEGORIAS_PRIORIDAD = Object.freeze(["enfermero", "licenciado"]);
 
@@ -17,33 +24,46 @@ function PanelPrepararMes({
 }) {
   const enfermeros = analisis.enfermeros;
   const flex = enfermeros.analisis;
-  const [previsualizarLicenciadosV2, setPrevisualizarLicenciadosV2] = useState(false);
-  const [borradorLicenciadosV2, setBorradorLicenciadosV2] = useState(null);
-  const [fijasLegacyPendientes, setFijasLegacyPendientes] = useState([]);
-
-  const activarPrevisualizacionV2 = (activar) => {
-    setPrevisualizarLicenciadosV2(activar);
-    if (!activar || borradorLicenciadosV2) return;
+  const origenLicenciadosV2 = resolverVersionEstructuraLicenciados(
+    analisis.configuracionLicenciadosOrigen
+  ) === VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA;
+  const [estadoInicialLicenciadosV2] = useState(() => {
     const fijasOrigen = analisis.configuracionLicenciadosOrigen?.asignacionesFijas || [];
     const creacion = crearConfiguracionPlanillaLicenciadosV2({
-      prioridadCoberturaSectorIds: [],
+      filas: origenLicenciadosV2
+        ? analisis.configuracionLicenciadosOrigen.filas.filter(
+            (fila) => fila?.turnanteId !== "turnante_4"
+          )
+        : undefined,
+      prioridadCoberturaSectorIds: origenLicenciadosV2
+        ? analisis.configuracionLicenciadosOrigen.prioridadCoberturaSectorIds
+        : [],
       asignacionesFijas: fijasOrigen
     });
     const compatibles = creacion.configuracion.asignacionesFijas || [];
     const clavesCompatibles = new Set(compatibles.map(({ sectorId, personaId }) =>
       `${sectorId}:${personaId}`
     ));
-    setBorradorLicenciadosV2(creacion.configuracion);
-    setFijasLegacyPendientes(fijasOrigen.filter(({ sectorId, personaId }) =>
-      !clavesCompatibles.has(`${sectorId}:${personaId}`)
-    ));
-  };
+    return {
+      borrador: creacion.configuracion,
+      fijasPendientes: origenLicenciadosV2 ? [] : fijasOrigen.filter(({ sectorId, personaId }) =>
+        !clavesCompatibles.has(`${sectorId}:${personaId}`)
+      )
+    };
+  });
+  const [borradorLicenciadosV2, setBorradorLicenciadosV2] = useState(
+    estadoInicialLicenciadosV2.borrador
+  );
+  const [fijasLegacyPendientes, setFijasLegacyPendientes] = useState(
+    estadoInicialLicenciadosV2.fijasPendientes
+  );
 
-  const borradoresVisibles = previsualizarLicenciadosV2 && borradorLicenciadosV2
-    ? { ...borradoresConfiguracionPlanilla, licenciado: borradorLicenciadosV2 }
-    : borradoresConfiguracionPlanilla;
+  const borradoresVisibles = {
+    ...borradoresConfiguracionPlanilla,
+    licenciado: borradorLicenciadosV2
+  };
   const actualizarBorradorVisible = (categoria, actualizador) => {
-    if (previsualizarLicenciadosV2 && categoria === "licenciado") {
+    if (categoria === "licenciado") {
       setBorradorLicenciadosV2((actual) =>
         typeof actualizador === "function" ? actualizador(actual) : actualizador
       );
@@ -52,7 +72,7 @@ function PanelPrepararMes({
     onActualizarBorradorConfiguracionPlanilla?.(categoria, actualizador);
   };
   const resultadoTransicion = useMemo(() => {
-    if (!previsualizarLicenciadosV2 || !borradorLicenciadosV2) return null;
+    if (origenLicenciadosV2 || !borradorLicenciadosV2) return null;
     return prepararTransicionLicenciadosV1aV2({
       configuracionOrigen: analisis.configuracionLicenciadosOrigen,
       baseSemanalOrigen: analisis.licenciados.base,
@@ -62,9 +82,11 @@ function PanelPrepararMes({
         ...(borradorLicenciadosV2.asignacionesFijas || []),
         ...fijasLegacyPendientes
       ],
-      personalDestino: analisis.personal.filter((persona) => persona?.categoria === "licenciado")
+      personalDestino: (analisis.personal || []).filter(
+        (persona) => persona?.categoria === "licenciado"
+      )
     });
-  }, [analisis, borradorLicenciadosV2, fijasLegacyPendientes, previsualizarLicenciadosV2]);
+  }, [analisis, borradorLicenciadosV2, fijasLegacyPendientes, origenLicenciadosV2]);
   const personalPorId = useMemo(() => new Map(
     (analisis.personal || []).map((persona) => [String(persona.id), persona])
   ), [analisis.personal]);
@@ -73,24 +95,27 @@ function PanelPrepararMes({
   const transformacion = (motivo) => resultadoTransicion?.referenciasTransformadas?.find(
     (referencia) => referencia.motivo === motivo
   );
-  const prioridadLista = resultadoTransicion?.ok === true;
+  const validacionConfiguracionV2 = validarConfiguracionPlanillaLicenciadosV2(
+    borradorLicenciadosV2
+  );
+  const prioridadLista = validacionConfiguracionV2.errores.every(({ codigo }) =>
+    !codigo.includes("PRIORIDAD")
+  );
   const fijasRevisadas = fijasLegacyPendientes.length === 0;
-  const transicionV2Lista = previsualizarLicenciadosV2 &&
-    resultadoTransicion?.ok === true &&
-    resultadoTransicion?.aplicar === true &&
-    resultadoTransicion?.finalizable !== false &&
-    resultadoTransicion?.requierePrioridadV2 !== true &&
-    resultadoTransicion?.requiereRevisionFijas !== true &&
+  const configuracionV2Lista = validacionConfiguracionV2.ok &&
+    (origenLicenciadosV2 || (
+      resultadoTransicion?.ok === true &&
+      resultadoTransicion?.aplicar === true &&
+      resultadoTransicion?.finalizable !== false &&
+      resultadoTransicion?.requierePrioridadV2 !== true &&
+      resultadoTransicion?.requiereRevisionFijas !== true
+    )) &&
     fijasLegacyPendientes.length === 0;
   const confirmarDesdePanel = () => {
-    if (!previsualizarLicenciadosV2) {
-      onConfirmar?.();
-      return;
-    }
-    if (!transicionV2Lista) return;
+    if (!configuracionV2Lista) return;
     onConfirmar?.({
-      transicionLicenciadosV2: {
-        activar: true,
+      configuracionLicenciadosV2: {
+        estructuraLicenciadosVersion: VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA,
         filas: borradorLicenciadosV2.filas,
         prioridadCoberturaSectorIds: borradorLicenciadosV2.prioridadCoberturaSectorIds,
         asignacionesFijas: borradorLicenciadosV2.asignacionesFijas
@@ -181,33 +206,23 @@ function PanelPrepararMes({
         </div>
 
         <section className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50/50 p-4">
-          <label className="flex min-h-11 items-center gap-3 font-semibold text-emerald-950">
-            <input
-              type="checkbox"
-              checked={previsualizarLicenciadosV2}
-              onChange={(evento) => activarPrevisualizacionV2(evento.target.checked)}
-              className="h-5 w-5 shrink-0"
-            />
-            Usar nueva estructura de Licenciados
-          </label>
+          <h4 className="font-semibold text-emerald-950">Estructura de Licenciados v2</h4>
           <p className="mt-2 text-sm text-emerald-900">
-            Explora pasa a T3 y el T3 adicional a T4. Reanimación y Sillones se
-            resolverán diariamente; la asignación combinada actual quedará para revisión.
+            Se aplicará automáticamente al preparar el nuevo mes.
           </p>
-          {previsualizarLicenciadosV2 && (
-            <div className="mt-4 space-y-3">
+          <div className="mt-4 space-y-3">
               <div className="grid gap-2 text-sm sm:grid-cols-2">
-                <p className="rounded-lg bg-white p-3"><strong>Nueva estructura:</strong> Lista</p>
+                <p className="rounded-lg bg-white p-3"><strong>Estructura:</strong> Lista</p>
                 <p className="rounded-lg bg-white p-3"><strong>Prioridad:</strong> {prioridadLista ? "Lista" : "Pendiente"}</p>
                 <p className="rounded-lg bg-white p-3"><strong>Fijas:</strong> {fijasRevisadas ? "Revisadas" : "Requieren revisión"}</p>
-                <p className="rounded-lg bg-white p-3"><strong>Personas Sin asignar:</strong> {resultadoTransicion?.personasSinAsignar?.length ?? "Pendiente"}</p>
+                <p className="rounded-lg bg-white p-3"><strong>Personas Sin asignar:</strong> {origenLicenciadosV2 ? 0 : resultadoTransicion?.personasSinAsignar?.length ?? "Pendiente"}</p>
               </div>
               {!prioridadLista && (
                 <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                   Falta configurar la prioridad de cobertura de Licenciados v2.
                 </p>
               )}
-              <div className="rounded-lg border border-emerald-200 bg-white p-3 text-sm">
+              {!origenLicenciadosV2 && <div className="rounded-lg border border-emerald-200 bg-white p-3 text-sm">
                 <p><strong>Explora → T3</strong></p>
                 {transformacion("TRANSICION_EXPLORA_A_T3") && (
                   <p>{nombrePersona(transformacion("TRANSICION_EXPLORA_A_T3").personaId)} conservará su asignación.</p>
@@ -226,7 +241,7 @@ function PanelPrepararMes({
                 <p className="mt-2 font-medium text-amber-800">
                   La asignación actual de Reanimación + Sillones no se trasladará automáticamente a Reanimación.
                 </p>
-              </div>
+              </div>}
               {fijasLegacyPendientes.length > 0 && (
                 <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
                   <p className="font-semibold text-amber-950">Fijas que requieren revisión</p>
@@ -253,7 +268,6 @@ function PanelPrepararMes({
                 </div>
               )}
             </div>
-          )}
         </section>
 
         <section className="mt-4 rounded-xl border border-slate-200 p-4">
@@ -319,24 +333,22 @@ function PanelPrepararMes({
           <button
             type="button"
             onClick={confirmarDesdePanel}
-            disabled={previsualizarLicenciadosV2 && !transicionV2Lista}
+            disabled={!configuracionV2Lista}
             className="rounded-lg bg-purple-600 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Confirmar preparación
           </button>
-          {previsualizarLicenciadosV2 && (
-            <p className={`text-sm sm:basis-full sm:text-right ${
-              transicionV2Lista ? "text-emerald-700" : "text-amber-800"
+          <p className={`text-sm sm:basis-full sm:text-right ${
+              configuracionV2Lista ? "text-emerald-700" : "text-amber-800"
             }`}>
-              {transicionV2Lista
-                ? "Nueva estructura lista para preparar."
+              {configuracionV2Lista
+                ? "Estructura de Licenciados v2 lista para preparar."
                 : !prioridadLista
                   ? "Configurá una prioridad v2 completa para continuar."
                   : !fijasRevisadas
                     ? "Revisá las asignaciones fijas incompatibles para continuar."
                     : "La configuración v2 requiere revisión antes de preparar."}
             </p>
-          )}
         </div>
       </div>
     </div>

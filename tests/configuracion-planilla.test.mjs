@@ -587,7 +587,9 @@ probar("dominio C7B se integra en Preparar mes y su preflight sin persistencia",
   const fuentePreparacion = fs.readFileSync("src/utils/preparacionMesNuevo.js", "utf8");
   assert.equal(/supabase|persistir|setEstado|onCambiar/i.test(fuente), false);
   assert.equal(fuentePreparacion.includes("prepararTransicionLicenciadosV1aV2"), true);
-  assert.equal(fuentePreparacion.includes("transicionLicenciadosV2?.activar === true"), true);
+  assert.equal(fuentePreparacion.includes("transicionLicenciadosV2?.activar === true"), false);
+  assert.equal(fuentePreparacion.includes("CONFIGURACION_LICENCIADOS_V2_REQUERIDA"), true);
+  assert.equal(fuentePreparacion.includes("DESTINO_CONFIGURACION_LICENCIADOS_LEGACY"), true);
   assert.equal(fs.readFileSync("src/components/mes/PanelPrepararMes.jsx", "utf8").includes("prepararTransicionLicenciadosV1aV2"), true);
   assert.equal(fs.readFileSync("src/App.jsx", "utf8").includes("transicionLicenciadosV1aV2"), false);
 });

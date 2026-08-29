@@ -15,6 +15,10 @@ import {
 const clonar = (valor) => JSON.parse(JSON.stringify(valor));
 const filasEnfermeros = obtenerFilasPlanilla(configuracionSectores.enfermero, "enfermero");
 const filasLicenciados = obtenerFilasPlanilla(configuracionSectores.licenciado, "licenciado");
+const prioridadLicenciadosV2 = CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2.map(({ id }) => id);
+const filasLicenciadosV2 = crearSnapshotConfiguracionPlanillaLicenciadosV2({
+  turno: "tarde", mes: "2026-09", prioridadCoberturaSectorIds: prioridadLicenciadosV2
+}).snapshot.filas;
 const personas = [
   ...filasEnfermeros.map((_, indice) => ({
     id: `enf-${indice}`, nombre: `Enfermero ${indice}`, categoria: "enfermero", turno: "tarde"
@@ -39,7 +43,11 @@ const crearAgostoLegacy = () => {
 const prepararSeptiembre = ({
   destino = crearEstadoMensualVacio(),
   configurarOrigen,
-  transicionLicenciadosV2
+  configuracionLicenciadosV2 = crearSnapshotConfiguracionPlanillaLicenciadosV2({
+    turno: "tarde",
+    mes: "2026-09",
+    prioridadCoberturaSectorIds: prioridadLicenciadosV2
+  }).snapshot
 } = {}) => {
   const origen = crearAgostoLegacy();
   configurarOrigen?.(origen);
@@ -54,7 +62,7 @@ const prepararSeptiembre = ({
   return {
     origen,
     analisis,
-    resultado: construirEstadoMesNuevo({ analisis, transicionLicenciadosV2 })
+    resultado: construirEstadoMesNuevo({ analisis, configuracionLicenciadosV2 })
   };
 };
 
@@ -89,15 +97,17 @@ probar("7 T6 se refleja cuando está habilitado", () => {
   } }).resultado.estado.configuracionPlanilla.enfermero;
   assert.equal(snapshot.filas.some((fila) => fila.etiqueta === "T6"), true);
 });
-probar("8 T3 se refleja cuando está habilitado", () => {
+probar("8 T3 adicional legacy se convierte en T4", () => {
   const snapshot = prepararSeptiembre({ configurarOrigen: (origen) => {
     origen.planillas.licenciados.posicionesMensualesAdicionales = ["T3"];
   } }).resultado.estado.configuracionPlanilla.licenciado;
   assert.equal(snapshot.filas.some((fila) => fila.etiqueta === "T3"), true);
+  assert.equal(snapshot.filas.some((fila) => fila.etiqueta === "T4"), false);
 });
-probar("9 sin T6/T3 no aparecen adicionales", () => {
+probar("9 sin adicionales T3 permanece como base v2", () => {
   assert.equal(snapshots.enfermero.filas.some((fila) => fila.etiqueta === "T6"), false);
-  assert.equal(snapshots.licenciado.filas.some((fila) => fila.etiqueta === "T3"), false);
+  assert.equal(snapshots.licenciado.filas.some((fila) => fila.etiqueta === "T3"), true);
+  assert.equal(snapshots.licenciado.filas.some((fila) => fila.etiqueta === "T4"), false);
 });
 probar("10 el origen legacy continúa sin configuracionPlanilla", () => {
   assert.equal(Object.hasOwn(base.origen, "configuracionPlanilla"), false);
@@ -138,7 +148,6 @@ probar("15 preserva configuración válida ya existente en destino", () => {
   assert.ok(resultado.estado.configuracionPlanilla.licenciado);
 });
 
-const prioridadLicenciadosV2 = CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2.map(({ id }) => id);
 const prepararTransicionV2 = ({ prioridad = prioridadLicenciadosV2, fijas, sinAdicional = false } = {}) =>
   prepararSeptiembre({
     configurarOrigen: (origen) => {
@@ -155,8 +164,9 @@ const prepararTransicionV2 = ({ prioridad = prioridadLicenciadosV2, fijas, sinAd
         origen.planillas.licenciados.semana5.T3 = { personaId: adicional.id, nombre: adicional.nombre };
       }
     },
-    transicionLicenciadosV2: {
-      activar: true,
+    configuracionLicenciadosV2: {
+      estructuraLicenciadosVersion: 2,
+      filas: filasLicenciadosV2,
       prioridadCoberturaSectorIds: prioridad,
       ...(fijas !== undefined ? { asignacionesFijas: fijas } : {})
     }
@@ -233,12 +243,12 @@ probar("19 fijas incompatibles bloquean y selección revisada conserva Diagnóst
     ["explora", "reanimacion_sillones", "turnante_3"].includes(sectorId)), false);
 });
 
-probar("20 sin intención explícita continúa v1 y no muta origen", () => {
+probar("20 origen v1 sin configuración v2 bloquea y no muta origen", () => {
   const normal = prepararSeptiembre();
-  assert.equal(Object.hasOwn(normal.resultado.estado.configuracionPlanilla.licenciado, "estructuraLicenciadosVersion"), false);
-  assert.equal(normal.resultado.estado.configuracionPlanilla.licenciado.filas.some((fila) => fila.sectorId === "explora"), true);
   const antes = clonar(normal.origen);
-  construirEstadoMesNuevo({ analisis: normal.analisis, transicionLicenciadosV2: { activar: false } });
+  const resultado = construirEstadoMesNuevo({ analisis: normal.analisis });
+  assert.equal(resultado.ok, false);
+  assert.equal(resultado.codigo, "CONFIGURACION_LICENCIADOS_V2_REQUERIDA");
   assert.deepEqual(normal.origen, antes);
 });
 
@@ -253,6 +263,13 @@ probar("21 flujo normal v2 a v2 conserva versión sin ejecutar C7B", () => {
     fila.etiqueta,
     { personaId: licenciados[indice].id, nombre: licenciados[indice].nombre }
   ]));
+  const personaT4 = { id: "lic-t4", nombre: "T4 vigente", categoria: "licenciado", turno: "tarde" };
+  origen.personal.push(personaT4);
+  origen.planillas.licenciados.posicionesMensualesAdicionales = ["T4"];
+  origen.planillas.licenciados.semana5.T4 = {
+    personaId: personaT4.id,
+    nombre: personaT4.nombre
+  };
   const analisis = analizarPreparacionMesNuevo({
     turnoId: "tarde", mesOrigen: "2026-08", mesDestino: "2026-09",
     estadoOrigen: origen, estadoDestino: crearEstadoMensualVacio()
@@ -262,6 +279,33 @@ probar("21 flujo normal v2 a v2 conserva versión sin ejecutar C7B", () => {
   assert.equal(resultado.ok, true, resultado.mensaje);
   assert.equal(resultado.estado.configuracionPlanilla.licenciado.estructuraLicenciadosVersion, 2);
   assert.equal(Object.hasOwn(resultado, "transicionLicenciadosV2"), false);
+  assert.deepEqual(resultado.estado.planillas.licenciados.posicionesMensualesAdicionales, ["T4"]);
+});
+
+probar("22 destino vacío con snapshot Licenciados v1 se bloquea", () => {
+  const destino = crearEstadoMensualVacio();
+  destino.configuracionPlanilla = {
+    licenciado: crearSnapshotConfiguracionPlanilla({
+      turno: "tarde", categoria: "licenciado", mes: "2026-09"
+    })
+  };
+  const resultado = prepararSeptiembre({ destino }).resultado;
+  assert.equal(resultado.ok, false);
+  assert.equal(resultado.codigo, "DESTINO_CONFIGURACION_LICENCIADOS_LEGACY");
+});
+
+probar("23 destino vacío con snapshot Licenciados v2 válido no se degrada", () => {
+  const destino = crearEstadoMensualVacio();
+  destino.configuracionPlanilla = {
+    licenciado: crearSnapshotConfiguracionPlanillaLicenciadosV2({
+      turno: "tarde", mes: "2026-09",
+      prioridadCoberturaSectorIds: prioridadLicenciadosV2
+    }).snapshot
+  };
+  const resultado = prepararSeptiembre({ destino }).resultado;
+  assert.equal(resultado.ok, true, resultado.mensaje);
+  assert.equal(resultado.estado.configuracionPlanilla.licenciado.estructuraLicenciadosVersion, 2);
+  assert.equal(resultado.estado.configuracionPlanilla.licenciado.filas.length, 12);
 });
 
 console.log(`\nEtapa 34B2: ${total} pruebas de preparación con snapshots aprobadas.`);

@@ -17,10 +17,15 @@ import {
 import {
   existenBloquesPosterioresUtiles,
   generarRotacionMensual,
+  generarRotacionMensualDesdeConfiguracion,
   obtenerPrimerBloqueReferencia,
   prepararRotacion3DiasParaGenerar,
   regenerarRotacion3DiasDesdePrimerBloque
 } from "../../utils/rotacionPlanilla.js";
+import {
+  resolverVersionEstructuraLicenciados,
+  VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+} from "../../utils/estructuraLicenciadosDinamica.js";
 import {
   evaluarPreparacionRotacion3Dias
 } from "../../utils/continuidadRotacionPlanilla.js";
@@ -85,7 +90,6 @@ import {
   resolverPersonalPlanificablePeriodo,
   resolverReferenciaPlanillaSemanal
 } from "../../utils/planillaVigenciasSemanales.js";
-
 function PlanillaMensual({
   personal,
   estadoMensual,
@@ -102,7 +106,14 @@ function PlanillaMensual({
 }) {
   const generarRotacionSemanalSegura = (argumentos) => {
     try {
-      return generarRotacionMensual(argumentos);
+      return tipo === "licenciado" &&
+        resolverVersionEstructuraLicenciados(configuracionEfectiva) ===
+          VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+        ? generarRotacionMensualDesdeConfiguracion({
+            ...argumentos,
+            configuracion: configuracionEfectiva
+          })
+        : generarRotacionMensual(argumentos);
     } catch (error) {
       if (!(error instanceof ErrorGeneracionAsignacionesFijas)) throw error;
       alert(
@@ -199,7 +210,7 @@ function PlanillaMensual({
         : []
     )
   ];
-  const posicionTurnanteMensual = obtenerPosicionTurnanteMensual(tipo);
+  const posicionTurnanteMensual = obtenerPosicionTurnanteMensual(tipo, configuracionEfectiva);
   const turnanteMensualHabilitado = filas.includes(posicionTurnanteMensual);
   const capacidadNormal = obtenerCapacidadNormalPlanilla(tipo);
   const picoPersonalPlanificable = Math.max(
@@ -647,13 +658,17 @@ function PlanillaMensual({
 
   const habilitarPosicionMensual = () => {
     if (soloLectura || versionHistoricaActiva) return;
-    setPlanilla((prev) => habilitarTurnanteMensual(prev, tipo));
+    setPlanilla((prev) => habilitarTurnanteMensual(prev, tipo, configuracionEfectiva));
     setMensajeTurnanteMensual("");
   };
 
   const solicitarEliminarPosicionMensual = () => {
     if (soloLectura || versionHistoricaActiva) return;
-    const validacion = validarEliminacionTurnanteMensual(planilla, tipo);
+    const validacion = validarEliminacionTurnanteMensual(
+      planilla,
+      tipo,
+      configuracionEfectiva
+    );
     if (!validacion.ok) {
       setMensajeTurnanteMensual(validacion.mensaje);
       return;
@@ -662,7 +677,7 @@ function PlanillaMensual({
       `¿Eliminar ${posicionTurnanteMensual} mensual? La fila está vacía y dejará de mostrarse en este turno y mes.`
     )) return;
     setPlanilla((prev) => {
-      const resultado = eliminarTurnanteMensual(prev, tipo);
+      const resultado = eliminarTurnanteMensual(prev, tipo, configuracionEfectiva);
       return resultado.ok ? resultado.planilla : prev;
     });
     setMensajeTurnanteMensual("");
@@ -1135,8 +1150,10 @@ function PlanillaMensual({
           </thead>
 
           <tbody className="divide-y divide-slate-100">
-            {filas.map((sector) => (
-              <tr key={sector} className="hover:bg-slate-50 transition">
+            {filasActivas.map((fila) => {
+              const sector = fila.etiqueta;
+              return (
+              <tr key={fila.filaId} className="hover:bg-slate-50 transition">
                 <td className="sticky left-0 z-10 w-[140px] min-w-[140px] max-w-[140px] whitespace-normal border-r border-slate-200 bg-slate-50 px-3 py-3 font-medium text-slate-700 shadow-[2px_0_4px_-3px_rgba(15,23,42,0.35)] md:w-[180px] md:min-w-[180px] md:max-w-[180px] md:whitespace-nowrap md:px-4">
                   {sector}
                 </td>
@@ -1202,7 +1219,8 @@ function PlanillaMensual({
                   );
                 })}
               </tr>
-            ))}
+              );
+            })}
             <tr className="border-t-2 border-blue-100 bg-blue-50/60">
               <td className="sticky left-0 z-10 w-[140px] min-w-[140px] max-w-[140px] whitespace-normal border-r border-blue-200 bg-blue-50 px-3 py-3 font-semibold text-blue-900 shadow-[2px_0_4px_-3px_rgba(15,23,42,0.35)] md:w-[180px] md:min-w-[180px] md:max-w-[180px] md:whitespace-nowrap md:px-4">
                 {tipo === "enfermero"

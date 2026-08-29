@@ -2,8 +2,15 @@ import { configuracionSectores } from "../data/sectores.js";
 import { normalizarAsignacionesFijasMensuales } from "./modeloAsignacionesFijasMensuales.js";
 import {
   copiarPrioridadCoberturaMensual,
+  obtenerCandidatosPrioridadCoberturaMes,
   obtenerPrioridadCoberturaEfectiva
 } from "./prioridadCoberturaMensual.js";
+import { validarPrioridadCoberturaLicenciadosV2 } from "./prioridadCoberturaLicenciadosDinamica.js";
+import {
+  FILAS_PLANILLA_LICENCIADOS_V2,
+  resolverVersionEstructuraLicenciados,
+  VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+} from "./estructuraLicenciadosDinamica.js";
 import { normalizar } from "./texto.js";
 
 export const TIPOS_FILA_PLANILLA = Object.freeze({
@@ -74,10 +81,15 @@ const crearFilaTurnante = ({ tipo, etiqueta, orden }) => {
     ordinalTurnante: ordinal, orden, activo: true });
 };
 
-const TURNANTE_ADICIONAL = Object.freeze({ enfermero: "T6", licenciado: "T3" });
+const obtenerEtiquetaTurnanteAdicional = (categoria, versionEstructura) => {
+  if (categoria === "enfermero") return "T6";
+  if (categoria !== "licenciado") return "";
+  return resolverVersionEstructuraLicenciados(versionEstructura) ===
+    VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA ? "T4" : "T3";
+};
 
-const reconciliarTurnanteAdicionalMensual = ({ filas, categoria, planilla }) => {
-  const etiqueta = TURNANTE_ADICIONAL[categoria];
+const reconciliarTurnanteAdicionalMensual = ({ filas, categoria, planilla, versionEstructura }) => {
+  const etiqueta = obtenerEtiquetaTurnanteAdicional(categoria, versionEstructura);
   if (!etiqueta) return filas;
 
   const habilitado = Array.isArray(planilla?.posicionesMensualesAdicionales) &&
@@ -152,8 +164,98 @@ export const copiarSnapshotConfiguracionPlanilla = (snapshot) => ({
   asignacionesFijas: normalizarAsignacionesFijasMensuales(snapshot.asignacionesFijas),
   prioridadCoberturaSectorIds: copiarPrioridadCoberturaMensual(
     snapshot.prioridadCoberturaSectorIds
-  )
+  ),
+  ...(Object.hasOwn(snapshot, "estructuraLicenciadosVersion")
+    ? { estructuraLicenciadosVersion: snapshot.estructuraLicenciadosVersion }
+    : {})
 });
+
+const IDS_FILA_LICENCIADOS_V2 = FILAS_PLANILLA_LICENCIADOS_V2.map((fila) => fila.filaId);
+const IDS_FIJA_INCOMPATIBLES_LICENCIADOS_V2 = new Set([
+  "sillones", "explora", "diagnostico_explora", "reanimacion_sillones",
+  "turnante_1", "turnante_2", "turnante_3", "turnante_4"
+]);
+
+export const validarConfiguracionPlanillaLicenciadosV2 = (configuracion = {}) => {
+  const filas = Array.isArray(configuracion?.filas) ? configuracion.filas : [];
+  const errores = [];
+  if (configuracion?.estructuraLicenciadosVersion !== VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA) {
+    errores.push({ codigo: "VERSION_ESTRUCTURA_LICENCIADOS_V2_INVALIDA" });
+  }
+  const idsFila = filas.map((fila) => fila?.filaId).filter(Boolean);
+  if (filas.length !== FILAS_PLANILLA_LICENCIADOS_V2.length) {
+    errores.push({ codigo: "FILAS_LICENCIADOS_V2_INCOMPLETAS" });
+  }
+  if (new Set(idsFila).size !== idsFila.length) {
+    errores.push({ codigo: "FILAS_LICENCIADOS_V2_DUPLICADAS" });
+  }
+  FILAS_PLANILLA_LICENCIADOS_V2.forEach((esperada) => {
+    const fila = filas.find(({ filaId }) => filaId === esperada.filaId);
+    if (
+      !fila || fila.tipo !== esperada.tipo || fila.sectorId !== esperada.sectorId ||
+      fila.turnanteId !== esperada.turnanteId
+    ) {
+      errores.push({ codigo: "FILA_LICENCIADOS_V2_INVALIDA", filaId: esperada.filaId });
+    }
+  });
+  idsFila.filter((filaId) => !IDS_FILA_LICENCIADOS_V2.includes(filaId)).forEach((filaId) => {
+    errores.push({ codigo: "FILA_LICENCIADOS_V2_DESCONOCIDA", filaId });
+  });
+  const candidatos = obtenerCandidatosPrioridadCoberturaMes({
+    categoria: "licenciado",
+    filas,
+    versionEstructura: configuracion
+  });
+  const validacionPrioridad = validarPrioridadCoberturaLicenciadosV2({
+    prioridad: configuracion?.prioridadCoberturaSectorIds,
+    candidatos
+  });
+  errores.push(...validacionPrioridad.errores);
+
+  const sectoresBase = new Set(filas.flatMap((fila) =>
+    fila?.tipo === TIPOS_FILA_PLANILLA.SECTOR && fila.sectorId ? [fila.sectorId] : []
+  ));
+  const asignacionesFijas = normalizarAsignacionesFijasMensuales(configuracion?.asignacionesFijas);
+  const asignacionesFijasCompatibles = asignacionesFijas.filter(({ sectorId }) =>
+    sectoresBase.has(sectorId) && !IDS_FIJA_INCOMPATIBLES_LICENCIADOS_V2.has(sectorId)
+  );
+  asignacionesFijas
+    .filter((asignacion) => !asignacionesFijasCompatibles.includes(asignacion))
+    .forEach((asignacion) => errores.push({
+      codigo: "ASIGNACION_FIJA_LICENCIADOS_V2_REQUIERE_REVISION",
+      sectorId: asignacion.sectorId,
+      personaId: asignacion.personaId
+    }));
+
+  return {
+    ok: errores.length === 0,
+    errores,
+    prioridadNormalizada: validacionPrioridad.prioridadNormalizada,
+    asignacionesFijasCompatibles
+  };
+};
+
+export const crearConfiguracionPlanillaLicenciadosV2 = ({
+  prioridadCoberturaSectorIds,
+  filas = FILAS_PLANILLA_LICENCIADOS_V2,
+  asignacionesFijas = []
+} = {}) => {
+  const configuracion = {
+    estructuraLicenciadosVersion: VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA,
+    filas: filas.map(copiarFilaSnapshot),
+    asignacionesFijas: normalizarAsignacionesFijasMensuales(asignacionesFijas),
+    prioridadCoberturaSectorIds: copiarPrioridadCoberturaMensual(prioridadCoberturaSectorIds)
+  };
+  const validacion = validarConfiguracionPlanillaLicenciadosV2(configuracion);
+  return {
+    ok: validacion.ok,
+    errores: validacion.errores,
+    configuracion: {
+      ...configuracion,
+      asignacionesFijas: validacion.asignacionesFijasCompatibles
+    }
+  };
+};
 
 export const adaptarConfiguracionLegacyPlanilla = (configuracion = {}, tipoSolicitado = "") => {
   const tipo = tipoSolicitado || inferirTipo(configuracion);
@@ -179,7 +281,7 @@ export const obtenerConfiguracionLegacyPlanilla = (tipo) => {
 
 export const obtenerFilasConfiguracionEfectivas = (tipo, planilla = {}) => {
   const filas = [...obtenerConfiguracionLegacyPlanilla(tipo).filas];
-  const etiqueta = TURNANTE_ADICIONAL[tipo];
+  const etiqueta = obtenerEtiquetaTurnanteAdicional(tipo);
   if (etiqueta && planilla?.posicionesMensualesAdicionales?.includes(etiqueta)) {
     filas.push(crearFilaTurnante({ tipo, etiqueta, orden: filas.length }));
   }
@@ -230,7 +332,8 @@ export const crearSnapshotConfiguracionPlanillaDesdeFilas = ({
   mes,
   filas,
   asignacionesFijas = [],
-  prioridadCoberturaSectorIds
+  prioridadCoberturaSectorIds,
+  estructuraLicenciadosVersion
 } = {}) => {
   if (!tieneTexto(turno) || !tieneTexto(categoria) || !tieneTexto(mes) || !Array.isArray(filas)) {
     throw new Error("El contexto y las filas son obligatorios para confirmar la configuración de Planilla.");
@@ -242,6 +345,22 @@ export const crearSnapshotConfiguracionPlanillaDesdeFilas = ({
   const prioridadConfigurada = copiarPrioridadCoberturaMensual(
     prioridadCoberturaSectorIds
   );
+  const usaLicenciadosV2 = categoriaNormalizada === "licenciado" &&
+    estructuraLicenciadosVersion === VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA;
+  const prioridadSnapshot = usaLicenciadosV2
+    ? obtenerPrioridadCoberturaEfectiva({
+        prioridadConfigurada,
+        filas: filasSnapshot,
+        prioridadFallback: configuracionSectores[categoriaNormalizada]?.prioridadSectoresIds,
+        categoria: categoriaNormalizada,
+        versionEstructura: estructuraLicenciadosVersion
+      }).prioridadSectorIds
+    : prioridadConfigurada.length
+      ? prioridadConfigurada
+      : obtenerPrioridadCoberturaEfectiva({
+          filas: filasSnapshot,
+          prioridadFallback: configuracionSectores[categoriaNormalizada]?.prioridadSectoresIds
+        }).prioridadSectorIds;
   return {
     schemaVersion: SCHEMA_VERSION_CONFIGURACION_PLANILLA,
     versionId: `${turnoId}:${categoriaNormalizada}:${mesNormalizado}:v${SCHEMA_VERSION_CONFIGURACION_PLANILLA}`,
@@ -250,12 +369,36 @@ export const crearSnapshotConfiguracionPlanillaDesdeFilas = ({
     mes: mesNormalizado,
     filas: filasSnapshot,
     asignacionesFijas: normalizarAsignacionesFijasMensuales(asignacionesFijas),
-    prioridadCoberturaSectorIds: prioridadConfigurada.length
-      ? prioridadConfigurada
-      : obtenerPrioridadCoberturaEfectiva({
-          filas: filasSnapshot,
-          prioridadFallback: configuracionSectores[categoriaNormalizada]?.prioridadSectoresIds
-        }).prioridadSectorIds
+    prioridadCoberturaSectorIds: prioridadSnapshot,
+    ...(estructuraLicenciadosVersion === VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+      ? { estructuraLicenciadosVersion: VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA }
+      : {})
+  };
+};
+
+export const crearSnapshotConfiguracionPlanillaLicenciadosV2 = ({
+  turno,
+  mes,
+  prioridadCoberturaSectorIds,
+  filas = FILAS_PLANILLA_LICENCIADOS_V2,
+  asignacionesFijas = []
+} = {}) => {
+  const resultado = crearConfiguracionPlanillaLicenciadosV2({
+    prioridadCoberturaSectorIds,
+    filas,
+    asignacionesFijas
+  });
+  if (!resultado.ok) return { ...resultado, snapshot: null };
+  return {
+    ok: true,
+    errores: [],
+    configuracion: resultado.configuracion,
+    snapshot: crearSnapshotConfiguracionPlanillaDesdeFilas({
+      turno,
+      categoria: "licenciado",
+      mes,
+      ...resultado.configuracion
+    })
   };
 };
 
@@ -279,7 +422,8 @@ export const obtenerConfiguracionPlanillaEfectiva = ({
     copia.filas = reconciliarTurnanteAdicionalMensual({
       filas: copia.filas,
       categoria: categoria.trim(),
-      planilla: estadoMensual?.planillas?.[clavePlanilla]
+      planilla: estadoMensual?.planillas?.[clavePlanilla],
+      versionEstructura: copia
     });
     if (copia.prioridadCoberturaSectorIds.length === 0) {
       copia.prioridadCoberturaSectorIds = obtenerPrioridadCoberturaEfectiva({

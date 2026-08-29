@@ -1,8 +1,13 @@
 import { configuracionSectores } from "../../data/sectores.js";
 import {
   moverSectorEnPrioridadCobertura,
+  obtenerCandidatosPrioridadCoberturaMes,
   obtenerPrioridadCoberturaEfectiva
 } from "../../utils/prioridadCoberturaMensual.js";
+import {
+  resolverVersionEstructuraLicenciados,
+  VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+} from "../../utils/estructuraLicenciadosDinamica.js";
 
 const ETIQUETAS_CATEGORIA = Object.freeze({
   enfermero: "Enfermeros",
@@ -13,19 +18,25 @@ function PrioridadCoberturaMes({
   categoria,
   filas = [],
   prioridadCoberturaSectorIds = [],
+  versionEstructura,
   onCambiarPrioridad
 }) {
   const prioridadFallback = configuracionSectores[categoria]?.prioridadSectoresIds || [];
-  const { prioridadSectorIds } = obtenerPrioridadCoberturaEfectiva({
+  const usaLicenciadosV2 = categoria === "licenciado" &&
+    resolverVersionEstructuraLicenciados(versionEstructura) ===
+      VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA;
+  const candidatos = obtenerCandidatosPrioridadCoberturaMes({ categoria, filas, versionEstructura });
+  const resultadoPrioridad = obtenerPrioridadCoberturaEfectiva({
     prioridadConfigurada: prioridadCoberturaSectorIds,
     filas,
-    prioridadFallback
+    prioridadFallback,
+    categoria,
+    versionEstructura
   });
-  const filasPorId = new Map(
-    filas
-      .filter((fila) => fila?.tipo === "sector" && fila.activo !== false && fila.sectorId)
-      .map((fila) => [fila.sectorId, fila])
-  );
+  const prioridadSectorIds = usaLicenciadosV2 && !resultadoPrioridad.valido
+    ? candidatos.map((candidato) => candidato.id)
+    : resultadoPrioridad.prioridadSectorIds;
+  const candidatosPorId = new Map(candidatos.map((candidato) => [candidato.id, candidato]));
 
   const mover = (sectorId, direccion) => {
     onCambiarPrioridad?.(moverSectorEnPrioridadCobertura({
@@ -36,9 +47,11 @@ function PrioridadCoberturaMes({
   };
   const restaurar = () => {
     onCambiarPrioridad?.(obtenerPrioridadCoberturaEfectiva({
-      prioridadConfigurada: [],
+      prioridadConfigurada: usaLicenciadosV2 ? candidatos.map((candidato) => candidato.id) : [],
       filas,
-      prioridadFallback
+      prioridadFallback,
+      categoria,
+      versionEstructura
     }).prioridadSectorIds);
   };
 
@@ -47,9 +60,14 @@ function PrioridadCoberturaMes({
       <h5 id={`prioridad-cobertura-${categoria}`} className="font-semibold text-slate-800">
         {ETIQUETAS_CATEGORIA[categoria] || categoria}
       </h5>
+      {usaLicenciadosV2 && !resultadoPrioridad.valido && (
+        <p role="alert" className="mt-2 text-sm text-amber-700">
+          La prioridad de Licenciados debe configurarse para la nueva estructura.
+        </p>
+      )}
       <ol className="mt-2 space-y-2">
         {prioridadSectorIds.map((sectorId, indice) => {
-          const etiqueta = filasPorId.get(sectorId)?.etiqueta || sectorId;
+          const etiqueta = candidatosPorId.get(sectorId)?.nombre || sectorId;
           return (
             <li key={sectorId}
               className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">

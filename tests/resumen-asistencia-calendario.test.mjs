@@ -178,4 +178,115 @@ probar("la corrección no modifica distribución ni Planilla", () => {
   );
 });
 
+const destino = (destinoId, nombre, personaAsignada = null) => ({
+  tipo: "sector", destinoId, nombre, etiqueta: nombre, enfermero: personaAsignada
+});
+const resumirDestinos = (destinosOperativos) => crearResumenTurno({
+  asignaciones: destinosOperativos,
+  destinosOperativos
+});
+
+probar("Licenciados v1 y Enfermeros conservan el resumen operativo existente", () => {
+  assert.equal(crearResumenTurno({ asignaciones, destinosOperativos: asignaciones }).conteos.sectoresSinCobertura, 0);
+});
+probar("v2 <=9 expone exactamente ambos combinados", () => {
+  const resultado = resumirDestinos([
+    destino("reanimacion_sillones", "Reanimación + Sillones", persona(20, "licenciado")),
+    destino("diagnostico_explora", "Diagnóstico + Explora")
+  ]);
+  assert.equal(resultado.conteos.sectoresSinCobertura, 1);
+  assert.equal(resultado.alertas.filter(({ tipo }) => tipo.includes("sin_cobertura")).length, 1);
+});
+probar("v2 10 Sillones conserva sólo los tres destinos visibles", () => {
+  assert.equal(resumirDestinos([
+    destino("reanimacion", "Reanimación"), destino("sillones", "Sillones"),
+    destino("diagnostico_explora", "Diagnóstico + Explora")
+  ]).conteos.sectoresSinCobertura, 3);
+});
+probar("v2 10 Explora conserva sólo los tres destinos visibles", () => {
+  assert.equal(resumirDestinos([
+    destino("reanimacion_sillones", "Reanimación + Sillones"),
+    destino("diagnostico", "Diagnóstico"), destino("explora", "Explora")
+  ]).conteos.sectoresSinCobertura, 3);
+});
+probar("v2 11+ expone cuatro destinos individuales por destinoId", () => {
+  assert.equal(resumirDestinos([
+    destino("reanimacion", "Reanimación"), destino("sillones", "Sillones"),
+    destino("diagnostico", "Diagnóstico"), destino("explora", "Explora")
+  ]).conteos.sectoresSinCobertura, 4);
+});
+probar("Turnante T4 y Extra consumidos aparecen una sola vez en destino final", () => {
+  const t4 = persona(40, "licenciado");
+  const extra = persona(41, "licenciado");
+  const resultado = resumirDestinos([destino("sillones", "Sillones", t4), destino("explora", "Explora", extra)]);
+  assert.equal(resultado.alertas.some(({ tipo }) => tipo === "persona_duplicada"), false);
+});
+probar("movimiento manual se refleja sin reconstruir asignación base", () => {
+  const a = persona(50, "licenciado"); const b = persona(51, "licenciado");
+  const resultado = resumirDestinos([destino("reanimacion", "Reanimación", b), destino("sillones", "Sillones", a)]);
+  assert.equal(resultado.conteos.sectoresSinCobertura, 0);
+});
+probar("Sin asignar permanece separado de destinos operativos", () => {
+  const libre = persona(60, "licenciado");
+  const inicio = crearResumenCategoriaInicio({
+    asignaciones: [destino("reanimacion", "Reanimación", persona(61, "licenciado")), { tipo: "sector", nombre: "SIN ASIGNAR", enfermero: libre }],
+    destinosOperativos: [destino("reanimacion", "Reanimación", persona(61, "licenciado"))]
+  });
+  assert.equal(inicio.sinAsignar, 1);
+  assert.equal(Object.hasOwn(inicio, "destinosOperativos"), false);
+});
+probar("cambio 9→10→11 recalcula sin conservar destinos anteriores", () => {
+  const nueve = resumirDestinos([destino("reanimacion_sillones", "Reanimación + Sillones"), destino("diagnostico_explora", "Diagnóstico + Explora")]);
+  const diez = resumirDestinos([destino("reanimacion", "Reanimación"), destino("sillones", "Sillones"), destino("diagnostico_explora", "Diagnóstico + Explora")]);
+  const once = resumirDestinos([destino("reanimacion", "Reanimación"), destino("sillones", "Sillones"), destino("diagnostico", "Diagnóstico"), destino("explora", "Explora")]);
+  assert.deepEqual([nueve.conteos.sectoresSinCobertura, diez.conteos.sectoresSinCobertura, once.conteos.sectoresSinCobertura], [2, 3, 4]);
+});
+probar("cada combinado cuenta como un destino operativo", () => {
+  const combinados = [destino("reanimacion_sillones", "Reanimación + Sillones"), destino("diagnostico_explora", "Diagnóstico + Explora", persona(70, "licenciado"))];
+  assert.equal(crearResumenTurno({ asignaciones: combinados, destinosOperativos: combinados }).conteos.sectoresSinCobertura, 1);
+});
+probar("crearResumenTurno usa internamente los dos combinados v2 reales", () => {
+  const vacios = [
+    destino("reanimacion_sillones", "Reanimación + Sillones"),
+    destino("diagnostico_explora", "Diagnóstico + Explora")
+  ];
+  const cubiertos = vacios.map((fila, indice) => ({ ...fila, enfermero: persona(80 + indice, "licenciado") }));
+  assert.equal(crearResumenTurno({ asignaciones: vacios, destinosOperativos: vacios }).conteos.sectoresSinCobertura, 2);
+  assert.equal(crearResumenTurno({ asignaciones: cubiertos, destinosOperativos: cubiertos }).conteos.sectoresSinCobertura, 0);
+});
+probar("crearResumenTurno recibe exactamente tres destinos v2 para dotación 10", () => {
+  const tres = [
+    destino("reanimacion", "Reanimación", persona(90, "licenciado")),
+    destino("sillones", "Sillones"),
+    destino("diagnostico_explora", "Diagnóstico + Explora", persona(91, "licenciado"))
+  ];
+  const resumen = crearResumenTurno({ asignaciones: tres, destinosOperativos: tres });
+  assert.equal(resumen.conteos.sectoresSinCobertura, 1);
+  assert.equal(resumen.alertas.filter(({ tipo }) => tipo.includes("sin_cobertura")).length, 1);
+});
+probar("crearResumenTurno recibe exactamente cuatro destinos v2 para 11+", () => {
+  const cuatro = [
+    destino("reanimacion", "Reanimación", persona(100, "licenciado")),
+    destino("sillones", "Sillones", persona(101, "licenciado")),
+    destino("diagnostico", "Diagnóstico"),
+    destino("explora", "Explora", persona(102, "licenciado"))
+  ];
+  assert.equal(crearResumenTurno({ asignaciones: cuatro, destinosOperativos: cuatro }).conteos.sectoresSinCobertura, 1);
+});
+probar("Calendario cablea la distribución final al resumen interno", () => {
+  const calendario = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
+  assert.match(calendario, /const destinosOperativos = esDiaParo[\s\S]*asignacionOrdenada\.filter/);
+  assert.match(calendario, /return \{[\s\S]*destinosOperativos,[\s\S]*\};[\s\S]*crearResumenTurno\(\{[\s\S]*\.\.\.datosResumenTurno/);
+});
+probar("Inicio conserva UI y shape históricos mientras el dominio v2 permanece", () => {
+  const calendario = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
+  const inicio = fs.readFileSync("src/components/layout/VistaInicio.jsx", "utf8");
+  const dominio = fs.readFileSync("src/utils/resumenTurno.js", "utf8");
+  assert.doesNotMatch(calendario, /destinosOperativos: resolverSectoresOperativosResumen\(/);
+  assert.doesNotMatch(inicio, /Distribución operativa/);
+  assert.doesNotMatch(inicio, /destinosOperativos\.map/);
+  assert.doesNotMatch(dominio, /resolverSectoresOperativosResumen/);
+  assert.match(dominio, /destino:\$\{destino\.destinoId\}/);
+});
+
 console.log(`\n${aprobadas} pruebas de resumen de asistencia aprobadas.`);

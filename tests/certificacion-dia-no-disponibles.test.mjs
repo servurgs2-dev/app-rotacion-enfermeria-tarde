@@ -73,10 +73,30 @@ probar("1 aparece Certificación por el día", () => {
   assert.ok(OPCIONES_MOTIVO_NO_DISPONIBLE.some((opcion) => opcion.etiqueta === "Certificación por el día"));
   assert.match(panelFuente, /Certificación por el día|CERTIFICACION_DIA/);
 });
-probar("2 permanecen todos los motivos anteriores", () => {
-  for (const motivo of ["falta_con_aviso", "cambio_otro_turno", "supervision_otro_turno", "otro"]) {
+probar("2 el catálogo actual excluye el alta Cambio con otro turno y conserva su lectura legacy", () => {
+  for (const motivo of [
+    "falta_con_aviso",
+    "supervision_otro_turno",
+    "certificacion_dia",
+    "adhesion_paro",
+    "otro"
+  ]) {
     assert.ok(OPCIONES_MOTIVO_NO_DISPONIBLE.some((opcion) => opcion.valor === motivo));
   }
+  assert.equal(
+    OPCIONES_MOTIVO_NO_DISPONIBLE.some(
+      (opcion) => opcion.valor === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO
+    ),
+    false
+  );
+  const legacy = crearRegistroNoDisponible({
+    persona: milton,
+    motivo: MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO,
+    detalle: "Registro histórico",
+    sectorOrigen: "EXPLORA"
+  });
+  assert.equal(legacy.error, "");
+  assert.equal(legacy.registro.motivo, "cambio_otro_turno");
 });
 probar("3 usa exactamente la fecha seleccionada", () => assert.equal(certificacion.desde, fecha));
 probar("4 desde y hasta son iguales", () => assert.equal(certificacion.desde, certificacion.hasta));

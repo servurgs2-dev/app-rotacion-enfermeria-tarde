@@ -18,6 +18,7 @@ import { resolverPersonaDesdeReferencia } from "./referenciasPersonas.js";
 import { tieneContenidoSignificativo } from "./limpiezaSegura.js";
 import {
   obtenerFilasBasePlanilla,
+  obtenerPosicionTurnanteMensual,
   quitarTurnanteMensualDeDistribucion
 } from "./turnanteMensual.js";
 import {
@@ -32,6 +33,11 @@ import {
 import { validarAsignacionesFijasMensuales } from "./asignacionesFijasMensuales.js";
 import { asegurarIdPersona } from "./identidadPersonas.js";
 import { limpiarReferenciasDePersona } from "./integridadPersonas.js";
+import {
+  resolverVersionEstructuraLicenciados,
+  VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+} from "./estructuraLicenciadosDinamica.js";
+import { prepararTransicionLicenciadosV1aV2 } from "./transicionLicenciadosV1aV2.js";
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -463,7 +469,15 @@ export const analizarPreparacionMesNuevo = ({
     mes: mesOrigen
   });
   let filasEnfermeros = obtenerFilasPlanilla(configuracionSectores.enfermero, "enfermero");
-  const filasLicenciados = obtenerFilasPlanilla(configuracionSectores.licenciado, "licenciado");
+  const configuracionLicenciadosOrigen = borradoresConfiguracionPlanilla.licenciado;
+  const filasLicenciados = resolverVersionEstructuraLicenciados(
+    configuracionLicenciadosOrigen
+  ) === VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+    ? configuracionLicenciadosOrigen.filas
+        .filter((fila) => fila.activo !== false)
+        .sort((a, b) => a.orden - b.orden)
+        .map((fila) => fila.etiqueta)
+    : obtenerFilasPlanilla(configuracionSectores.licenciado, "licenciado");
   const estrategiaEnfermeros = obtenerEstrategiaRotacionPlanilla({
     turnoId,
     tipo: "enfermero",
@@ -604,6 +618,7 @@ export const analizarPreparacionMesNuevo = ({
       licenciado: copiarSnapshotDestinoValido("licenciado")
     },
     borradoresConfiguracionPlanilla,
+    configuracionLicenciadosOrigen: clonar(configuracionLicenciadosOrigen),
     enfermeros: {
       estrategia: estrategiaEnfermeros,
       filas: filasEnfermeros,
@@ -668,7 +683,11 @@ const filtrarDistribucionParaPadronDestino = ({
   ])
 );
 
-export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlanilla } = {}) => {
+export const construirEstadoMesNuevo = ({
+  analisis,
+  borradoresConfiguracionPlanilla,
+  transicionLicenciadosV2
+} = {}) => {
   if (!analisis?.ok) {
     return { ok: false, mensaje: "La preparación del mes no es válida." };
   }
@@ -678,8 +697,49 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
     mesOrigen: analisis.mesOrigen
   });
   if (!validacionBorradores.ok) return validacionBorradores;
+  const activarTransicionLicenciadosV2 = transicionLicenciadosV2?.activar === true;
+  let resultadoTransicionLicenciadosV2 = null;
+  if (activarTransicionLicenciadosV2) {
+    const fijasRevisadas = Object.hasOwn(
+      transicionLicenciadosV2,
+      "asignacionesFijas"
+    )
+      ? transicionLicenciadosV2.asignacionesFijas
+      : validacionBorradores.borradores.licenciado.asignacionesFijas;
+    resultadoTransicionLicenciadosV2 = prepararTransicionLicenciadosV1aV2({
+      configuracionOrigen: analisis.configuracionLicenciadosOrigen ||
+        analisis.borradoresConfiguracionPlanilla?.licenciado,
+      baseSemanalOrigen: analisis.licenciados.base,
+      ...(Object.hasOwn(transicionLicenciadosV2, "filas")
+        ? { filasDestinoV2: transicionLicenciadosV2.filas }
+        : {}),
+      prioridadDestinoV2: transicionLicenciadosV2.prioridadCoberturaSectorIds,
+      asignacionesFijasOrigen: fijasRevisadas,
+      personalDestino: analisis.personal.filter((persona) => persona?.categoria === "licenciado")
+    });
+    if (!resultadoTransicionLicenciadosV2.ok || !resultadoTransicionLicenciadosV2.aplicar) {
+      return {
+        ok: false,
+        codigo: resultadoTransicionLicenciadosV2.motivo ||
+          "TRANSICION_LICENCIADOS_V2_INVALIDA",
+        mensaje: "La transición de Licenciados v2 requiere una configuración válida.",
+        transicionLicenciadosV2: resultadoTransicionLicenciadosV2
+      };
+    }
+    if (resultadoTransicionLicenciadosV2.requiereRevisionFijas ||
+        resultadoTransicionLicenciadosV2.finalizable === false) {
+      return {
+        ok: false,
+        codigo: "ASIGNACIONES_FIJAS_LICENCIADOS_V2_REQUIEREN_REVISION",
+        mensaje: "Revisá las asignaciones fijas incompatibles antes de preparar Licenciados v2.",
+        transicionLicenciadosV2: resultadoTransicionLicenciadosV2
+      };
+    }
+  }
   for (const categoria of ["enfermero", "licenciado"]) {
-    const borrador = validacionBorradores.borradores[categoria];
+    const borrador = categoria === "licenciado" && resultadoTransicionLicenciadosV2
+      ? resultadoTransicionLicenciadosV2.configuracionDestino
+      : validacionBorradores.borradores[categoria];
     const validacionFijas = validarAsignacionesFijasMensuales({
       asignaciones: borrador.asignacionesFijas,
       personal: analisis.personalCanonicoOrigen || analisis.personal,
@@ -705,7 +765,9 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
     ["enfermero", "licenciado"].map((categoria) => [
       categoria,
       (() => {
-        const borrador = validacionBorradores.borradores[categoria];
+        const borrador = categoria === "licenciado" && resultadoTransicionLicenciadosV2
+          ? resultadoTransicionLicenciadosV2.configuracionDestino
+          : validacionBorradores.borradores[categoria];
         const destinoExistente = analisis.configuracionPlanillaDestino?.[categoria];
         return crearSnapshotConfiguracionPlanillaDesdeFilas({
           turno: analisis.turnoId,
@@ -715,17 +777,28 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
           asignacionesFijas: borrador.asignacionesFijas.filter(
             ({ personaId }) => personaIdsDestino.has(String(personaId ?? "").trim())
           ),
-          prioridadCoberturaSectorIds: borrador.prioridadCoberturaSectorIds
+          prioridadCoberturaSectorIds: borrador.prioridadCoberturaSectorIds,
+          ...(Object.hasOwn(borrador, "estructuraLicenciadosVersion")
+            ? { estructuraLicenciadosVersion: borrador.estructuraLicenciadosVersion }
+            : {})
         });
       })()
     ])
   );
-  const posicionAdicionalActiva = (categoria, etiqueta) =>
+  const posicionAdicionalActiva = (categoria) => {
+    const etiqueta = obtenerPosicionTurnanteMensual(
+      categoria,
+      configuracionPlanilla[categoria]
+    );
+    return etiqueta &&
     configuracionPlanilla[categoria].filas.some((fila) =>
       fila.tipo === "turnante" && fila.etiqueta === etiqueta && fila.activo === true
     ) ? [etiqueta] : [];
-  const posicionesEnfermeros = posicionAdicionalActiva("enfermero", "T6");
-  const posicionesLicenciados = posicionAdicionalActiva("licenciado", "T3");
+  };
+  const posicionesEnfermeros = posicionAdicionalActiva("enfermero");
+  const posicionesLicenciados = resultadoTransicionLicenciadosV2
+    ? [...resultadoTransicionLicenciadosV2.posicionesMensualesAdicionalesDestino]
+    : posicionAdicionalActiva("licenciado");
   const filtrarBaseSemanal = (distribucion) => filtrarDistribucionParaPadronDestino({
     distribucion,
     personalDestino: analisis.personal,
@@ -738,10 +811,13 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
   });
   const planillaLicBase = {
     ...crearPlanillaMensualVacia(),
-    semana1: quitarTurnanteMensualDeDistribucion(
-      filtrarBaseSemanal(analisis.licenciados.base),
-      "licenciado"
-    ),
+    semana1: resultadoTransicionLicenciadosV2
+      ? clonar(resultadoTransicionLicenciadosV2.baseSemanalDestino)
+      : quitarTurnanteMensualDeDistribucion(
+          filtrarBaseSemanal(analisis.licenciados.base),
+          "licenciado",
+          configuracionPlanilla.licenciado
+        ),
     coberturaLibreSM: {}
   };
   if (posicionesLicenciados.length) {
@@ -826,7 +902,13 @@ export const construirEstadoMesNuevo = ({ analisis, borradoresConfiguracionPlani
     licencias: clonar(analisis.licencias),
     certificaciones: clonar(analisis.certificaciones)
   });
-  return { ok: true, estado };
+  return {
+    ok: true,
+    estado,
+    ...(resultadoTransicionLicenciadosV2
+      ? { transicionLicenciadosV2: resultadoTransicionLicenciadosV2 }
+      : {})
+  };
 };
 
 export const validarContextoPreparacion = (esperado, actual) =>

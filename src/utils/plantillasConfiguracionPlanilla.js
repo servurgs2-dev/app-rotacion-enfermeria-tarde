@@ -36,7 +36,10 @@ const crearBorradorCategoria = ({ estadoMensual, turno, categoria, mes }) => {
     ),
     prioridadCoberturaSectorIds: copiarPrioridadCoberturaMensual(
       efectiva?.prioridadCoberturaSectorIds
-    )
+    ),
+    ...(Object.hasOwn(efectiva || {}, "estructuraLicenciadosVersion")
+      ? { estructuraLicenciadosVersion: efectiva.estructuraLicenciadosVersion }
+      : {})
   };
 };
 
@@ -170,7 +173,10 @@ export const validarBorradorConfiguracionPlanilla = ({
       ),
       prioridadCoberturaSectorIds: copiarPrioridadCoberturaMensual(
         borrador.prioridadCoberturaSectorIds
-      )
+      ),
+      ...(Object.hasOwn(borrador, "estructuraLicenciadosVersion")
+        ? { estructuraLicenciadosVersion: borrador.estructuraLicenciadosVersion }
+        : {})
     }
   };
 };

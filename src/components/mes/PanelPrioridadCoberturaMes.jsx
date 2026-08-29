@@ -29,6 +29,7 @@ function PanelPrioridadCoberturaMes({
               key={categoria}
               categoria={categoria}
               filas={borrador.filas}
+              versionEstructura={borrador.estructuraLicenciadosVersion}
               prioridadCoberturaSectorIds={borrador.prioridadCoberturaSectorIds}
               onCambiarPrioridad={(prioridadCoberturaSectorIds) =>
                 onActualizar?.(categoria, prioridadCoberturaSectorIds)

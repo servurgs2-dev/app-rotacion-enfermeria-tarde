@@ -1,6 +1,9 @@
+import { useMemo, useState } from "react";
 import ConfiguracionPlanilla from "../configuracion/ConfiguracionPlanilla.jsx";
 import AsignacionesFijasMes from "./AsignacionesFijasMes.jsx";
 import PrioridadCoberturaMes from "./PrioridadCoberturaMes.jsx";
+import { crearConfiguracionPlanillaLicenciadosV2 } from "../../utils/configuracionPlanilla.js";
+import { prepararTransicionLicenciadosV1aV2 } from "../../utils/transicionLicenciadosV1aV2.js";
 
 const CATEGORIAS_PRIORIDAD = Object.freeze(["enfermero", "licenciado"]);
 
@@ -14,6 +17,86 @@ function PanelPrepararMes({
 }) {
   const enfermeros = analisis.enfermeros;
   const flex = enfermeros.analisis;
+  const [previsualizarLicenciadosV2, setPrevisualizarLicenciadosV2] = useState(false);
+  const [borradorLicenciadosV2, setBorradorLicenciadosV2] = useState(null);
+  const [fijasLegacyPendientes, setFijasLegacyPendientes] = useState([]);
+
+  const activarPrevisualizacionV2 = (activar) => {
+    setPrevisualizarLicenciadosV2(activar);
+    if (!activar || borradorLicenciadosV2) return;
+    const fijasOrigen = analisis.configuracionLicenciadosOrigen?.asignacionesFijas || [];
+    const creacion = crearConfiguracionPlanillaLicenciadosV2({
+      prioridadCoberturaSectorIds: [],
+      asignacionesFijas: fijasOrigen
+    });
+    const compatibles = creacion.configuracion.asignacionesFijas || [];
+    const clavesCompatibles = new Set(compatibles.map(({ sectorId, personaId }) =>
+      `${sectorId}:${personaId}`
+    ));
+    setBorradorLicenciadosV2(creacion.configuracion);
+    setFijasLegacyPendientes(fijasOrigen.filter(({ sectorId, personaId }) =>
+      !clavesCompatibles.has(`${sectorId}:${personaId}`)
+    ));
+  };
+
+  const borradoresVisibles = previsualizarLicenciadosV2 && borradorLicenciadosV2
+    ? { ...borradoresConfiguracionPlanilla, licenciado: borradorLicenciadosV2 }
+    : borradoresConfiguracionPlanilla;
+  const actualizarBorradorVisible = (categoria, actualizador) => {
+    if (previsualizarLicenciadosV2 && categoria === "licenciado") {
+      setBorradorLicenciadosV2((actual) =>
+        typeof actualizador === "function" ? actualizador(actual) : actualizador
+      );
+      return;
+    }
+    onActualizarBorradorConfiguracionPlanilla?.(categoria, actualizador);
+  };
+  const resultadoTransicion = useMemo(() => {
+    if (!previsualizarLicenciadosV2 || !borradorLicenciadosV2) return null;
+    return prepararTransicionLicenciadosV1aV2({
+      configuracionOrigen: analisis.configuracionLicenciadosOrigen,
+      baseSemanalOrigen: analisis.licenciados.base,
+      filasDestinoV2: borradorLicenciadosV2.filas,
+      prioridadDestinoV2: borradorLicenciadosV2.prioridadCoberturaSectorIds,
+      asignacionesFijasOrigen: [
+        ...(borradorLicenciadosV2.asignacionesFijas || []),
+        ...fijasLegacyPendientes
+      ],
+      personalDestino: analisis.personal.filter((persona) => persona?.categoria === "licenciado")
+    });
+  }, [analisis, borradorLicenciadosV2, fijasLegacyPendientes, previsualizarLicenciadosV2]);
+  const personalPorId = useMemo(() => new Map(
+    (analisis.personal || []).map((persona) => [String(persona.id), persona])
+  ), [analisis.personal]);
+  const nombrePersona = (personaId) =>
+    personalPorId.get(String(personaId))?.nombre || String(personaId || "Sin persona asignada");
+  const transformacion = (motivo) => resultadoTransicion?.referenciasTransformadas?.find(
+    (referencia) => referencia.motivo === motivo
+  );
+  const prioridadLista = resultadoTransicion?.ok === true;
+  const fijasRevisadas = fijasLegacyPendientes.length === 0;
+  const transicionV2Lista = previsualizarLicenciadosV2 &&
+    resultadoTransicion?.ok === true &&
+    resultadoTransicion?.aplicar === true &&
+    resultadoTransicion?.finalizable !== false &&
+    resultadoTransicion?.requierePrioridadV2 !== true &&
+    resultadoTransicion?.requiereRevisionFijas !== true &&
+    fijasLegacyPendientes.length === 0;
+  const confirmarDesdePanel = () => {
+    if (!previsualizarLicenciadosV2) {
+      onConfirmar?.();
+      return;
+    }
+    if (!transicionV2Lista) return;
+    onConfirmar?.({
+      transicionLicenciadosV2: {
+        activar: true,
+        filas: borradorLicenciadosV2.filas,
+        prioridadCoberturaSectorIds: borradorLicenciadosV2.prioridadCoberturaSectorIds,
+        asignacionesFijas: borradorLicenciadosV2.asignacionesFijas
+      }
+    });
+  };
 
   return (
     <div
@@ -97,11 +180,87 @@ function PanelPrepararMes({
           </section>
         </div>
 
+        <section className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50/50 p-4">
+          <label className="flex min-h-11 items-center gap-3 font-semibold text-emerald-950">
+            <input
+              type="checkbox"
+              checked={previsualizarLicenciadosV2}
+              onChange={(evento) => activarPrevisualizacionV2(evento.target.checked)}
+              className="h-5 w-5 shrink-0"
+            />
+            Usar nueva estructura de Licenciados
+          </label>
+          <p className="mt-2 text-sm text-emerald-900">
+            Explora pasa a T3 y el T3 adicional a T4. Reanimación y Sillones se
+            resolverán diariamente; la asignación combinada actual quedará para revisión.
+          </p>
+          {previsualizarLicenciadosV2 && (
+            <div className="mt-4 space-y-3">
+              <div className="grid gap-2 text-sm sm:grid-cols-2">
+                <p className="rounded-lg bg-white p-3"><strong>Nueva estructura:</strong> Lista</p>
+                <p className="rounded-lg bg-white p-3"><strong>Prioridad:</strong> {prioridadLista ? "Lista" : "Pendiente"}</p>
+                <p className="rounded-lg bg-white p-3"><strong>Fijas:</strong> {fijasRevisadas ? "Revisadas" : "Requieren revisión"}</p>
+                <p className="rounded-lg bg-white p-3"><strong>Personas Sin asignar:</strong> {resultadoTransicion?.personasSinAsignar?.length ?? "Pendiente"}</p>
+              </div>
+              {!prioridadLista && (
+                <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  Falta configurar la prioridad de cobertura de Licenciados v2.
+                </p>
+              )}
+              <div className="rounded-lg border border-emerald-200 bg-white p-3 text-sm">
+                <p><strong>Explora → T3</strong></p>
+                {transformacion("TRANSICION_EXPLORA_A_T3") && (
+                  <p>{nombrePersona(transformacion("TRANSICION_EXPLORA_A_T3").personaId)} conservará su asignación.</p>
+                )}
+                {resultadoTransicion?.ok === true && !transformacion("TRANSICION_EXPLORA_A_T3") && (
+                  <p>No hay una persona Licenciada elegible asignada a Explora en {analisis.licenciados.claveBase}.</p>
+                )}
+                {resultadoTransicion?.posicionesMensualesAdicionalesDestino?.includes("T4") && (
+                  <div className="mt-2">
+                    <p><strong>T3 adicional → T4</strong></p>
+                    {transformacion("TRANSICION_T3_ADICIONAL_A_T4") && (
+                      <p>{nombrePersona(transformacion("TRANSICION_T3_ADICIONAL_A_T4").personaId)} conservará su asignación.</p>
+                    )}
+                  </div>
+                )}
+                <p className="mt-2 font-medium text-amber-800">
+                  La asignación actual de Reanimación + Sillones no se trasladará automáticamente a Reanimación.
+                </p>
+              </div>
+              {fijasLegacyPendientes.length > 0 && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+                  <p className="font-semibold text-amber-950">Fijas que requieren revisión</p>
+                  <ul className="mt-2 space-y-2">
+                    {fijasLegacyPendientes.map((fija) => (
+                      <li key={`${fija.sectorId}:${fija.personaId}`} className="flex flex-wrap items-center justify-between gap-2 rounded bg-white p-2">
+                        <span>{fija.sectorId} — {nombrePersona(fija.personaId)}</span>
+                        <button type="button" className="min-h-11 rounded-lg border px-3" onClick={() =>
+                          setFijasLegacyPendientes((actual) => actual.filter((item) => item !== fija))
+                        }>Excluir de la transición</button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {resultadoTransicion?.personasSinAsignar?.length > 0 && (
+                <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                  <p className="font-semibold">Quedarán Sin asignar</p>
+                  <ul className="mt-1 list-inside list-disc">
+                    {resultadoTransicion.personasSinAsignar.map((persona) => (
+                      <li key={persona.id}>{persona.nombre || persona.id}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
         <section className="mt-4 rounded-xl border border-slate-200 p-4">
           <h4 className="font-semibold text-slate-900">Estructura de Planilla del mes a preparar</h4>
           <ConfiguracionPlanilla
-            borradores={borradoresConfiguracionPlanilla}
-            onActualizarBorrador={onActualizarBorradorConfiguracionPlanilla}
+            borradores={borradoresVisibles}
+            onActualizarBorrador={actualizarBorradorVisible}
           />
         </section>
 
@@ -113,15 +272,16 @@ function PanelPrepararMes({
           </p>
           <div className="mt-4 grid gap-5 lg:grid-cols-2">
             {CATEGORIAS_PRIORIDAD.map((categoria) => {
-              const borrador = borradoresConfiguracionPlanilla?.[categoria];
+              const borrador = borradoresVisibles?.[categoria];
               return (
                 <PrioridadCoberturaMes
                   key={categoria}
                   categoria={categoria}
                   filas={borrador?.filas || []}
                   prioridadCoberturaSectorIds={borrador?.prioridadCoberturaSectorIds || []}
+                  versionEstructura={borrador}
                   onCambiarPrioridad={(prioridadCoberturaSectorIds) =>
-                    onActualizarBorradorConfiguracionPlanilla?.(categoria, (actual) => ({
+                    actualizarBorradorVisible(categoria, (actual) => ({
                       ...actual,
                       prioridadCoberturaSectorIds
                     }))
@@ -136,9 +296,9 @@ function PanelPrepararMes({
           <h4 className="font-semibold text-slate-900">Asignaciones fijas del mes</h4>
           <div className="mt-3">
             <AsignacionesFijasMes
-              borradores={borradoresConfiguracionPlanilla}
+              borradores={borradoresVisibles}
               personal={analisis.personal}
-              onActualizarBorrador={onActualizarBorradorConfiguracionPlanilla}
+              onActualizarBorrador={actualizarBorradorVisible}
             />
           </div>
         </section>
@@ -158,11 +318,25 @@ function PanelPrepararMes({
           </button>
           <button
             type="button"
-            onClick={onConfirmar}
-            className="rounded-lg bg-purple-600 px-4 py-2 text-white"
+            onClick={confirmarDesdePanel}
+            disabled={previsualizarLicenciadosV2 && !transicionV2Lista}
+            className="rounded-lg bg-purple-600 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Confirmar preparación
           </button>
+          {previsualizarLicenciadosV2 && (
+            <p className={`text-sm sm:basis-full sm:text-right ${
+              transicionV2Lista ? "text-emerald-700" : "text-amber-800"
+            }`}>
+              {transicionV2Lista
+                ? "Nueva estructura lista para preparar."
+                : !prioridadLista
+                  ? "Configurá una prioridad v2 completa para continuar."
+                  : !fijasRevisadas
+                    ? "Revisá las asignaciones fijas incompatibles para continuar."
+                    : "La configuración v2 requiere revisión antes de preparar."}
+            </p>
+          )}
         </div>
       </div>
     </div>

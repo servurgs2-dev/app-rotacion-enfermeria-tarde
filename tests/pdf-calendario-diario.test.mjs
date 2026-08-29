@@ -3,6 +3,8 @@ import fs from "node:fs";
 import {
   crearCalendarioDiarioPDF,
   crearPlanillaSemanalPDF,
+  obtenerAsignacionesCalendarioPDF,
+  obtenerFilasPlanillaPDF,
   obtenerPerfilVisualCalendarioPDF,
   prepararCertificacionesDiaPDF,
   prepararFilasCalendarioPDF
@@ -20,6 +22,9 @@ import {
   redistribuirPorBoxes
 } from "../src/utils/redistribucionEnfermeros.js";
 import { configuracionSectores } from "../src/data/sectores.js";
+import { crearSnapshotConfiguracionPlanillaLicenciadosV2 } from "../src/utils/configuracionPlanilla.js";
+import { CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2 } from "../src/utils/prioridadCoberturaLicenciadosDinamica.js";
+import { habilitarTurnanteMensual } from "../src/utils/turnanteMensual.js";
 
 let total = 0;
 const probar = (nombre, prueba) => {
@@ -95,6 +100,31 @@ const opciones = {
 };
 const copiaOpciones = structuredClone(opciones);
 const pdf = crearCalendarioDiarioPDF(opciones);
+
+const prioridadLicenciadosV2 = CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2
+  .map(({ id }) => id);
+const snapshotLicenciadosV2 = crearSnapshotConfiguracionPlanillaLicenciadosV2({
+  turno: "tarde",
+  mes: "2026-08",
+  prioridadCoberturaSectorIds: prioridadLicenciadosV2
+}).snapshot;
+const estadoLicenciadosV2 = {
+  configuracionPlanilla: { licenciado: snapshotLicenciadosV2 },
+  planillas: { licenciados: {} }
+};
+const ordenarPDFLicenciadosV2 = (asignaciones) => obtenerAsignacionesCalendarioPDF({
+  asignaciones,
+  estadoMensual: estadoLicenciadosV2,
+  turnoId: "tarde",
+  mesActivo: "2026-08",
+  tipo: "licenciado"
+});
+const filaV2 = (destinoId, nombre, enfermero = null) => ({
+  destinoId,
+  nombre,
+  enfermero,
+  tipo: "sector"
+});
 
 probar("1 el PDF diario tiene exactamente una página", () => {
   assert.equal(pdf.getNumberOfPages(), 1);
@@ -367,7 +397,7 @@ probar("34 la semana activa es la fuente de identidades Turnantes", () => {
 probar("35 Noche cada tres días usa el bloque activo", () => {
   assert.match(
     calendarioFuente,
-    /planilla\?\.rotacion3Dias\?\.bloques\?\.\[clavePeriodo\]/
+    /resolverPeriodoPlanillaDia\(\{[\s\S]*planillaPeriodo: resultado\.distribucion \|\| \{\}/
   );
 });
 probar("36 cambios manuales y SIN ASIGNAR conservan la marca", () => {
@@ -628,6 +658,85 @@ probar("44 los perfiles usan tamaños y alturas adaptativos", () => {
   );
   assert.equal(obtenerPerfilVisualCalendarioPDF({ maximoFilas: 24 }).fuenteTabla, 7.25);
   assert.equal(obtenerPerfilVisualCalendarioPDF({ maximoFilas: 25 }).fuenteTabla, 6.25);
+});
+
+probar("PDF diario v2 <=9 conserva exactamente los dos combinados finales", () => {
+  const finales = [
+    filaV2("reanimacion_sillones", "Reanimación + Sillones", personas[28]),
+    filaV2("diagnostico_explora", "Diagnóstico + Explora", personas[29])
+  ];
+  assert.deepEqual(ordenarPDFLicenciadosV2(finales), finales);
+  assert.deepEqual(prepararFilasCalendarioPDF(finales).map(([nombre]) => nombre), [
+    "REANIMACIÓN + SILLONES", "DIAGNÓSTICO + EXPLORA"
+  ]);
+});
+
+probar("PDF diario v2 10 conserva el perfil Sillones en orden visible", () => {
+  const finales = [
+    filaV2("reanimacion", "Reanimación", personas[28]),
+    filaV2("sillones", "Sillones", personas[30]),
+    filaV2("diagnostico_explora", "Diagnóstico + Explora", personas[29])
+  ];
+  assert.deepEqual(ordenarPDFLicenciadosV2(finales).map(({ destinoId }) => destinoId), [
+    "reanimacion", "sillones", "diagnostico_explora"
+  ]);
+});
+
+probar("PDF diario v2 10 conserva el perfil Explora en orden visible", () => {
+  const finales = [
+    filaV2("reanimacion_sillones", "Reanimación + Sillones", personas[28]),
+    filaV2("diagnostico", "Diagnóstico", personas[29]),
+    filaV2("explora", "Explora", personas[30])
+  ];
+  assert.deepEqual(ordenarPDFLicenciadosV2(finales).map(({ destinoId }) => destinoId), [
+    "reanimacion_sillones", "diagnostico", "explora"
+  ]);
+});
+
+probar("PDF diario v2 11+ conserva cuatro destinos y personas finales sin duplicar", () => {
+  const finales = [
+    filaV2("reanimacion", "Reanimación", personas[28]),
+    filaV2("sillones", "Sillones", { ...personas[30], esTurnante: true }),
+    filaV2("diagnostico", "Diagnóstico", personas[29]),
+    filaV2("explora", "Explora", personas[31])
+  ];
+  const resultado = ordenarPDFLicenciadosV2(finales);
+  assert.equal(new Set(resultado.map(({ enfermero }) => enfermero.id)).size, 4);
+  assert.deepEqual(resultado.map(({ destinoId }) => destinoId), finales.map(({ destinoId }) => destinoId));
+});
+
+probar("movimientos, Extras y Sin asignar llegan al PDF en su posición final", () => {
+  const extra = { id: "extra-pdf", nombre: "Extra final", categoria: "licenciado" };
+  const finales = [
+    filaV2("reanimacion", "Reanimación", personas[30]),
+    filaV2("sillones", "Sillones", personas[28]),
+    filaV2("explora", "Explora", extra),
+    { destinoId: "sin_asignar", nombre: "SIN ASIGNAR", enfermero: personas[32], tipo: "sector" }
+  ];
+  assert.deepEqual(ordenarPDFLicenciadosV2(finales), finales);
+  assert.equal(prepararFilasCalendarioPDF(finales).filter(([, nombre]) => nombre.includes("EXTRA FINAL")).length, 1);
+});
+
+probar("PDF mensual v2 conserva filas base, T3 y T4 opcional sin destinos diarios", () => {
+  const filasBase = obtenerFilasPlanillaPDF({
+    estadoMensual: estadoLicenciadosV2, turnoId: "tarde", mesActivo: "2026-08", tipo: "licenciado"
+  });
+  assert.equal(filasBase.includes("T3"), true);
+  assert.equal(filasBase.includes("T4"), false);
+  assert.equal(filasBase.some((fila) => ["Sillones", "Explora", "Reanimación + Sillones", "Diagnóstico + Explora"].includes(fila)), false);
+  const estadoConT4 = structuredClone(estadoLicenciadosV2);
+  estadoConT4.planillas.licenciados = habilitarTurnanteMensual({}, "licenciado", snapshotLicenciadosV2);
+  const filasConT4 = obtenerFilasPlanillaPDF({
+    estadoMensual: estadoConT4, turnoId: "tarde", mesActivo: "2026-08", tipo: "licenciado"
+  });
+  assert.equal(filasConT4.filter((fila) => fila === "T3").length, 1);
+  assert.equal(filasConT4.filter((fila) => fila === "T4").length, 1);
+});
+
+probar("exportPDF no reejecuta perfiles diarios y gatea sólo Licenciados v2", () => {
+  const fuente = fs.readFileSync("src/utils/exportPDF.js", "utf8");
+  assert.match(fuente, /tipo === "licenciado"[\s\S]*resolverVersionEstructuraLicenciados\(configuracionEfectiva\)/);
+  assert.doesNotMatch(fuente, /resolverCalendarioLicenciadosDinamico|resolverPerfilEstructuraLicenciadosDia/);
 });
 
 console.log(`\n${total} pruebas de PDF de Calendario Diario pasaron.`);

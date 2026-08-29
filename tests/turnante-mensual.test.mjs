@@ -38,6 +38,12 @@ probar("2 Licenciados sin configuración conserva 12 filas", () =>
   assert.equal(obtenerFilasEfectivasPlanilla(filasLicBase, {}, "licenciado").length, 12));
 const enfHabilitada = habilitarTurnanteMensual({ semana1: {} }, "enfermero");
 const licHabilitada = habilitarTurnanteMensual({ semana1: {} }, "licenciado");
+const versionLicenciadosV2 = { estructuraLicenciadosVersion: 2 };
+const licV2Habilitada = habilitarTurnanteMensual(
+  { semana1: { T3: ref("base-t3") } },
+  "licenciado",
+  versionLicenciadosV2
+);
 probar("3 habilitar Enfermeros agrega únicamente T6", () =>
   assert.deepEqual(enfHabilitada.posicionesMensualesAdicionales, ["T6"]));
 probar("4 habilitar Licenciados agrega únicamente T3", () =>
@@ -82,6 +88,29 @@ probar("17 T6 queda después de T1-T5", () =>
   assert.equal(obtenerPosicionesTurnantesEfectivas(["T1", "T2", "T3", "T4", "T5"], enfHabilitada, "enfermero").at(-1), "T6"));
 probar("18 T3 queda después de T1-T2", () =>
   assert.equal(obtenerPosicionesTurnantesEfectivas(["T1", "T2"], licHabilitada, "licenciado").at(-1), "T3"));
+probar("18A Licenciados v2 habilita T4 sin duplicar ni eliminar T3", () => {
+  assert.deepEqual(licV2Habilitada.posicionesMensualesAdicionales, ["T4"]);
+  assert.equal(licV2Habilitada.semana1.T3.personaId, "base-t3");
+  assert.equal(licV2Habilitada.semana1.T4, "");
+  assert.deepEqual(
+    obtenerFilasEfectivasPlanilla(["T1", "T2", "T3"], licV2Habilitada, "licenciado", versionLicenciadosV2),
+    ["T1", "T2", "T3", "T4"]
+  );
+  assert.deepEqual(
+    obtenerPosicionesTurnantesEfectivas(["T1", "T2", "T3"], licV2Habilitada, "licenciado", versionLicenciadosV2),
+    ["T1", "T2", "T3", "T4"]
+  );
+});
+probar("18B eliminar T4 v2 conserva T3 base", () => {
+  const resultado = eliminarTurnanteMensual(licV2Habilitada, "licenciado", versionLicenciadosV2);
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.planilla.semana1.T3.personaId, "base-t3");
+  assert.equal(Object.hasOwn(resultado.planilla.semana1, "T4"), false);
+});
+probar("18C adicional se resuelve T3 en v1 y T4 en v2", () => {
+  assert.equal(obtenerPosicionTurnanteMensual("licenciado"), "T3");
+  assert.equal(obtenerPosicionTurnanteMensual("licenciado", versionLicenciadosV2), "T4");
+});
 probar("19-23 disponibilidad sigue dependiendo de Calendario", () => {
   const fuente = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
   for (const texto of ["estaDeLicenciaHoy", "esLibreReal", "estaCertificadoHoy", "estaNoDisponible", "ESTADOS_ASISTENCIA.AUSENTE"]) {

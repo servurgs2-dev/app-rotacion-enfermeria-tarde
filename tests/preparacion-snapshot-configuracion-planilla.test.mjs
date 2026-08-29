@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { configuracionSectores } from "../src/data/sectores.js";
 import {
-  crearSnapshotConfiguracionPlanilla
+  crearSnapshotConfiguracionPlanilla,
+  crearSnapshotConfiguracionPlanillaLicenciadosV2
 } from "../src/utils/configuracionPlanilla.js";
+import { CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2 } from "../src/utils/prioridadCoberturaLicenciadosDinamica.js";
 import { crearEstadoMensualVacio, normalizarEstadoMensual } from "../src/utils/estadoMensual.js";
 import {
   analizarPreparacionMesNuevo,
@@ -34,7 +36,11 @@ const crearAgostoLegacy = () => {
   return estado;
 };
 
-const prepararSeptiembre = ({ destino = crearEstadoMensualVacio(), configurarOrigen } = {}) => {
+const prepararSeptiembre = ({
+  destino = crearEstadoMensualVacio(),
+  configurarOrigen,
+  transicionLicenciadosV2
+} = {}) => {
   const origen = crearAgostoLegacy();
   configurarOrigen?.(origen);
   const analisis = analizarPreparacionMesNuevo({
@@ -45,7 +51,11 @@ const prepararSeptiembre = ({ destino = crearEstadoMensualVacio(), configurarOri
     estadoDestino: destino
   });
   assert.equal(analisis.ok, true, analisis.mensaje);
-  return { origen, analisis, resultado: construirEstadoMesNuevo({ analisis }) };
+  return {
+    origen,
+    analisis,
+    resultado: construirEstadoMesNuevo({ analisis, transicionLicenciadosV2 })
+  };
 };
 
 let total = 0;
@@ -126,6 +136,132 @@ probar("15 preserva configuración válida ya existente en destino", () => {
   assert.equal(resultado.estado.configuracionPlanilla.enfermero.filas[0].etiqueta, "ETIQUETA CONSERVADA");
   assert.notEqual(resultado.estado.configuracionPlanilla.enfermero, existente);
   assert.ok(resultado.estado.configuracionPlanilla.licenciado);
+});
+
+const prioridadLicenciadosV2 = CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2.map(({ id }) => id);
+const prepararTransicionV2 = ({ prioridad = prioridadLicenciadosV2, fijas, sinAdicional = false } = {}) =>
+  prepararSeptiembre({
+    configurarOrigen: (origen) => {
+      const explora = filasLicenciados.indexOf("Explora");
+      const reanimacion = filasLicenciados.indexOf("Reanimación + Sillones");
+      assert.ok(explora >= 0);
+      assert.ok(reanimacion >= 0);
+      origen.licencias = [{ personaId: `lic-${explora}`, desde: "2026-09-02", hasta: "2026-09-03" }];
+      origen.certificaciones = [{ personaId: `lic-${reanimacion}`, desde: "2026-09-04", hasta: "2026-09-04" }];
+      if (!sinAdicional) {
+        const adicional = { id: "lic-t3-adicional", nombre: "T3 adicional", categoria: "licenciado", turno: "tarde" };
+        origen.personal.push(adicional);
+        origen.planillas.licenciados.posicionesMensualesAdicionales = ["T3"];
+        origen.planillas.licenciados.semana5.T3 = { personaId: adicional.id, nombre: adicional.nombre };
+      }
+    },
+    transicionLicenciadosV2: {
+      activar: true,
+      prioridadCoberturaSectorIds: prioridad,
+      ...(fijas !== undefined ? { asignacionesFijas: fijas } : {})
+    }
+  });
+
+probar("16 transición explícita crea snapshot y semana1 Licenciados v2", () => {
+  const preparado = prepararTransicionV2();
+  assert.equal(preparado.resultado.ok, true, preparado.resultado.mensaje);
+  const snapshot = preparado.resultado.estado.configuracionPlanilla.licenciado;
+  const planilla = preparado.resultado.estado.planillas.licenciados;
+  assert.equal(snapshot.estructuraLicenciadosVersion, 2);
+  assert.equal(snapshot.filas.length, 12);
+  assert.deepEqual(snapshot.prioridadCoberturaSectorIds, prioridadLicenciadosV2);
+  assert.equal(snapshot.filas.some((fila) => fila.sectorId === "explora"), false);
+  assert.equal(snapshot.filas.some((fila) => fila.sectorId === "reanimacion_sillones"), false);
+  assert.equal(snapshot.filas.filter((fila) => fila.turnanteId === "turnante_3").length, 1);
+  assert.equal(snapshot.filas.some((fila) => fila.turnanteId === "turnante_4"), false);
+  assert.equal(planilla.semana1.T3.personaId, `lic-${filasLicenciados.indexOf("Explora")}`);
+  assert.equal(planilla.semana1.T4.personaId, "lic-t3-adicional");
+  assert.deepEqual(planilla.posicionesMensualesAdicionales, ["T4"]);
+  assert.equal(planilla.semana1["Reanimación"], "");
+  for (const clave of ["Explora", "Reanimación + Sillones", "Diagnóstico + Explora"])
+    assert.equal(Object.hasOwn(planilla.semana1, clave), false);
+  for (let semana = 2; semana <= 6; semana += 1)
+    assert.deepEqual(planilla[`semana${semana}`], {});
+  const personaReanimacionId = `lic-${filasLicenciados.indexOf("Reanimación + Sillones")}`;
+  assert.equal(preparado.resultado.estado.personal.some(({ id }) => id === personaReanimacionId), true);
+  assert.equal(preparado.resultado.transicionLicenciadosV2.personasSinAsignar.some(({ id }) => id === personaReanimacionId), true);
+  assert.deepEqual(
+    preparado.resultado.estado.licencias.map(({ personaId, desde, hasta }) => ({ personaId, desde, hasta })),
+    preparado.analisis.licencias
+  );
+  assert.deepEqual(
+    preparado.resultado.estado.certificaciones.map(({ personaId, desde, hasta }) => ({ personaId, desde, hasta })),
+    preparado.analisis.certificaciones
+  );
+});
+
+probar("17 transición sin T3 adicional conserva T3 base y no crea T4", () => {
+  const preparado = prepararTransicionV2({ sinAdicional: true });
+  const planilla = preparado.resultado.estado.planillas.licenciados;
+  assert.equal(Object.hasOwn(planilla.semana1, "T3"), true);
+  assert.equal(Object.hasOwn(planilla.semana1, "T4"), false);
+  assert.equal(planilla.posicionesMensualesAdicionales, undefined);
+});
+
+probar("18 transición requiere prioridad v2 válida", () => {
+  for (const prioridad of [
+    [],
+    prioridadLicenciadosV2.filter((id) => id !== "sillones"),
+    prioridadLicenciadosV2.filter((id) => id !== "explora")
+  ]) {
+    const resultado = prepararTransicionV2({ prioridad }).resultado;
+    assert.equal(resultado.ok, false);
+    assert.equal(resultado.codigo, "CONFIGURACION_DESTINO_LICENCIADOS_V2_INVALIDA");
+  }
+});
+
+probar("19 fijas incompatibles bloquean y selección revisada conserva Diagnóstico", () => {
+  const fijaDiagnostico = { sectorId: "diagnostico", personaId: "lic-7" };
+  const incompatibles = [
+    fijaDiagnostico,
+    { sectorId: "explora", personaId: "lic-5" },
+    { sectorId: "reanimacion_sillones", personaId: "lic-3" }
+  ];
+  const bloqueada = prepararTransicionV2({ fijas: incompatibles }).resultado;
+  assert.equal(bloqueada.ok, false);
+  assert.equal(bloqueada.codigo, "ASIGNACIONES_FIJAS_LICENCIADOS_V2_REQUIEREN_REVISION");
+  assert.equal(bloqueada.transicionLicenciadosV2.asignacionesFijasIncompatibles.length, 2);
+  const revisada = prepararTransicionV2({ fijas: [fijaDiagnostico] }).resultado;
+  assert.equal(revisada.ok, true);
+  assert.deepEqual(revisada.estado.configuracionPlanilla.licenciado.asignacionesFijas, [fijaDiagnostico]);
+  assert.equal(revisada.estado.configuracionPlanilla.licenciado.asignacionesFijas.some(({ sectorId }) =>
+    ["explora", "reanimacion_sillones", "turnante_3"].includes(sectorId)), false);
+});
+
+probar("20 sin intención explícita continúa v1 y no muta origen", () => {
+  const normal = prepararSeptiembre();
+  assert.equal(Object.hasOwn(normal.resultado.estado.configuracionPlanilla.licenciado, "estructuraLicenciadosVersion"), false);
+  assert.equal(normal.resultado.estado.configuracionPlanilla.licenciado.filas.some((fila) => fila.sectorId === "explora"), true);
+  const antes = clonar(normal.origen);
+  construirEstadoMesNuevo({ analisis: normal.analisis, transicionLicenciadosV2: { activar: false } });
+  assert.deepEqual(normal.origen, antes);
+});
+
+probar("21 flujo normal v2 a v2 conserva versión sin ejecutar C7B", () => {
+  const origen = crearAgostoLegacy();
+  const snapshotV2 = crearSnapshotConfiguracionPlanillaLicenciadosV2({
+    turno: "tarde", mes: "2026-08", prioridadCoberturaSectorIds: prioridadLicenciadosV2
+  }).snapshot;
+  origen.configuracionPlanilla = { licenciado: snapshotV2 };
+  const licenciados = personas.filter((persona) => persona.categoria === "licenciado");
+  origen.planillas.licenciados.semana5 = Object.fromEntries(snapshotV2.filas.map((fila, indice) => [
+    fila.etiqueta,
+    { personaId: licenciados[indice].id, nombre: licenciados[indice].nombre }
+  ]));
+  const analisis = analizarPreparacionMesNuevo({
+    turnoId: "tarde", mesOrigen: "2026-08", mesDestino: "2026-09",
+    estadoOrigen: origen, estadoDestino: crearEstadoMensualVacio()
+  });
+  assert.equal(analisis.ok, true, analisis.mensaje);
+  const resultado = construirEstadoMesNuevo({ analisis });
+  assert.equal(resultado.ok, true, resultado.mensaje);
+  assert.equal(resultado.estado.configuracionPlanilla.licenciado.estructuraLicenciadosVersion, 2);
+  assert.equal(Object.hasOwn(resultado, "transicionLicenciadosV2"), false);
 });
 
 console.log(`\nEtapa 34B2: ${total} pruebas de preparación con snapshots aprobadas.`);

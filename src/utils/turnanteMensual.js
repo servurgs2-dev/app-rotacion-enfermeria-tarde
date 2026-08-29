@@ -2,6 +2,10 @@ import {
   adaptarConfiguracionLegacyPlanilla,
   obtenerEtiquetasFilasPlanilla
 } from "./configuracionPlanilla.js";
+import {
+  resolverVersionEstructuraLicenciados,
+  VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+} from "./estructuraLicenciadosDinamica.js";
 
 const CONFIGURACION = Object.freeze({
   enfermero: Object.freeze({
@@ -20,14 +24,18 @@ const esObjeto = (valor) =>
 const referenciaTieneContenido = (referencia) =>
   referencia !== "" && referencia !== null && referencia !== undefined;
 
-export const obtenerPosicionTurnanteMensual = (tipo) =>
-  CONFIGURACION[tipo]?.posicion || "";
+export const obtenerPosicionTurnanteMensual = (tipo, versionEstructura) =>
+  tipo === "licenciado" &&
+  resolverVersionEstructuraLicenciados(versionEstructura) ===
+    VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+    ? "T4"
+    : CONFIGURACION[tipo]?.posicion || "";
 
 export const obtenerCapacidadNormalPlanilla = (tipo) =>
   CONFIGURACION[tipo]?.capacidadNormal ?? 0;
 
-export const estaHabilitadoTurnanteMensual = (planilla, tipo) => {
-  const posicion = obtenerPosicionTurnanteMensual(tipo);
+export const estaHabilitadoTurnanteMensual = (planilla, tipo, versionEstructura) => {
+  const posicion = obtenerPosicionTurnanteMensual(tipo, versionEstructura);
   return Boolean(
     posicion &&
     Array.isArray(planilla?.posicionesMensualesAdicionales) &&
@@ -43,13 +51,14 @@ export const obtenerFilasBasePlanilla = (configuracion = {}, tipo = "") =>
 export const obtenerFilasEfectivasPlanilla = (
   filasBase,
   planilla,
-  tipo
+  tipo,
+  versionEstructura
 ) => {
   const filas = [...new Set(Array.isArray(filasBase) ? filasBase : [])];
-  const posicion = obtenerPosicionTurnanteMensual(tipo);
+  const posicion = obtenerPosicionTurnanteMensual(tipo, versionEstructura);
   if (
     posicion &&
-    estaHabilitadoTurnanteMensual(planilla, tipo) &&
+    estaHabilitadoTurnanteMensual(planilla, tipo, versionEstructura) &&
     !filas.includes(posicion)
   ) {
     filas.push(posicion);
@@ -60,21 +69,22 @@ export const obtenerFilasEfectivasPlanilla = (
 export const obtenerPosicionesTurnantesEfectivas = (
   turnantesBase,
   planilla,
-  tipo
+  tipo,
+  versionEstructura
 ) => {
   const base = [...new Set(Array.isArray(turnantesBase) ? turnantesBase : [])]
-    .filter((posicion) => posicion !== obtenerPosicionTurnanteMensual(tipo));
-  const posicion = obtenerPosicionTurnanteMensual(tipo);
-  if (posicion && estaHabilitadoTurnanteMensual(planilla, tipo)) {
+    .filter((posicion) => posicion !== obtenerPosicionTurnanteMensual(tipo, versionEstructura));
+  const posicion = obtenerPosicionTurnanteMensual(tipo, versionEstructura);
+  if (posicion && estaHabilitadoTurnanteMensual(planilla, tipo, versionEstructura)) {
     base.push(posicion);
   }
   return base;
 };
 
-export const habilitarTurnanteMensual = (planilla, tipo) => {
+export const habilitarTurnanteMensual = (planilla, tipo, versionEstructura) => {
   const actual = esObjeto(planilla) ? planilla : {};
-  const posicion = obtenerPosicionTurnanteMensual(tipo);
-  if (!posicion || estaHabilitadoTurnanteMensual(actual, tipo)) return actual;
+  const posicion = obtenerPosicionTurnanteMensual(tipo, versionEstructura);
+  if (!posicion || estaHabilitadoTurnanteMensual(actual, tipo, versionEstructura)) return actual;
 
   const resultado = {
     ...actual,
@@ -125,9 +135,9 @@ const etiquetaPeriodo = (clave) => {
   return coincidencia ? `Semana ${coincidencia[1]}` : clave;
 };
 
-export const validarEliminacionTurnanteMensual = (planilla, tipo) => {
-  const posicion = obtenerPosicionTurnanteMensual(tipo);
-  if (!posicion || !estaHabilitadoTurnanteMensual(planilla, tipo)) {
+export const validarEliminacionTurnanteMensual = (planilla, tipo, versionEstructura) => {
+  const posicion = obtenerPosicionTurnanteMensual(tipo, versionEstructura);
+  if (!posicion || !estaHabilitadoTurnanteMensual(planilla, tipo, versionEstructura)) {
     return { ok: true, posicion, usos: [] };
   }
 
@@ -168,8 +178,8 @@ const quitarClave = (distribucion, posicion) => {
   return resto;
 };
 
-export const eliminarTurnanteMensual = (planilla, tipo) => {
-  const validacion = validarEliminacionTurnanteMensual(planilla, tipo);
+export const eliminarTurnanteMensual = (planilla, tipo, versionEstructura) => {
+  const validacion = validarEliminacionTurnanteMensual(planilla, tipo, versionEstructura);
   if (!validacion.ok) return { ...validacion, planilla };
 
   const actual = esObjeto(planilla) ? planilla : {};
@@ -205,5 +215,5 @@ export const eliminarTurnanteMensual = (planilla, tipo) => {
   return { ok: true, posicion, usos: [], planilla: resultado };
 };
 
-export const quitarTurnanteMensualDeDistribucion = (distribucion, tipo) =>
-  quitarClave(distribucion, obtenerPosicionTurnanteMensual(tipo));
+export const quitarTurnanteMensualDeDistribucion = (distribucion, tipo, versionEstructura) =>
+  quitarClave(distribucion, obtenerPosicionTurnanteMensual(tipo, versionEstructura));

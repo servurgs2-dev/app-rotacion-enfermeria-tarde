@@ -23,14 +23,18 @@ const crearDestinosLegacy = (sectores) => (Array.isArray(sectores) ? sectores : 
   .map((etiqueta) => ({ etiqueta, claveLegacy: normalizar(etiqueta) }))
   .filter((destino) => destino.claveLegacy);
 
+const obtenerClaveDestinoResumen = (destino) => destino?.destinoId
+  ? `destino:${destino.destinoId}`
+  : obtenerClaveIdentidadOperativa(resolverIdentidadOperativaAsignacion(destino));
+
 const crearDestinosOperativos = (destinos, sectoresLegacy) => {
   if (!Array.isArray(destinos)) return crearDestinosLegacy(sectoresLegacy);
   const unicos = new Map();
   destinos.forEach((destino) => {
     if (!destino || destino.tipo === "divider") return;
     const identidad = resolverIdentidadOperativaAsignacion(destino);
-    const claveIdentidad = obtenerClaveIdentidadOperativa(identidad);
-    if (!claveIdentidad || identidad?.tipoIdentidad === "turnante") return;
+    const claveIdentidad = obtenerClaveDestinoResumen(destino);
+    if (!claveIdentidad || (!destino.destinoId && identidad?.tipoIdentidad === "turnante")) return;
     if (!unicos.has(claveIdentidad)) {
       unicos.set(claveIdentidad, {
         etiqueta: destino.etiqueta || destino.nombre,
@@ -72,9 +76,7 @@ export const crearResumenTurno = ({
   const asignacionesPorSector = new Map();
 
   asignaciones.forEach((asignacion) => {
-    const claveIdentidad = obtenerClaveIdentidadOperativa(
-      resolverIdentidadOperativaAsignacion(asignacion)
-    );
+    const claveIdentidad = obtenerClaveDestinoResumen(asignacion);
     if (claveIdentidad) asignacionesPorIdentidad.set(claveIdentidad, asignacion);
     const sector = normalizar(asignacion?.nombre);
     if (sector) asignacionesPorSector.set(sector, asignacion);

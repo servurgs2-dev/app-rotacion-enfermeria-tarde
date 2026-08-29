@@ -51,7 +51,7 @@ probar("renderiza sólo sectores activos tipo sector", () => {
     fila.tipo === "sector" && fila.activo !== false && fila.sectorId
   ).map((fila) => fila.sectorId);
   assert.deepEqual(new Set(ids), new Set(esperados));
-  assert.match(ui, /fila\?\.tipo === "sector" && fila\.activo !== false && fila\.sectorId/);
+  assert.match(ui, /obtenerCandidatosPrioridadCoberturaMes/);
 });
 probar("no muestra Turnantes", () => {
   const snapshot = snapshotEnfermero();
@@ -65,7 +65,7 @@ probar("no muestra sectores desactivados", () => {
   assert.equal(prioridadEfectiva(snapshot).includes("explora_2"), false);
 });
 probar("muestra etiqueta y usa sectorId como key", () => {
-  assert.match(ui, /filasPorId\.get\(sectorId\)\?\.etiqueta/);
+  assert.match(ui, /candidatosPorId\.get\(sectorId\)\?\.nombre/);
   assert.match(ui, /<li key=\{sectorId\}/);
 });
 probar("botón bajar mueve una posición", () => {

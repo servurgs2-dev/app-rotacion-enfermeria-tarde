@@ -1970,7 +1970,7 @@ const iniciarPreparacionMes = async () => {
   });
 };
 
-const confirmarPreparacionMes = () => {
+const confirmarPreparacionMes = ({ transicionLicenciadosV2 } = {}) => {
   if (preparacionMes?.estado !== "lista") return;
   const metadatosDestino = metadatosPorClaveRef.current.get(claveActiva);
   const contextoActual = {
@@ -2010,7 +2010,8 @@ const confirmarPreparacionMes = () => {
   }
   const construccion = construirEstadoMesNuevo({
     analisis: preparacionMes.analisis,
-    borradoresConfiguracionPlanilla: validacionBorradores.borradores
+    borradoresConfiguracionPlanilla: validacionBorradores.borradores,
+    ...(transicionLicenciadosV2 ? { transicionLicenciadosV2 } : {})
   });
   if (!construccion.ok) {
     setPreparacionMes((actual) => ({ ...actual, error: construccion.mensaje }));
@@ -2180,6 +2181,9 @@ const abrirEdicionPrioridadCobertura = () => {
       const snapshot = configuraciones[categoria];
       return [categoria, {
         filas: snapshot.filas.map((fila) => ({ ...fila })),
+        ...(Object.hasOwn(snapshot, "estructuraLicenciadosVersion")
+          ? { estructuraLicenciadosVersion: snapshot.estructuraLicenciadosVersion }
+          : {}),
         prioridadCoberturaSectorIds: copiarPrioridadCoberturaMensual(
           snapshot.prioridadCoberturaSectorIds
         )
@@ -2240,7 +2244,9 @@ const guardarPrioridadCoberturaMesPreparado = () => {
   if (!resultado.ok) {
     setEdicionPrioridadCobertura((actual) => ({
       ...actual,
-      error: "No se pudo actualizar la prioridad porque falta la configuración mensual."
+      error: resultado.codigo === "PRIORIDAD_COBERTURA_LICENCIADOS_V2_INVALIDA"
+        ? "La prioridad de Licenciados debe configurarse para la nueva estructura."
+        : "No se pudo actualizar la prioridad porque falta la configuración mensual."
     }));
     return;
   }

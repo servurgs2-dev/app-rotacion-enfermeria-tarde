@@ -19,6 +19,10 @@ import {
 } from "./configuracionPlanilla.js";
 import { resolverEstructuraCalendario } from "./estructuraCalendario.js";
 import {
+  resolverVersionEstructuraLicenciados,
+  VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+} from "./estructuraLicenciadosDinamica.js";
+import {
   crearIdentidadSector,
   crearIdentidadTurnante,
   obtenerClaveIdentidadOperativa,
@@ -644,6 +648,15 @@ export const obtenerAsignacionesCalendarioPDF = ({
     mes: mesActivo
   });
   if (!configuracionEfectiva || configuracionEfectiva.schemaVersion === null) {
+    return asignacionesActuales;
+  }
+  if (
+    tipo === "licenciado" &&
+    resolverVersionEstructuraLicenciados(configuracionEfectiva) ===
+      VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+  ) {
+    // Calendario ya resolvió perfil, cobertura y movimientos: el PDF diario
+    // conserva esa representación final, incluidos los destinos sin fila mensual.
     return asignacionesActuales;
   }
 

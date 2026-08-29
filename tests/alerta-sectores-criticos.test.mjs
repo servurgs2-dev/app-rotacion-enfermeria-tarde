@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   formatearAlertaSectoresCriticos,
-  obtenerSectoresCriticosSinCobertura
+  obtenerSectoresCriticosSinCobertura,
+  resolverDestinosCriticosCalendario
 } from "../src/utils/alertaSectoresCriticos.js";
 import { configuracionSectores } from "../src/data/sectores.js";
 
@@ -24,6 +25,13 @@ const detectar = (asignaciones, lista = criticos) =>
     asignaciones: conIdentidad(asignaciones),
     sectoresCriticosIds: lista
   });
+const criticosLicenciados = configuracionSectores.licenciado.sectoresCriticosIds;
+const detectarLicenciadoV2 = (asignaciones) => obtenerSectoresCriticosSinCobertura({
+  asignaciones: asignaciones.map((fila) => ({ tipo: "sector", ...fila })),
+  sectoresCriticosIds: criticosLicenciados,
+  categoria: "licenciado",
+  versionEstructura: 2
+});
 const calendario = fs.readFileSync(
   new URL("../src/components/calendario/CalendarioDiario.jsx", import.meta.url),
   "utf8"
@@ -134,6 +142,105 @@ probar("22 no existe SQL nuevo", () => {
     "utf8"
   );
   assert.doesNotMatch(helper, /\b(?:select|insert|update|delete)\s+(?:from|into|public\.)/i);
+});
+probar("23 Licenciados v1 conserva críticos legacy", () => {
+  assert.deepEqual(obtenerSectoresCriticosSinCobertura({
+    asignaciones: [
+      { tipo: "sector", sectorId: "triage_1", nombre: "Triage 1", enfermero: null },
+      { tipo: "sector", sectorId: "estabiliza", nombre: "Estabiliza", enfermero: null },
+      { tipo: "sector", sectorId: "reanimacion_sillones", nombre: "Reanimación + Sillones", enfermero: null }
+    ],
+    sectoresCriticosIds: criticosLicenciados,
+    categoria: "licenciado",
+    versionEstructura: 1
+  }), ["Triage 1", "Estabiliza", "Reanimación + Sillones"]);
+});
+probar("24 v2 combinado cubierto no alerta y vacío alerta una vez", () => {
+  const combinado = {
+    destinoId: "reanimacion_sillones",
+    nombre: "Reanimación + Sillones",
+    componentes: ["reanimacion", "sillones"]
+  };
+  assert.deepEqual(detectarLicenciadoV2([{ ...combinado, enfermero: persona }]), []);
+  assert.deepEqual(detectarLicenciadoV2([{ ...combinado, enfermero: null }]), ["Reanimación + Sillones"]);
+  assert.equal(resolverDestinosCriticosCalendario({
+    categoria: "licenciado",
+    versionEstructura: 2,
+    asignaciones: [{ tipo: "sector", ...combinado, enfermero: null }],
+    sectoresCriticosIds: criticosLicenciados
+  }).length, 1);
+});
+probar("25 Diagnóstico+Explora vacío no crea crítico", () => {
+  assert.deepEqual(detectarLicenciadoV2([{
+    destinoId: "diagnostico_explora",
+    nombre: "Diagnóstico + Explora",
+    componentes: ["diagnostico", "explora"],
+    enfermero: null
+  }]), []);
+});
+probar("26 v2 separado alerta Reanimación vacía pero no Sillones", () => {
+  assert.deepEqual(detectarLicenciadoV2([
+    { destinoId: "reanimacion", nombre: "Reanimación", componentes: ["reanimacion"], enfermero: null },
+    { destinoId: "sillones", nombre: "Sillones", componentes: ["sillones"], enfermero: null },
+    { destinoId: "diagnostico_explora", nombre: "Diagnóstico + Explora", componentes: ["diagnostico", "explora"], enfermero: null }
+  ]), ["Reanimación"]);
+});
+probar("27 v2 combinado alerta aunque Diagnóstico y Explora separados estén vacíos", () => {
+  assert.deepEqual(detectarLicenciadoV2([
+    { destinoId: "reanimacion_sillones", nombre: "Reanimación + Sillones", componentes: ["reanimacion", "sillones"], enfermero: null },
+    { destinoId: "diagnostico", nombre: "Diagnóstico", componentes: ["diagnostico"], enfermero: null },
+    { destinoId: "explora", nombre: "Explora", componentes: ["explora"], enfermero: null }
+  ]), ["Reanimación + Sillones"]);
+});
+probar("28 v2 11+ no convierte Sillones, Diagnóstico ni Explora en críticos", () => {
+  assert.deepEqual(detectarLicenciadoV2([
+    { destinoId: "reanimacion", nombre: "Reanimación", enfermero: persona },
+    { destinoId: "sillones", nombre: "Sillones", enfermero: null },
+    { destinoId: "diagnostico", nombre: "Diagnóstico", enfermero: null },
+    { destinoId: "explora", nombre: "Explora", enfermero: null }
+  ]), []);
+});
+probar("29 Triage 1 y Estabiliza mantienen criticidad v2", () => {
+  assert.deepEqual(detectarLicenciadoV2([
+    { sectorId: "triage_1", nombre: "Triage 1", enfermero: null },
+    { sectorId: "estabiliza", nombre: "Estabiliza", enfermero: null }
+  ]), ["Triage 1", "Estabiliza"]);
+});
+probar("30 movimientos y vacío manual se evalúan sobre cobertura final", () => {
+  assert.deepEqual(detectarLicenciadoV2([{
+    destinoId: "reanimacion",
+    nombre: "Reanimación",
+    enfermero: null,
+    vacioManual: true
+  }]), ["Reanimación"]);
+  assert.deepEqual(detectarLicenciadoV2([{
+    destinoId: "reanimacion",
+    nombre: "Reanimación",
+    enfermero: persona,
+    cambioManualProtegido: true
+  }]), []);
+});
+probar("31 cambiar perfil recalcula el representante crítico por identidad", () => {
+  const combinado = detectarLicenciadoV2([{
+    destinoId: "reanimacion_sillones",
+    nombre: "Reanimación + Sillones",
+    componentes: ["reanimacion", "sillones"],
+    enfermero: null
+  }]);
+  const separado = detectarLicenciadoV2([{
+    destinoId: "reanimacion",
+    nombre: "Reanimación",
+    componentes: ["reanimacion"],
+    enfermero: null
+  }]);
+  assert.deepEqual(combinado, ["Reanimación + Sillones"]);
+  assert.deepEqual(separado, ["Reanimación"]);
+});
+probar("32 Calendario pasa categoría y versión sólo al detector visible compartido", () => {
+  const bloqueVisible = calendario.slice(calendario.indexOf("const sectoresCriticosSinCobertura"));
+  assert.match(bloqueVisible, /categoria: tipo/);
+  assert.match(bloqueVisible, /versionEstructura: configuracionEfectiva/);
+  assert.equal((bloqueVisible.match(/const sectoresCriticosSinCobertura/g) || []).length, 1);
 });
 
 console.log(`\n${total} pruebas de alerta de sectores críticos pasaron.`);

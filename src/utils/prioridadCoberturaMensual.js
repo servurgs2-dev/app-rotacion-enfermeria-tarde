@@ -1,3 +1,12 @@
+import {
+  CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2,
+  validarPrioridadCoberturaLicenciadosV2
+} from "./prioridadCoberturaLicenciadosDinamica.js";
+import {
+  resolverVersionEstructuraLicenciados,
+  VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+} from "./estructuraLicenciadosDinamica.js";
+
 const lista = (valor) => Array.isArray(valor) ? valor : [];
 
 const normalizarSectorId = (valor) =>
@@ -33,6 +42,27 @@ export const actualizarPrioridadCoberturaEnEstadoMensual = ({
   const snapshot = estadoMensual?.configuracionPlanilla?.[categoriaNormalizada];
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
     return { ok: false, codigo: "SNAPSHOT_CONFIGURACION_INEXISTENTE", estado: estadoMensual };
+  }
+  const usaLicenciadosV2 = categoriaNormalizada === "licenciado" &&
+    resolverVersionEstructuraLicenciados(snapshot) === VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA;
+  if (usaLicenciadosV2) {
+    const candidatos = obtenerCandidatosPrioridadCoberturaMes({
+      categoria: categoriaNormalizada,
+      filas: snapshot.filas,
+      versionEstructura: snapshot
+    });
+    const validacion = validarPrioridadCoberturaLicenciadosV2({
+      prioridad: prioridadCoberturaSectorIds,
+      candidatos
+    });
+    if (!validacion.ok) {
+      return {
+        ok: false,
+        codigo: "PRIORIDAD_COBERTURA_LICENCIADOS_V2_INVALIDA",
+        errores: validacion.errores,
+        estado: estadoMensual
+      };
+    }
   }
   const prioridadNormalizada = copiarPrioridadCoberturaMensual(
     prioridadCoberturaSectorIds
@@ -82,8 +112,31 @@ export const moverSectorEnPrioridadCobertura = ({
 export const obtenerPrioridadCoberturaEfectiva = ({
   prioridadConfigurada,
   filas,
-  prioridadFallback
+  prioridadFallback,
+  categoria = "",
+  versionEstructura
 } = {}) => {
+  const usaLicenciadosV2 = categoria === "licenciado" &&
+    resolverVersionEstructuraLicenciados(versionEstructura) ===
+      VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA;
+  if (usaLicenciadosV2) {
+    const candidatos = obtenerCandidatosPrioridadCoberturaMes({
+      categoria,
+      filas,
+      versionEstructura
+    });
+    const validacion = validarPrioridadCoberturaLicenciadosV2({
+      prioridad: prioridadConfigurada,
+      candidatos
+    });
+    const idsCandidatos = new Set(candidatos.map(({ id }) => id));
+    return {
+      prioridadSectorIds: validacion.prioridadNormalizada.filter((id) => idsCandidatos.has(id)),
+      advertencias: validacion.errores,
+      valido: validacion.ok,
+      requiereConfiguracionV2: !validacion.ok
+    };
+  }
   const advertencias = [];
   const filasPorId = new Map();
   lista(filas).forEach((fila) => {
@@ -165,6 +218,42 @@ export const obtenerPrioridadCoberturaEfectiva = ({
     });
 
   return { prioridadSectorIds, advertencias };
+};
+
+export const obtenerCandidatosPrioridadCoberturaMes = ({
+  categoria,
+  filas = [],
+  versionEstructura
+} = {}) => {
+  const usaLicenciadosV2 = categoria === "licenciado" &&
+    resolverVersionEstructuraLicenciados(versionEstructura) ===
+      VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA;
+  if (usaLicenciadosV2) {
+    const candidatosPorId = new Map(
+      CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2.map((candidato) => [candidato.id, candidato])
+    );
+    const sectoresBaseActivos = lista(filas).flatMap((fila) => {
+      const sectorId = normalizarSectorId(fila?.sectorId);
+      const candidato = candidatosPorId.get(sectorId);
+      return fila?.tipo === "sector" && fila.activo !== false && candidato?.origen === "fila_base"
+        ? [{ ...candidato }]
+        : [];
+    });
+    return [
+      ...sectoresBaseActivos,
+      { ...candidatosPorId.get("sillones") },
+      { ...candidatosPorId.get("explora") }
+    ];
+  }
+  return lista(filas)
+    .filter((fila) => fila?.tipo === "sector" && fila.activo !== false && fila.sectorId)
+    .map((fila) => ({
+      id: fila.sectorId,
+      sectorId: fila.sectorId,
+      nombre: fila.etiqueta,
+      origen: "fila_base",
+      configurablePrioridad: true
+    }));
 };
 
 export const validarPrioridadCoberturaMensual = (argumentos = {}) => {

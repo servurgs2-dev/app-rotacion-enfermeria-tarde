@@ -8,6 +8,14 @@ import {
   resolverPersonaDesdeReferencia
 } from "./referenciasPersonas.js";
 import { resolverClaveDistribucionParaFila } from "./resolucionIdentidadesPlanilla.js";
+import {
+  obtenerEtiquetasFilasPlanilla,
+  obtenerFilasActivas
+} from "./configuracionPlanilla.js";
+import {
+  resolverVersionEstructuraLicenciados,
+  VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+} from "./estructuraLicenciadosDinamica.js";
 
 const clonarAsignacion = (referencia) =>
   referencia && typeof referencia === "object"
@@ -755,4 +763,27 @@ export const generarRotacionMensual = ({
   });
 
   return nuevaPlanilla;
+};
+
+export const generarRotacionMensualDesdeConfiguracion = ({
+  configuracion,
+  categoria = configuracion?.categoria || "",
+  ...argumentos
+} = {}) => {
+  const filasConfiguracion = obtenerFilasActivas(configuracion?.filas || []);
+  const usaLicenciadosV2 = categoria === "licenciado" &&
+    resolverVersionEstructuraLicenciados(configuracion) ===
+      VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA;
+  const filas = obtenerEtiquetasFilasPlanilla(filasConfiguracion);
+
+  return generarRotacionMensual({
+    ...argumentos,
+    categoria,
+    filas,
+    filasConfiguracion,
+    asignacionesFijas: configuracion?.asignacionesFijas || argumentos.asignacionesFijas || [],
+    estructuraLicenciadosVersion: usaLicenciadosV2
+      ? VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
+      : undefined
+  });
 };

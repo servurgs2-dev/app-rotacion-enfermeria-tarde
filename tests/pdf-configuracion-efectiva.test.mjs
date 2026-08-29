@@ -8,7 +8,8 @@ import {
   obtenerDocumentoCalendarioPDF,
   obtenerDocumentoPlanillaPDF,
   obtenerFilasPlanillaPDF,
-  prepararFilasCalendarioPDF
+  prepararFilasCalendarioPDF,
+  prepararTablaPlanillaPDF
 } from "../src/utils/exportPDF.js";
 
 const clonar = (valor) => JSON.parse(JSON.stringify(valor));
@@ -158,7 +159,27 @@ await probar("19 PDF diario con snapshot usa estructura nueva", () => {
   ]);
   assert.equal(ordenadas.some((fila) => fila.nombre === snapshotEnfermero.filas[2].etiqueta), false);
 });
-await probar("20 correo reutiliza los generadores actualizados", async () => {
+await probar("20 PDF de Planilla usa etiqueta de boxes por turno", () => {
+  assert.equal(filasPlanilla("enfermero", legacy, "manana").includes("19-22+24"), true);
+  for (const turnoId of ["tarde", "vespertino", "noche"]) {
+    assert.equal(filasPlanilla("enfermero", legacy, turnoId).includes("20-22+24"), true);
+  }
+});
+
+await probar("21 PDF mensual conserva asignación guardada con alias histórico", () => {
+  const tabla = prepararTablaPlanillaPDF({
+    planilla: { semana1: { "20-22-24": { personaId: "persona-boxes" } } },
+    periodos: [{ clave: "semana1", desde: new Date(2026, 7, 1), hasta: new Date(2026, 7, 7) }],
+    estrategia: { tipo: "semanal" }, tipo: "enfermero",
+    personal: [{ id: "persona-boxes", nombre: "Persona Boxes" }],
+    ordenFilas: configuracionSectores.enfermero.ordenPDF,
+    estadoMensual: legacy, turnoId: "manana", mesActivo: "2026-08"
+  });
+  const fila = tabla.cuerpo.find(([etiqueta]) => etiqueta === "19-22+24");
+  assert.equal(fila[1], "Persona Boxes");
+});
+
+await probar("22 correo reutiliza los generadores actualizados", async () => {
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
   const modal = await readFile(new URL("../src/components/correo/ModalEnviarPDF.jsx", import.meta.url), "utf8");
   assert.match(app, /obtenerAdjuntoPlanillaPDF\(\{[\s\S]*?estadoMensual: mesData/);

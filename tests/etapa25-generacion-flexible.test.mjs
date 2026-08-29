@@ -28,7 +28,7 @@ const filas = [
   "REA 1", "EXPLORA 1", "T1", "1-3 + 21", "PRE INT 1",
   "DX 25-30", "T2", "8-13", "4-7", "T3",
   "SILLÓN 1", "14-19", "REA 2", "T4", "SILLON 2",
-  "20-22-24", "PRE INT 2", "EXPLORA 2", "T5", "SM"
+  "20-22+24", "PRE INT 2", "EXPLORA 2", "T5", "SM"
 ];
 const personal = filas.map((fila, indice) => ({
   id: `persona-${indice + 1}`,
@@ -464,7 +464,7 @@ await probar("se advierte antes de regenerar períodos con datos", () => {
 
 await probar("Calendario y PDF continúan tolerando referencias vacías", () => {
   assert.match(calendario, /resolverPersonaDesdeReferencia/);
-  assert.match(pdf, /nombreParaPDF\(valores\[filaPlanilla\]\) \|\| "-"/);
+  assert.match(pdf, /nombreParaPDF\(obtenerReferenciaFilaPDF\(valores, filaPlanilla\)\) \|\| "-"/);
 });
 
 process.stdout.write(`\n${cantidad} pruebas permanentes de Etapa 25 superadas.\n`);

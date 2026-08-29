@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { configuracionSectores } from "../../data/sectores";
 import {
-  obtenerConfiguracionPlanillaEfectiva
+  obtenerConfiguracionPlanillaEfectiva,
+  obtenerSectorIdPorNombreHistorico
 } from "../../utils/configuracionPlanilla.js";
 import {
   obtenerCandidatosPrioridadCoberturaMes,
@@ -1030,8 +1031,10 @@ if (esDiaParo) {
       enfermero = tomarCandidato(resolverCambioParo(override));
     } else {
       for (const sectorPrioritario of prioridadesParo[sector] || []) {
+        const sectorPrioritarioId = obtenerSectorIdPorNombreHistorico(sectorPrioritario);
         const candidatoPrioritario = asignacionFinal.find(
-          (item) => normalizar(item.nombre) === normalizar(sectorPrioritario)
+          (item) => (sectorPrioritarioId && item.sectorId === sectorPrioritarioId) ||
+            normalizar(item.nombre) === normalizar(sectorPrioritario)
         )?.enfermero;
 
         const sectorReservado = candidatoPrioritario &&

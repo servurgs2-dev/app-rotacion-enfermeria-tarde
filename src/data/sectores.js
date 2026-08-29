@@ -6,13 +6,13 @@ export const configuracionSectores = {
     sectoresFijos: [
       "REA 1", "EXPLORA 1", "1-3 + 21", "PRE INT 1", "DX 25-30",
       "8-13", "4-7", "SILLÓN 1", "14-19", "REA 2",
-      "SILLON 2", "20-22-24", "PRE INT 2", "EXPLORA 2", "SM"
+      "SILLON 2", "20-22+24", "PRE INT 2", "EXPLORA 2", "SM"
     ],
     turnantes: ["T1", "T2", "T3", "T4", "T5"],
     posicionesTurnantes: [2, 5, 7, 11, 14],
     sectoresCriticos: [
       "REA 1", "EXPLORA 1", "1-3 + 21", "PRE INT 1", "DX 25-30",
-      "8-13", "4-7", "SILLÓN 1", "14-19", "20-22-24", "SM"
+      "8-13", "4-7", "SILLÓN 1", "14-19", "20-22+24", "SM"
     ],
     sectoresBajaPrioridad: ["REA 2", "PRE INT 2", "EXPLORA 2", "SILLON 2"],
     prioridadSectores: [
@@ -21,7 +21,7 @@ export const configuracionSectores = {
       "4-7",
       "8-13",
       "14-19",
-      "20-22-24",
+      "20-22+24",
       "DX 25-30",
       "SILLÓN 1",
       "EXPLORA 1",
@@ -42,24 +42,24 @@ export const configuracionSectores = {
       "Rea"
     ],
     prioridadesParo: {
-      "1 al 3 + 19 al 22": ["1-3 + 21", "20-22-24"],
+      "1 al 3 + 19 al 22": ["1-3 + 21", "20-22+24"],
       "4 al 10": ["4-7", "8-13"],
       "11 al 18": ["14-19", "8-13"],
-      "23 al 30": ["DX 25-30", "20-22-24"],
+      "23 al 30": ["DX 25-30", "20-22+24"],
       Explora: ["EXPLORA 1", "EXPLORA 2"],
       Sillones: ["SILLÓN 1", "SILLON 2"],
       Rea: ["REA 1", "REA 2"]
     },
     ordenVisual: [
       "REA 1", "REA 2", "DIVIDER",
-      "1-3 + 21", "4-7", "8-13", "14-19", "20-22-24", "DX 25-30", "DIVIDER",
+      "1-3 + 21", "4-7", "8-13", "14-19", "20-22+24", "DX 25-30", "DIVIDER",
       "EXPLORA 1", "EXPLORA 2", "DIVIDER",
       "SILLÓN 1", "SILLON 2", "SILLONES 3", "DIVIDER",
       "PRE INT 1", "PRE INT 2", "SM", "DIVIDER",
       "SIN ASIGNAR"
     ],
     ordenPDF: [
-      "REA 1", "REA 2", "1-3 + 21", "4-7", "8-13", "14-19", "20-22-24",
+      "REA 1", "REA 2", "1-3 + 21", "4-7", "8-13", "14-19", "20-22+24",
       "DX 25-30", "SILLÓN 1", "SILLON 2", "EXPLORA 1", "EXPLORA 2",
       "PRE INT 1", "PRE INT 2", "SM", "T1", "T2", "T3", "T4", "T5"
     ]

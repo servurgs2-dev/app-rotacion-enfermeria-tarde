@@ -28,7 +28,8 @@ const DEFINICIONES_SECTORES = [
   ["sillon_1", "SILLÓN 1", "SILLON 1"],
   ["sillon_2", "SILLON 2", "SILLÓN 2"],
   ["sillones_3", "SILLONES 3", "SILLÓN 3", "SILLON 3"],
-  ["boxes_14_19", "14-19"], ["boxes_20_22_24", "20-22-24"],
+  ["boxes_14_19", "14-19"],
+  ["boxes_20_22_24", "20-22+24", "20-22-24", "19-22+24"],
   ["salud_mental", "Salud Mental", "SM"],
   ["triage_1", "Triage 1"], ["triage_2", "Triage 2"],
   ["estabiliza", "Estabiliza"],
@@ -86,6 +87,15 @@ const obtenerEtiquetaTurnanteAdicional = (categoria, versionEstructura) => {
   if (categoria !== "licenciado") return "";
   return resolverVersionEstructuraLicenciados(versionEstructura) ===
     VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA ? "T4" : "T3";
+};
+
+export const resolverEtiquetaSectorPorTurno = ({
+  sectorId,
+  turnoId,
+  etiquetaBase
+} = {}) => {
+  if (sectorId !== "boxes_20_22_24") return etiquetaBase || obtenerEtiquetaSector(sectorId);
+  return turnoId === "manana" ? "19-22+24" : "20-22+24";
 };
 
 const reconciliarTurnanteAdicionalMensual = ({ filas, categoria, planilla, versionEstructura }) => {
@@ -257,14 +267,23 @@ export const crearConfiguracionPlanillaLicenciadosV2 = ({
   };
 };
 
-export const adaptarConfiguracionLegacyPlanilla = (configuracion = {}, tipoSolicitado = "") => {
+export const adaptarConfiguracionLegacyPlanilla = (
+  configuracion = {},
+  tipoSolicitado = "",
+  turnoId = ""
+) => {
   const tipo = tipoSolicitado || inferirTipo(configuracion);
   if (!tipo) throw new Error("La categoría de la configuración de Planilla es obligatoria.");
   const filas = [];
   let indiceTurnante = 0;
   const posiciones = new Set(configuracion.posicionesTurnantes || []);
   (configuracion.sectoresFijos || []).forEach((etiqueta, indiceSector) => {
-    filas.push(crearFilaSector({ tipo, etiqueta, orden: filas.length }));
+    const sectorId = obtenerSectorIdPorNombreHistorico(etiqueta);
+    filas.push(crearFilaSector({
+      tipo,
+      etiqueta: resolverEtiquetaSectorPorTurno({ sectorId, turnoId, etiquetaBase: etiqueta }),
+      orden: filas.length
+    }));
     if (!posiciones.has(indiceSector)) return;
     const etiquetaTurnante = configuracion.turnantes?.[indiceTurnante];
     indiceTurnante += 1;
@@ -273,14 +292,17 @@ export const adaptarConfiguracionLegacyPlanilla = (configuracion = {}, tipoSolic
   return filas;
 };
 
-export const obtenerConfiguracionLegacyPlanilla = (tipo) => {
+export const obtenerConfiguracionLegacyPlanilla = (tipo, { turnoId = "" } = {}) => {
   const configuracion = configuracionSectores[tipo];
   if (!configuracion) throw new Error(`Categoría de Planilla desconocida: ${tipo}`);
-  return Object.freeze({ tipo, filas: Object.freeze(adaptarConfiguracionLegacyPlanilla(configuracion, tipo)) });
+  return Object.freeze({
+    tipo,
+    filas: Object.freeze(adaptarConfiguracionLegacyPlanilla(configuracion, tipo, turnoId))
+  });
 };
 
-export const obtenerFilasConfiguracionEfectivas = (tipo, planilla = {}) => {
-  const filas = [...obtenerConfiguracionLegacyPlanilla(tipo).filas];
+export const obtenerFilasConfiguracionEfectivas = (tipo, planilla = {}, turnoId = "") => {
+  const filas = [...obtenerConfiguracionLegacyPlanilla(tipo, { turnoId }).filas];
   const etiqueta = obtenerEtiquetaTurnanteAdicional(tipo);
   if (etiqueta && planilla?.posicionesMensualesAdicionales?.includes(etiqueta)) {
     filas.push(crearFilaTurnante({ tipo, etiqueta, orden: filas.length }));
@@ -309,7 +331,7 @@ export const crearSnapshotConfiguracionPlanilla = ({
   const mesNormalizado = mes.trim();
   const filas = obtenerFilasConfiguracionEfectivas(categoriaNormalizada, {
     posicionesMensualesAdicionales: [...posicionesMensualesAdicionales]
-  }).map(copiarFilaSnapshot);
+  }, turnoId).map(copiarFilaSnapshot);
 
   return {
     schemaVersion: SCHEMA_VERSION_CONFIGURACION_PLANILLA,
@@ -341,7 +363,16 @@ export const crearSnapshotConfiguracionPlanillaDesdeFilas = ({
   const turnoId = turno.trim();
   const categoriaNormalizada = categoria.trim();
   const mesNormalizado = mes.trim();
-  const filasSnapshot = filas.map(copiarFilaSnapshot);
+  const filasSnapshot = filas.map((fila) => copiarFilaSnapshot({
+    ...fila,
+    etiqueta: categoriaNormalizada === "enfermero"
+      ? resolverEtiquetaSectorPorTurno({
+          sectorId: fila?.sectorId,
+          turnoId,
+          etiquetaBase: fila?.etiqueta
+        })
+      : fila?.etiqueta
+  }));
   const prioridadConfigurada = copiarPrioridadCoberturaMensual(
     prioridadCoberturaSectorIds
   );
@@ -444,7 +475,8 @@ export const obtenerConfiguracionPlanillaEfectiva = ({
       categoria.trim(),
       estadoMensual?.planillas?.[
         categoria.trim() === "enfermero" ? "enfermeros" : "licenciados"
-      ]
+      ],
+      turno.trim()
     ).map(copiarFilaSnapshot),
     asignacionesFijas: [],
     prioridadCoberturaSectorIds: obtenerPrioridadCoberturaEfectiva({
@@ -452,7 +484,8 @@ export const obtenerConfiguracionPlanillaEfectiva = ({
         categoria.trim(),
         estadoMensual?.planillas?.[
           categoria.trim() === "enfermero" ? "enfermeros" : "licenciados"
-        ]
+        ],
+        turno.trim()
       ),
       prioridadFallback: configuracionSectores[categoria.trim()]?.prioridadSectoresIds
     }).prioridadSectorIds

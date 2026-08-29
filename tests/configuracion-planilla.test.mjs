@@ -13,6 +13,7 @@ import {
   obtenerFilasConfiguracionEfectivas,
   obtenerSectorIdPorNombreHistorico,
   obtenerTurnantesBase,
+  resolverEtiquetaSectorPorTurno,
   TIPOS_FILA_PLANILLA
 } from "../src/utils/configuracionPlanilla.js";
 import { CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2 } from "../src/utils/prioridadCoberturaLicenciadosDinamica.js";
@@ -44,7 +45,7 @@ const probar = (nombre, prueba) => {
 const ordenEnfermeros = [
   "REA 1", "EXPLORA 1", "1-3 + 21", "T1", "PRE INT 1", "DX 25-30",
   "8-13", "T2", "4-7", "SILLÓN 1", "T3", "14-19", "REA 2",
-  "SILLON 2", "20-22-24", "T4", "PRE INT 2", "EXPLORA 2", "SM", "T5"
+  "SILLON 2", "20-22+24", "T4", "PRE INT 2", "EXPLORA 2", "SM", "T5"
 ];
 const ordenLicenciados = [
   "Triage 1", "Estabiliza", "T1", "Reanimación + Sillones", "Observación 1",
@@ -88,6 +89,31 @@ probar("SILLON 2 y SILLÓN 2 comparten sectorId", () =>
 probar("aliases sin tilde conservan identidad", () => {
   assert.equal(obtenerSectorIdPorNombreHistorico("Observacion 1"), "observacion_1");
   assert.equal(obtenerSectorIdPorNombreHistorico("Preinternacion"), "preinternacion");
+});
+probar("las tres etiquetas de boxes 20/22/24 conservan una identidad", () => {
+  assert.equal(obtenerSectorIdPorNombreHistorico("20-22-24"), "boxes_20_22_24");
+  assert.equal(obtenerSectorIdPorNombreHistorico("20-22+24"), "boxes_20_22_24");
+  assert.equal(obtenerSectorIdPorNombreHistorico("19-22+24"), "boxes_20_22_24");
+});
+probar("boxes 20/22/24 resuelve su etiqueta canónica por turno", () => {
+  assert.equal(resolverEtiquetaSectorPorTurno({ sectorId: "boxes_20_22_24", turnoId: "manana" }), "19-22+24");
+  for (const turnoId of ["tarde", "vespertino", "noche"]) {
+    assert.equal(resolverEtiquetaSectorPorTurno({ sectorId: "boxes_20_22_24", turnoId }), "20-22+24");
+  }
+});
+probar("la configuración efectiva por turno conserva filaId y sectorId", () => {
+  for (const [turnoId, etiqueta] of [
+    ["manana", "19-22+24"],
+    ["tarde", "20-22+24"],
+    ["vespertino", "20-22+24"],
+    ["noche", "20-22+24"]
+  ]) {
+    const filas = obtenerConfiguracionLegacyPlanilla("enfermero", { turnoId }).filas;
+    const boxes = filas.filter(({ sectorId }) => sectorId === "boxes_20_22_24");
+    assert.equal(boxes.length, 1);
+    assert.equal(boxes[0].filaId, "enfermero.sector.boxes_20_22_24");
+    assert.equal(boxes[0].etiqueta, etiqueta);
+  }
 });
 probar("etiqueta visible permanece separada del sectorId", () => {
   assert.equal(obtenerEtiquetaSector("diagnostico"), "Diagnostico");

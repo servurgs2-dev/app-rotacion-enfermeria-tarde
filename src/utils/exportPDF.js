@@ -15,7 +15,9 @@ import { resolverPersonaDeCertificacion } from "./certificacionesPersonas.js";
 import { obtenerNombreConMarcaTurnante } from "./etiquetaTurnante.js";
 import {
   obtenerConfiguracionPlanillaEfectiva,
-  obtenerFilasActivas
+  obtenerFilasActivas,
+  obtenerAliasesSector,
+  obtenerSectorIdPorNombreHistorico
 } from "./configuracionPlanilla.js";
 import { resolverEstructuraCalendario } from "./estructuraCalendario.js";
 import {
@@ -46,7 +48,7 @@ export const ORDEN_PDF_ENFERMEROS_TRES_DIAS = [
   "4-7",
   "8-13",
   "14-19",
-  "20-22-24",
+  "20-22+24",
   "DX 25-30",
   "EXPLORA 1",
   "EXPLORA 2",
@@ -92,14 +94,21 @@ export const obtenerFilasPlanillaPDF = ({
   });
   if (!configuracionEfectiva) return [];
 
-  const filasActivas = obtenerFilasActivas(configuracionEfectiva.filas)
-    .sort((filaA, filaB) => filaA.orden - filaB.orden)
-    .map((fila) => fila.etiqueta);
+  const filasConfiguracion = obtenerFilasActivas(configuracionEfectiva.filas)
+    .sort((filaA, filaB) => filaA.orden - filaB.orden);
+  const filasActivas = filasConfiguracion.map((fila) => fila.etiqueta);
   if (configuracionEfectiva.schemaVersion !== null) return filasActivas;
 
-  const activas = new Set(filasActivas);
-  const ordenHistorico = (Array.isArray(ordenLegacy) ? ordenLegacy : [])
-    .filter((fila) => activas.has(fila));
+  const porSectorId = new Map(filasConfiguracion.flatMap((fila) =>
+    fila.sectorId ? [[fila.sectorId, fila.etiqueta]] : []
+  ));
+  const ordenHistorico = (Array.isArray(ordenLegacy) ? ordenLegacy : []).flatMap((fila) => {
+    const sectorId = obtenerSectorIdPorNombreHistorico(fila);
+    const etiqueta = sectorId ? porSectorId.get(sectorId) : filasActivas.find(
+      (activa) => activa === fila
+    );
+    return etiqueta ? [etiqueta] : [];
+  });
   return [
     ...ordenHistorico,
     ...filasActivas.filter((fila) => !ordenHistorico.includes(fila))
@@ -130,6 +139,15 @@ const obtenerValoresPeriodoPDF = ({ planilla, periodo, estrategia }) =>
     ? planilla?.rotacion3Dias?.bloques?.[periodo.clave] || {}
     : planilla?.[periodo.clave] || {};
 
+const obtenerReferenciaFilaPDF = (valores, etiqueta) => {
+  if (Object.hasOwn(valores, etiqueta)) return valores[etiqueta];
+  const sectorId = obtenerSectorIdPorNombreHistorico(etiqueta);
+  const alias = obtenerAliasesSector(sectorId).find((candidato) =>
+    Object.hasOwn(valores, candidato)
+  );
+  return alias ? valores[alias] : undefined;
+};
+
 export const prepararTablaPlanillaPDF = ({
   planilla,
   periodos,
@@ -158,7 +176,7 @@ export const prepararTablaPlanillaPDF = ({
     filaPlanilla,
     ...periodosValidos.map((periodo) => {
       const valores = obtenerValoresPeriodoPDF({ planilla, periodo, estrategia });
-      return nombreParaPDF(valores[filaPlanilla]) || "-";
+      return nombreParaPDF(obtenerReferenciaFilaPDF(valores, filaPlanilla)) || "-";
     })
   ]);
 

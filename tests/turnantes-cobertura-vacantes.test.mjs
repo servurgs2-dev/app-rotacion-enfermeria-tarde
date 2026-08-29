@@ -380,7 +380,10 @@ probar("Licenciados conservan el orden vigente cuando no reciben prioridad de En
 probar("Calendario activa la prioridad previa sólo para Enfermeros fuera de paro", () => {
   assert.match(calendarioFuente, /prioridadSectorIds: tipo === "enfermero" && !esDiaParo/);
   assert.match(calendarioFuente, /sectorIdsDonantes: tipo === "enfermero" && !esDiaParo/);
-  assert.match(calendarioFuente, /else if \(tipo !== "enfermero"\)/);
+  assert.match(
+    calendarioFuente,
+    /else if \(tipo !== "enfermero" && !usarCalendarioLicenciadosDinamico\)/
+  );
 });
 
 console.log(`\n${total} pruebas de Turnantes y vacantes por sectorId aprobadas.`);

@@ -187,4 +187,27 @@ probar("18 normalizar estado legacy no agrega contenedor y preserva ambos snapsh
   assert.notEqual(normalizado.configuracionPlanilla.licenciado, contenedor.licenciado);
 });
 
+probar("19 snapshots nuevos congelan la etiqueta de boxes según turno sin cambiar identidad", () => {
+  for (const [turno, etiqueta] of [
+    ["manana", "19-22+24"], ["tarde", "20-22+24"],
+    ["vespertino", "20-22+24"], ["noche", "20-22+24"]
+  ]) {
+    const snapshot = crearSnapshotConfiguracionPlanilla({ turno, categoria: "enfermero", mes: "2026-10" });
+    const fila = snapshot.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
+    assert.equal(fila.etiqueta, etiqueta);
+    assert.equal(fila.filaId, "enfermero.sector.boxes_20_22_24");
+  }
+});
+
+probar("20 snapshot histórico conserva 20-22-24 y sigue resolviéndose por identidad", () => {
+  const snapshot = crearSnapshotConfiguracionPlanilla(contextoEnfermeros);
+  snapshot.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24").etiqueta = "20-22-24";
+  const resultado = obtenerConfiguracionPlanillaEfectiva({
+    estadoMensual: { configuracionPlanilla: { enfermero: snapshot } }, ...contextoEnfermeros
+  });
+  const fila = resultado.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
+  assert.equal(fila.etiqueta, "20-22-24");
+  assert.equal(fila.filaId, "enfermero.sector.boxes_20_22_24");
+});
+
 console.log(`\nEtapa 34B1: ${total} pruebas de snapshot aprobadas.`);

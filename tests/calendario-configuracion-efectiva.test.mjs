@@ -157,6 +157,17 @@ try {
     ]);
     assert.equal(estructura.ordenVisual.includes("Observación 2"), false);
   });
+  await probar("8d legacy Mañana sustituye únicamente la etiqueta de boxes en el orden", () => {
+    const efectiva = resolver({ estadoMensual: legacy, turno: "manana", categoria: "enfermero" });
+    const estructura = resolverEstructuraCalendario({
+      configuracionEfectiva: efectiva,
+      ordenVisualLegacy: configuracionSectores.enfermero.ordenVisual
+    });
+    const esperado = configuracionSectores.enfermero.ordenVisual.map((item) =>
+      item === "20-22+24" ? "19-22+24" : item
+    );
+    assert.deepEqual(estructura.ordenVisual, esperado);
+  });
 } finally {
   await servidor.close();
 }

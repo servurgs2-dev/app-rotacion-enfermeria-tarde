@@ -95,6 +95,16 @@ probar("las tres etiquetas de boxes 20/22/24 conservan una identidad", () => {
   assert.equal(obtenerSectorIdPorNombreHistorico("20-22+24"), "boxes_20_22_24");
   assert.equal(obtenerSectorIdPorNombreHistorico("19-22+24"), "boxes_20_22_24");
 });
+probar("14-19 y 14-18 conservan la identidad boxes_14_19", () => {
+  assert.equal(obtenerSectorIdPorNombreHistorico("14-19"), "boxes_14_19");
+  assert.equal(obtenerSectorIdPorNombreHistorico("14-18"), "boxes_14_19");
+});
+probar("boxes 14/19 resuelve su etiqueta canónica por turno", () => {
+  assert.equal(resolverEtiquetaSectorPorTurno({ sectorId: "boxes_14_19", turnoId: "manana" }), "14-18");
+  for (const turnoId of ["tarde", "vespertino", "noche"]) {
+    assert.equal(resolverEtiquetaSectorPorTurno({ sectorId: "boxes_14_19", turnoId }), "14-19");
+  }
+});
 probar("boxes 20/22/24 resuelve su etiqueta canónica por turno", () => {
   assert.equal(resolverEtiquetaSectorPorTurno({ sectorId: "boxes_20_22_24", turnoId: "manana" }), "19-22+24");
   for (const turnoId of ["tarde", "vespertino", "noche"]) {
@@ -102,17 +112,21 @@ probar("boxes 20/22/24 resuelve su etiqueta canónica por turno", () => {
   }
 });
 probar("la configuración efectiva por turno conserva filaId y sectorId", () => {
-  for (const [turnoId, etiqueta] of [
-    ["manana", "19-22+24"],
-    ["tarde", "20-22+24"],
-    ["vespertino", "20-22+24"],
-    ["noche", "20-22+24"]
+  for (const [turnoId, etiqueta14, etiqueta20] of [
+    ["manana", "14-18", "19-22+24"],
+    ["tarde", "14-19", "20-22+24"],
+    ["vespertino", "14-19", "20-22+24"],
+    ["noche", "14-19", "20-22+24"]
   ]) {
     const filas = obtenerConfiguracionLegacyPlanilla("enfermero", { turnoId }).filas;
-    const boxes = filas.filter(({ sectorId }) => sectorId === "boxes_20_22_24");
-    assert.equal(boxes.length, 1);
-    assert.equal(boxes[0].filaId, "enfermero.sector.boxes_20_22_24");
-    assert.equal(boxes[0].etiqueta, etiqueta);
+    const boxes14 = filas.filter(({ sectorId }) => sectorId === "boxes_14_19");
+    const boxes20 = filas.filter(({ sectorId }) => sectorId === "boxes_20_22_24");
+    assert.equal(boxes14.length, 1);
+    assert.equal(boxes14[0].filaId, "enfermero.sector.boxes_14_19");
+    assert.equal(boxes14[0].etiqueta, etiqueta14);
+    assert.equal(boxes20.length, 1);
+    assert.equal(boxes20[0].filaId, "enfermero.sector.boxes_20_22_24");
+    assert.equal(boxes20[0].etiqueta, etiqueta20);
   }
 });
 probar("etiqueta visible permanece separada del sectorId", () => {

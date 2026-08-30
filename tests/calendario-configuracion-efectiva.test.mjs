@@ -157,16 +157,17 @@ try {
     ]);
     assert.equal(estructura.ordenVisual.includes("Observación 2"), false);
   });
-  await probar("8d legacy Mañana sustituye únicamente la etiqueta de boxes en el orden", () => {
+  await probar("8d legacy Mañana sustituye únicamente las etiquetas de boxes en el orden", () => {
     const efectiva = resolver({ estadoMensual: legacy, turno: "manana", categoria: "enfermero" });
     const estructura = resolverEstructuraCalendario({
       configuracionEfectiva: efectiva,
       ordenVisualLegacy: configuracionSectores.enfermero.ordenVisual
     });
     const esperado = configuracionSectores.enfermero.ordenVisual.map((item) =>
-      item === "20-22+24" ? "19-22+24" : item
+      item === "14-19" ? "14-18" : item === "20-22+24" ? "19-22+24" : item
     );
     assert.deepEqual(estructura.ordenVisual, esperado);
+    assert.equal(estructura.ordenVisual.indexOf("14-18") < estructura.ordenVisual.indexOf("19-22+24"), true);
   });
 } finally {
   await servidor.close();

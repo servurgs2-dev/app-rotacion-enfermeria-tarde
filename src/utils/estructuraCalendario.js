@@ -4,7 +4,10 @@ import {
 } from "./configuracionPlanilla.js";
 
 const MARCADORES_ORDEN = new Set(["DIVIDER", "SIN ASIGNAR"]);
-const SECTOR_ID_BOXES_20_22_24 = "boxes_20_22_24";
+const SECTORES_BOXES_CON_ETIQUETA_POR_TURNO = new Set([
+  "boxes_14_19",
+  "boxes_20_22_24"
+]);
 
 const resolverOrdenOperativo = ({ sectores, ordenVisualLegacy }) => {
   const sectoresPorId = new Map(sectores.map((fila) => [fila.sectorId, fila]));
@@ -30,16 +33,14 @@ const resolverOrdenOperativo = ({ sectores, ordenVisualLegacy }) => {
   return orden;
 };
 
-const resolverEtiquetaBoxesEnOrdenLegacy = ({ sectores, ordenVisualLegacy }) => {
-  const etiquetaBoxes = sectores.find(
-    ({ sectorId }) => sectorId === SECTOR_ID_BOXES_20_22_24
-  )?.etiqueta;
-  if (!etiquetaBoxes) return ordenVisualLegacy;
-  return ordenVisualLegacy.map((item) =>
-    obtenerSectorIdPorNombreHistorico(item) === SECTOR_ID_BOXES_20_22_24
-      ? etiquetaBoxes
-      : item
-  );
+const resolverEtiquetasBoxesEnOrdenLegacy = ({ sectores, ordenVisualLegacy }) => {
+  const etiquetasPorSectorId = new Map(sectores
+    .filter(({ sectorId }) => SECTORES_BOXES_CON_ETIQUETA_POR_TURNO.has(sectorId))
+    .map(({ sectorId, etiqueta }) => [sectorId, etiqueta]));
+  return ordenVisualLegacy.map((item) => {
+    const sectorId = obtenerSectorIdPorNombreHistorico(item);
+    return etiquetasPorSectorId.get(sectorId) || item;
+  });
 };
 
 export const resolverEstructuraCalendario = ({
@@ -60,7 +61,7 @@ export const resolverEstructuraCalendario = ({
     turnantes,
     sectores: sectores.map((fila) => fila.etiqueta),
     ordenVisual: configuracionEfectiva?.schemaVersion === null
-      ? resolverEtiquetaBoxesEnOrdenLegacy({ sectores, ordenVisualLegacy })
+      ? resolverEtiquetasBoxesEnOrdenLegacy({ sectores, ordenVisualLegacy })
       : resolverOrdenOperativo({ sectores, ordenVisualLegacy })
   };
 };

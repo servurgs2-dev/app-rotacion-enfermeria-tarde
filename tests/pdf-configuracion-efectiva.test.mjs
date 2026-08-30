@@ -160,10 +160,25 @@ await probar("19 PDF diario con snapshot usa estructura nueva", () => {
   assert.equal(ordenadas.some((fila) => fila.nombre === snapshotEnfermero.filas[2].etiqueta), false);
 });
 await probar("20 PDF de Planilla usa etiqueta de boxes por turno", () => {
+  assert.equal(filasPlanilla("enfermero", legacy, "manana").includes("14-18"), true);
   assert.equal(filasPlanilla("enfermero", legacy, "manana").includes("19-22+24"), true);
   for (const turnoId of ["tarde", "vespertino", "noche"]) {
+    assert.equal(filasPlanilla("enfermero", legacy, turnoId).includes("14-19"), true);
     assert.equal(filasPlanilla("enfermero", legacy, turnoId).includes("20-22+24"), true);
   }
+});
+
+await probar("20b PDF mensual conserva asignación histórica 14-19 con etiqueta Mañana", () => {
+  const tabla = prepararTablaPlanillaPDF({
+    planilla: { semana1: { "14-19": { personaId: "persona-14" } } },
+    periodos: [{ clave: "semana1", desde: new Date(2026, 7, 1), hasta: new Date(2026, 7, 7) }],
+    estrategia: { tipo: "semanal" }, tipo: "enfermero",
+    personal: [{ id: "persona-14", nombre: "Persona 14" }],
+    ordenFilas: configuracionSectores.enfermero.ordenPDF,
+    estadoMensual: legacy, turnoId: "manana", mesActivo: "2026-08"
+  });
+  const fila = tabla.cuerpo.find(([etiqueta]) => etiqueta === "14-18");
+  assert.equal(fila[1], "Persona 14");
 });
 
 await probar("21 PDF mensual conserva asignación guardada con alias histórico", () => {

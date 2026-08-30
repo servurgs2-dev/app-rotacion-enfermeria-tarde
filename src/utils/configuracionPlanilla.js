@@ -28,7 +28,7 @@ const DEFINICIONES_SECTORES = [
   ["sillon_1", "SILLÓN 1", "SILLON 1"],
   ["sillon_2", "SILLON 2", "SILLÓN 2"],
   ["sillones_3", "SILLONES 3", "SILLÓN 3", "SILLON 3"],
-  ["boxes_14_19", "14-19"],
+  ["boxes_14_19", "14-19", "14-18"],
   ["boxes_20_22_24", "20-22+24", "20-22-24", "19-22+24"],
   ["salud_mental", "Salud Mental", "SM"],
   ["triage_1", "Triage 1"], ["triage_2", "Triage 2"],
@@ -94,8 +94,13 @@ export const resolverEtiquetaSectorPorTurno = ({
   turnoId,
   etiquetaBase
 } = {}) => {
-  if (sectorId !== "boxes_20_22_24") return etiquetaBase || obtenerEtiquetaSector(sectorId);
-  return turnoId === "manana" ? "19-22+24" : "20-22+24";
+  if (sectorId === "boxes_14_19") {
+    return turnoId === "manana" ? "14-18" : "14-19";
+  }
+  if (sectorId === "boxes_20_22_24") {
+    return turnoId === "manana" ? "19-22+24" : "20-22+24";
+  }
+  return etiquetaBase || obtenerEtiquetaSector(sectorId);
 };
 
 const reconciliarTurnanteAdicionalMensual = ({ filas, categoria, planilla, versionEstructura }) => {

@@ -34,6 +34,44 @@ probar("sectorId resuelve fila snapshot", () => {
   const fila = obtenerFilaActivaPorSectorId({ estadoMensual: estadoSnapshot(), ...base, sectorId: "rea_1" });
   assert.equal(fila.filaId, "enfermero.sector.rea_1");
 });
+probar("boxes 20/22/24 asocia todos sus aliases con la fila efectiva vigente", () => {
+  const estado = estadoSnapshot();
+  estado.configuracionPlanilla.enfermero.filas.find(
+    (fila) => fila.sectorId === "boxes_20_22_24"
+  ).etiqueta = "20-22+24";
+  for (const alias of ["20-22-24", "20-22+24", "19-22+24", "19-20+22-24", "20+22-24"]) {
+    const resultado = resolverAsignacionPorSectorId({
+      estadoMensual: estado,
+      ...base,
+      sectorId: "boxes_20_22_24",
+      distribucion: { [alias]: persona }
+    });
+    assert.equal(resultado.filaId, "enfermero.sector.boxes_20_22_24");
+    assert.equal(resultado.sectorId, "boxes_20_22_24");
+    assert.equal(resultado.claveDistribucion, alias);
+    assert.deepEqual(resultado.referencia, persona);
+  }
+});
+probar("filaId y sectorId tienen prioridad sobre labels de boxes 20/22/24", () => {
+  const estado = estadoSnapshot();
+  const contexto = { estadoMensual: estado, ...base, sectorId: "boxes_20_22_24" };
+  const porFilaId = resolverAsignacionPorSectorId({
+    ...contexto,
+    distribucion: {
+      "enfermero.sector.boxes_20_22_24": { personaId: "fila-id" },
+      "20+22-24": { personaId: "label" }
+    }
+  });
+  assert.equal(porFilaId.claveDistribucion, "enfermero.sector.boxes_20_22_24");
+  const porSectorId = resolverAsignacionPorSectorId({
+    ...contexto,
+    distribucion: {
+      boxes_20_22_24: { personaId: "sector-id" },
+      "20+22-24": { personaId: "label" }
+    }
+  });
+  assert.equal(porSectorId.claveDistribucion, "boxes_20_22_24");
+});
 probar("sectorId resuelve agosto legacy sin crear snapshot", () => {
   const estado = crearEstadoMensualVacio(); const antes = firma(estado);
   const fila = obtenerFilaActivaPorSectorId({ estadoMensual: estado, ...base, mes: "2026-08", sectorId: "rea_1" });

@@ -79,6 +79,7 @@ import {
   obtenerEtiquetasFilasPlanilla,
   obtenerFilasActivas
 } from "../../utils/configuracionPlanilla.js";
+import { resolverClaveDistribucionParaFila } from "../../utils/resolucionIdentidadesPlanilla.js";
 import {
   adaptarPlanillaSaludMental,
   obtenerFilaSaludMentalActiva,
@@ -568,7 +569,7 @@ function PlanillaMensual({
     if (generada) setPlanilla(generada);
   }
 
-  function actualizarCelda(periodo, sector, personaId) {
+  function actualizarCelda(periodo, fila, personaId) {
     if (soloLectura) return;
     const periodoActual = periodos.find((item) => item.clave === periodo);
     const personalPeriodo = obtenerCohortePeriodo(periodoActual);
@@ -581,6 +582,10 @@ function PlanillaMensual({
         const rotacionActual = prev?.rotacion3Dias || {};
         const bloquesActuales = rotacionActual.bloques || {};
         const bloqueActual = bloquesActuales[periodo] || {};
+        const sector = resolverClaveDistribucionParaFila({
+          distribucion: bloqueActual,
+          fila
+        }) || fila.etiqueta;
         const sincronizaAsignacionBase = debeSincronizarAsignacionBase({
           rotacion3Dias: rotacionActual,
           periodoClave: periodo
@@ -616,13 +621,17 @@ function PlanillaMensual({
       return;
     }
 
-    setPlanilla((prev) => ({
-      ...prev,
-      [periodo]: {
-        ...(prev?.[periodo] || {}),
-        [sector]: valor
-      }
-    }));
+    setPlanilla((prev) => {
+      const distribucion = prev?.[periodo] || {};
+      const sector = resolverClaveDistribucionParaFila({ distribucion, fila }) || fila.etiqueta;
+      return {
+        ...prev,
+        [periodo]: {
+          ...distribucion,
+          [sector]: valor
+        }
+      };
+    });
   }
 
   function actualizarCoberturaLibreSM(periodo, personaId) {
@@ -692,22 +701,26 @@ function PlanillaMensual({
     setPlanilla((prev) => vaciarPlanillaDesdeSemana2({ planilla: prev }));
   };
 
-  function actualizarAsignacionBaseNocturna(sector, personaId) {
+  function actualizarAsignacionBaseNocturna(fila, personaId) {
     if (soloLectura || !usaRotacionTresDias || tipo !== "enfermero") return;
     const persona = personalCanonicoFiltrado.find((item) => item.id === personaId);
     const valor = personaId ? crearReferenciaPersona(persona) : "";
     if (personaId && !valor) return;
 
-    setPlanilla((prev) => ({
-      ...prev,
-      rotacion3Dias: {
-        ...(prev?.rotacion3Dias || {}),
-        asignacionBase: {
-          ...(prev?.rotacion3Dias?.asignacionBase || {}),
-          [sector]: valor
+    setPlanilla((prev) => {
+      const distribucion = prev?.rotacion3Dias?.asignacionBase || {};
+      const sector = resolverClaveDistribucionParaFila({ distribucion, fila }) || fila.etiqueta;
+      return {
+        ...prev,
+        rotacion3Dias: {
+          ...(prev?.rotacion3Dias || {}),
+          asignacionBase: {
+            ...distribucion,
+            [sector]: valor
+          }
         }
-      }
-    }));
+      };
+    });
   }
 
   const obtenerValoresPeriodo = (periodo) => usaRotacionTresDias
@@ -1062,8 +1075,10 @@ function PlanillaMensual({
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {filas.map((sector) => {
+              const fila = filasActivas.find((actual) => actual.etiqueta === sector);
               const distribucion = planilla?.rotacion3Dias?.asignacionBase || {};
-              const referenciaActual = distribucion[sector] || "";
+              const claveSector = resolverClaveDistribucionParaFila({ distribucion, fila }) || sector;
+              const referenciaActual = distribucion[claveSector] || "";
               const personaActual = resolverPersonaDesdeReferencia(
                 referenciaActual,
                 personal
@@ -1081,7 +1096,7 @@ function PlanillaMensual({
                     disabled={soloLectura}
                     value={valor}
                     onChange={(evento) =>
-                      actualizarAsignacionBaseNocturna(sector, evento.target.value)
+                      actualizarAsignacionBaseNocturna(fila, evento.target.value)
                     }
                     className="w-full rounded-lg border border-indigo-200 bg-white px-2 py-1.5"
                   >
@@ -1095,7 +1110,7 @@ function PlanillaMensual({
                       .filter((persona) =>
                         !Object.entries(distribucion).some(
                           ([otraFila, referencia]) =>
-                            otraFila !== sector &&
+                            otraFila !== claveSector &&
                             referenciaCorrespondeAPersona(
                               referencia,
                               persona,
@@ -1164,7 +1179,11 @@ function PlanillaMensual({
                     (persona) => persona?.categoria === tipo
                   );
                   const valoresPeriodo = obtenerValoresPeriodo(periodo);
-                  const referenciaActual = valoresPeriodo[sector] || "";
+                  const claveSector = resolverClaveDistribucionParaFila({
+                    distribucion: valoresPeriodo,
+                    fila
+                  }) || sector;
+                  const referenciaActual = valoresPeriodo[claveSector] || "";
                   const estadoReferencia = resolverReferenciaPlanillaSemanal({
                     referencia: referenciaActual,
                     personalPeriodo: personalCategoriaPeriodo,
@@ -1181,7 +1200,7 @@ function PlanillaMensual({
                     personalCategoria: personalCategoriaPeriodo,
                     personal: personalPeriodo,
                     distribucion: valoresPeriodo,
-                    sector,
+                    sector: claveSector,
                     referenciaActual,
                     licencias,
                     periodo
@@ -1194,7 +1213,7 @@ function PlanillaMensual({
                         className="w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                         value={valorSelect}
                         onChange={(evento) =>
-                          actualizarCelda(periodo.clave, sector, evento.target.value)
+                          actualizarCelda(periodo.clave, fila, evento.target.value)
                         }
                       >
                         <option value="">-- elegir --</option>

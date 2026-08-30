@@ -142,6 +142,35 @@ try {
     assert.ok(html.indexOf(snapshotEnfermero.filas[1].etiqueta) <
       html.indexOf(snapshotEnfermero.filas[0].etiqueta));
   });
+  await probar("15b Planilla editable muestra label vigente y conserva asignación bajo alias histórico", () => {
+    const persona = {
+      id: "persona-boxes",
+      nombre: "Persona Boxes",
+      categoria: "enfermero"
+    };
+    const estado = crearEstadoMensualVacio();
+    const snapshot = crearSnapshotConfiguracionPlanilla({
+      turno: "manana", categoria: "enfermero", mes: "2026-08"
+    });
+    snapshot.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24").etiqueta = "19-22+24";
+    estado.configuracionPlanilla = { enfermero: snapshot };
+    estado.planillas.enfermeros.semana1 = {
+      "20-22-24": { personaId: persona.id, nombre: persona.nombre }
+    };
+    const html = renderToStaticMarkup(React.createElement(PlanillaMensual, {
+      personal: [persona],
+      estadoMensual: estado,
+      planilla: estado.planillas.enfermeros,
+      setPlanilla: () => {},
+      tipo: "enfermero",
+      licencias: [],
+      mesActivo: "2026-08",
+      turnoId: "manana"
+    }));
+    assert.match(html, /19-20\+22-24/);
+    assert.match(html, /<option value="persona-boxes" selected="">Persona Boxes<\/option>/);
+    assert.match(html, />0 sin asignar<\/span>/);
+  });
 } finally {
   await servidor.close();
 }

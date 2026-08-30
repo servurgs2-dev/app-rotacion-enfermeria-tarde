@@ -161,11 +161,39 @@ await probar("19 PDF diario con snapshot usa estructura nueva", () => {
 });
 await probar("20 PDF de Planilla usa etiqueta de boxes por turno", () => {
   assert.equal(filasPlanilla("enfermero", legacy, "manana").includes("14-18"), true);
-  assert.equal(filasPlanilla("enfermero", legacy, "manana").includes("19-22+24"), true);
+  assert.equal(filasPlanilla("enfermero", legacy, "manana").includes("19-20+22-24"), true);
   for (const turnoId of ["tarde", "vespertino", "noche"]) {
     assert.equal(filasPlanilla("enfermero", legacy, turnoId).includes("14-19"), true);
-    assert.equal(filasPlanilla("enfermero", legacy, turnoId).includes("20-22+24"), true);
+    assert.equal(filasPlanilla("enfermero", legacy, turnoId).includes("20+22-24"), true);
   }
+});
+
+await probar("20a PDF diario conserva la etiqueta efectiva recibida desde Calendario", () => {
+  assert.deepEqual(prepararFilasCalendarioPDF([
+    { nombre: "19-20+22-24", enfermero: { nombre: "Persona Mañana" } },
+    { nombre: "20+22-24", enfermero: { nombre: "Persona Resto" } }
+  ]), [
+    ["19-20+22-24", "PERSONA MAÑANA"],
+    ["20+22-24", "PERSONA RESTO"]
+  ]);
+});
+
+await probar("20aa PDF distingue snapshot histórico congelado de snapshot editable", () => {
+  const historico = crearEstadoMensualVacio();
+  const snapshotHistorico = crearSnapshotConfiguracionPlanilla({
+    turno: "manana", categoria: "enfermero", mes: "2026-07"
+  });
+  snapshotHistorico.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24").etiqueta = "19-22+24";
+  historico.configuracionPlanilla = { enfermero: snapshotHistorico };
+  assert.equal(filasPlanilla("enfermero", historico, "manana", "2026-07").includes("19-22+24"), true);
+
+  const preparado = crearEstadoMensualVacio();
+  const snapshotPreparado = crearSnapshotConfiguracionPlanilla({
+    turno: "tarde", categoria: "enfermero", mes: "2026-09"
+  });
+  snapshotPreparado.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24").etiqueta = "20-22-24";
+  preparado.configuracionPlanilla = { enfermero: snapshotPreparado };
+  assert.equal(filasPlanilla("enfermero", preparado, "tarde", "2026-09").includes("20+22-24"), true);
 });
 
 await probar("20b PDF mensual conserva asignación histórica 14-19 con etiqueta Mañana", () => {
@@ -190,7 +218,7 @@ await probar("21 PDF mensual conserva asignación guardada con alias histórico"
     ordenFilas: configuracionSectores.enfermero.ordenPDF,
     estadoMensual: legacy, turnoId: "manana", mesActivo: "2026-08"
   });
-  const fila = tabla.cuerpo.find(([etiqueta]) => etiqueta === "19-22+24");
+  const fila = tabla.cuerpo.find(([etiqueta]) => etiqueta === "19-20+22-24");
   assert.equal(fila[1], "Persona Boxes");
 });
 

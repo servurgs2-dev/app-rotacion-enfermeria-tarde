@@ -47,8 +47,16 @@ const clavesHistoricasFila = (fila) => {
   return [];
 };
 
+const clavesEstablesFila = (fila) => [
+  fila?.filaId,
+  fila?.tipo === "sector" ? fila?.sectorId : fila?.turnanteId
+].filter(tieneTexto);
+
 export const resolverClaveDistribucionParaFila = ({ distribucion, fila } = {}) => {
   if (!esDistribucion(distribucion) || !fila) return null;
+  for (const claveEstable of clavesEstablesFila(fila)) {
+    if (Object.hasOwn(distribucion, claveEstable)) return claveEstable;
+  }
   if (tieneTexto(fila.etiqueta) && Object.hasOwn(distribucion, fila.etiqueta)) {
     return fila.etiqueta;
   }
@@ -68,7 +76,7 @@ export const resolverClaveDistribucionParaFila = ({ distribucion, fila } = {}) =
 
 export const resolverClaveNormalizadaParaFila = ({ distribucion, fila } = {}) => {
   if (!esDistribucion(distribucion) || !fila) return null;
-  const candidatas = [fila.etiqueta, ...clavesHistoricasFila(fila)]
+  const candidatas = [...clavesEstablesFila(fila), fila.etiqueta, ...clavesHistoricasFila(fila)]
     .filter(tieneTexto)
     .map(normalizar);
   for (const candidata of [...new Set(candidatas)]) {

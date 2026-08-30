@@ -45,7 +45,7 @@ const probar = (nombre, prueba) => {
 const ordenEnfermeros = [
   "REA 1", "EXPLORA 1", "1-3 + 21", "T1", "PRE INT 1", "DX 25-30",
   "8-13", "T2", "4-7", "SILLÓN 1", "T3", "14-19", "REA 2",
-  "SILLON 2", "20-22+24", "T4", "PRE INT 2", "EXPLORA 2", "SM", "T5"
+  "SILLON 2", "20+22-24", "T4", "PRE INT 2", "EXPLORA 2", "SM", "T5"
 ];
 const ordenLicenciados = [
   "Triage 1", "Estabiliza", "T1", "Reanimación + Sillones", "Observación 1",
@@ -90,10 +90,12 @@ probar("aliases sin tilde conservan identidad", () => {
   assert.equal(obtenerSectorIdPorNombreHistorico("Observacion 1"), "observacion_1");
   assert.equal(obtenerSectorIdPorNombreHistorico("Preinternacion"), "preinternacion");
 });
-probar("las tres etiquetas de boxes 20/22/24 conservan una identidad", () => {
+probar("todas las etiquetas de boxes 20/22/24 conservan una identidad", () => {
   assert.equal(obtenerSectorIdPorNombreHistorico("20-22-24"), "boxes_20_22_24");
   assert.equal(obtenerSectorIdPorNombreHistorico("20-22+24"), "boxes_20_22_24");
   assert.equal(obtenerSectorIdPorNombreHistorico("19-22+24"), "boxes_20_22_24");
+  assert.equal(obtenerSectorIdPorNombreHistorico("19-20+22-24"), "boxes_20_22_24");
+  assert.equal(obtenerSectorIdPorNombreHistorico("20+22-24"), "boxes_20_22_24");
 });
 probar("14-19 y 14-18 conservan la identidad boxes_14_19", () => {
   assert.equal(obtenerSectorIdPorNombreHistorico("14-19"), "boxes_14_19");
@@ -106,17 +108,17 @@ probar("boxes 14/19 resuelve su etiqueta canónica por turno", () => {
   }
 });
 probar("boxes 20/22/24 resuelve su etiqueta canónica por turno", () => {
-  assert.equal(resolverEtiquetaSectorPorTurno({ sectorId: "boxes_20_22_24", turnoId: "manana" }), "19-22+24");
+  assert.equal(resolverEtiquetaSectorPorTurno({ sectorId: "boxes_20_22_24", turnoId: "manana" }), "19-20+22-24");
   for (const turnoId of ["tarde", "vespertino", "noche"]) {
-    assert.equal(resolverEtiquetaSectorPorTurno({ sectorId: "boxes_20_22_24", turnoId }), "20-22+24");
+    assert.equal(resolverEtiquetaSectorPorTurno({ sectorId: "boxes_20_22_24", turnoId }), "20+22-24");
   }
 });
 probar("la configuración efectiva por turno conserva filaId y sectorId", () => {
   for (const [turnoId, etiqueta14, etiqueta20] of [
-    ["manana", "14-18", "19-22+24"],
-    ["tarde", "14-19", "20-22+24"],
-    ["vespertino", "14-19", "20-22+24"],
-    ["noche", "14-19", "20-22+24"]
+    ["manana", "14-18", "19-20+22-24"],
+    ["tarde", "14-19", "20+22-24"],
+    ["vespertino", "14-19", "20+22-24"],
+    ["noche", "14-19", "20+22-24"]
   ]) {
     const filas = obtenerConfiguracionLegacyPlanilla("enfermero", { turnoId }).filas;
     const boxes14 = filas.filter(({ sectorId }) => sectorId === "boxes_14_19");
@@ -445,6 +447,12 @@ probar("PlanillaMensual gatea generación v2 y ofrece adicional versionado", () 
   assert.equal(/reanimacion_sillones[^\n]*reanimacion|reanimacion[^\n]*reanimacion_sillones/i.test(fuente), false);
   assert.equal(fuente.includes("estructuraLicenciadosVersion: 2"), false);
 });
+probar("PlanillaMensual resuelve y conserva claves legacy por identidad de fila", () => {
+  const fuente = fs.readFileSync("src/components/planilla/PlanillaMensual.jsx", "utf8");
+  assert.match(fuente, /resolverClaveDistribucionParaFila/);
+  assert.match(fuente, /const claveSector = resolverClaveDistribucionParaFila\(\{[\s\S]*?distribucion: valoresPeriodo,[\s\S]*?fila/);
+  assert.match(fuente, /actualizarCelda\(periodo\.clave, fila, evento\.target\.value\)/);
+});
 probar("PlanillaMensual conserva Sin asignar y fija Diagnóstico en v2", () => {
   const resultado = crearSnapshotConfiguracionPlanillaLicenciadosV2({
     turno: "tarde", mes: "2027-01", prioridadCoberturaSectorIds: prioridadLicenciadosV2,
@@ -453,7 +461,7 @@ probar("PlanillaMensual conserva Sin asignar y fija Diagnóstico en v2", () => {
   assert.deepEqual(resultado.snapshot.asignacionesFijas, [{ sectorId: "diagnostico", personaId: "P" }]);
   const fuente = fs.readFileSync("src/components/planilla/PlanillaMensual.jsx", "utf8");
   assert.match(fuente, /obtenerPersonasSinAsignarPlanillaSemanal\(/);
-  assert.match(fuente, /actualizarCelda\(periodo\.clave, sector/);
+  assert.match(fuente, /actualizarCelda\(periodo\.clave, fila/);
 });
 
 const crearFixtureTransicion = ({ adicional = true, filasDestinoV2, prioridad = prioridadLicenciadosV2, fijas = [] } = {}) => {

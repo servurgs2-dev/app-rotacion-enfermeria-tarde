@@ -189,8 +189,8 @@ probar("18 normalizar estado legacy no agrega contenedor y preserva ambos snapsh
 
 probar("19 snapshots nuevos congelan las etiquetas de boxes según turno sin cambiar identidad", () => {
   for (const [turno, etiqueta14, etiqueta20] of [
-    ["manana", "14-18", "19-22+24"], ["tarde", "14-19", "20-22+24"],
-    ["vespertino", "14-19", "20-22+24"], ["noche", "14-19", "20-22+24"]
+    ["manana", "14-18", "19-20+22-24"], ["tarde", "14-19", "20+22-24"],
+    ["vespertino", "14-19", "20+22-24"], ["noche", "14-19", "20+22-24"]
   ]) {
     const snapshot = crearSnapshotConfiguracionPlanilla({ turno, categoria: "enfermero", mes: "2026-10" });
     const fila14 = snapshot.filas.find(({ sectorId }) => sectorId === "boxes_14_19");
@@ -214,15 +214,43 @@ probar("19b snapshot histórico conserva 14-19 y sigue resolviéndose por identi
   assert.equal(historica.filaId, "enfermero.sector.boxes_14_19");
 });
 
-probar("20 snapshot histórico conserva 20-22-24 y sigue resolviéndose por identidad", () => {
-  const snapshot = crearSnapshotConfiguracionPlanilla(contextoEnfermeros);
-  snapshot.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24").etiqueta = "20-22-24";
-  const resultado = obtenerConfiguracionPlanillaEfectiva({
-    estadoMensual: { configuracionPlanilla: { enfermero: snapshot } }, ...contextoEnfermeros
-  });
-  const fila = resultado.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
-  assert.equal(fila.etiqueta, "20-22-24");
-  assert.equal(fila.filaId, "enfermero.sector.boxes_20_22_24");
+probar("20 snapshots históricos conservan su etiqueta congelada y la identidad", () => {
+  for (const etiquetaHistorica of ["20-22-24", "20-22+24", "19-22+24"]) {
+    const contextoHistorico = { turno: "tarde", categoria: "enfermero", mes: "2026-07" };
+    const snapshot = crearSnapshotConfiguracionPlanilla(contextoHistorico);
+    snapshot.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24").etiqueta = etiquetaHistorica;
+    const resultado = obtenerConfiguracionPlanillaEfectiva({
+      estadoMensual: { configuracionPlanilla: { enfermero: snapshot } },
+      ...contextoHistorico,
+      mesReferencia: "2026-08"
+    });
+    const fila = resultado.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
+    assert.equal(fila.etiqueta, etiquetaHistorica);
+    assert.equal(fila.filaId, "enfermero.sector.boxes_20_22_24");
+  }
+});
+
+probar("21 mes editable reetiqueta la copia efectiva sin mutar el snapshot preparado", () => {
+  for (const [turno, etiquetaAnterior, etiquetaVigente] of [
+    ["manana", "19-22+24", "19-20+22-24"],
+    ["tarde", "20-22-24", "20+22-24"],
+    ["vespertino", "20-22+24", "20+22-24"],
+    ["noche", "20-22-24", "20+22-24"]
+  ]) {
+    const contexto = { turno, categoria: "enfermero", mes: "2026-09" };
+    const snapshot = crearSnapshotConfiguracionPlanilla(contexto);
+    const filaPersistida = snapshot.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
+    filaPersistida.etiqueta = etiquetaAnterior;
+    const resultado = obtenerConfiguracionPlanillaEfectiva({
+      estadoMensual: { configuracionPlanilla: { enfermero: snapshot } },
+      ...contexto,
+      mesReferencia: "2026-08"
+    });
+    const filaEfectiva = resultado.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
+    assert.equal(filaEfectiva.etiqueta, etiquetaVigente);
+    assert.equal(filaEfectiva.filaId, "enfermero.sector.boxes_20_22_24");
+    assert.equal(filaPersistida.etiqueta, etiquetaAnterior);
+  }
 });
 
 console.log(`\nEtapa 34B1: ${total} pruebas de snapshot aprobadas.`);

@@ -48,7 +48,7 @@ export const ORDEN_PDF_ENFERMEROS_TRES_DIAS = [
   "4-7",
   "8-13",
   "14-19",
-  "20-22+24",
+  "20+22-24",
   "DX 25-30",
   "EXPLORA 1",
   "EXPLORA 2",

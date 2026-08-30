@@ -29,7 +29,7 @@ const DEFINICIONES_SECTORES = [
   ["sillon_2", "SILLON 2", "SILLÓN 2"],
   ["sillones_3", "SILLONES 3", "SILLÓN 3", "SILLON 3"],
   ["boxes_14_19", "14-19", "14-18"],
-  ["boxes_20_22_24", "20-22+24", "20-22-24", "19-22+24"],
+  ["boxes_20_22_24", "20+22-24", "20-22-24", "20-22+24", "19-22+24", "19-20+22-24"],
   ["salud_mental", "Salud Mental", "SM"],
   ["triage_1", "Triage 1"], ["triage_2", "Triage 2"],
   ["estabiliza", "Estabiliza"],
@@ -98,7 +98,7 @@ export const resolverEtiquetaSectorPorTurno = ({
     return turnoId === "manana" ? "14-18" : "14-19";
   }
   if (sectorId === "boxes_20_22_24") {
-    return turnoId === "manana" ? "19-22+24" : "20-22+24";
+    return turnoId === "manana" ? "19-20+22-24" : "20+22-24";
   }
   return etiquetaBase || obtenerEtiquetaSector(sectorId);
 };
@@ -151,6 +151,35 @@ const copiarFilaSnapshot = (fila) => Object.fromEntries(
 );
 
 const tieneTexto = (valor) => typeof valor === "string" && valor.trim().length > 0;
+const PATRON_MES = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+const obtenerMesActualLocal = () => {
+  const hoy = new Date();
+  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
+};
+
+const resolverEtiquetasVigentesMesEditable = ({
+  filas,
+  categoria,
+  turnoId,
+  mes,
+  mesReferencia
+}) => {
+  const mesActual = PATRON_MES.test(mesReferencia || "")
+    ? mesReferencia
+    : obtenerMesActualLocal();
+  if (categoria !== "enfermero" || mes < mesActual) return filas;
+  return filas.map((fila) => fila?.sectorId === "boxes_20_22_24"
+    ? {
+        ...fila,
+        etiqueta: resolverEtiquetaSectorPorTurno({
+          sectorId: fila.sectorId,
+          turnoId,
+          etiquetaBase: fila.etiqueta
+        })
+      }
+    : fila);
+};
 
 export const esSnapshotConfiguracionPlanillaValido = (snapshot) =>
   Boolean(snapshot) &&
@@ -442,7 +471,8 @@ export const obtenerConfiguracionPlanillaEfectiva = ({
   estadoMensual,
   turno,
   categoria,
-  mes
+  mes,
+  mesReferencia
 } = {}) => {
   if (!tieneTexto(turno) || !tieneTexto(categoria) || !tieneTexto(mes)) return null;
 
@@ -460,6 +490,13 @@ export const obtenerConfiguracionPlanillaEfectiva = ({
       categoria: categoria.trim(),
       planilla: estadoMensual?.planillas?.[clavePlanilla],
       versionEstructura: copia
+    });
+    copia.filas = resolverEtiquetasVigentesMesEditable({
+      filas: copia.filas,
+      categoria: categoria.trim(),
+      turnoId: turno.trim(),
+      mes: mes.trim(),
+      mesReferencia
     });
     if (copia.prioridadCoberturaSectorIds.length === 0) {
       copia.prioridadCoberturaSectorIds = obtenerPrioridadCoberturaEfectiva({

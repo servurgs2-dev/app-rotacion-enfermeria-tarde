@@ -19,13 +19,28 @@ import {
 import { aplicarPrioridadCoberturaParejas } from "../src/utils/coberturaParejasEnfermeros.js";
 import { vincularCambioOtroTurno } from "../src/utils/cambioOtroTurno.js";
 import { resolverEstructuraCalendario } from "../src/utils/estructuraCalendario.js";
+import {
+  construirAsignacionesDiariasCalendario,
+  incorporarPersonasSinAsignar
+} from "../src/utils/pipelineCalendarioDiario.js";
 
 const clonar = (valor) => JSON.parse(JSON.stringify(valor));
 const filas = (configuracion) => obtenerFilasActivas(configuracion?.filas)
   .sort((a, b) => a.orden - b.orden);
 const etiquetas = (configuracion) => filas(configuracion).map((fila) => fila.etiqueta);
-const resolver = ({ estadoMensual, turno = "tarde", categoria, mes = "2026-08" }) =>
-  obtenerConfiguracionPlanillaEfectiva({ estadoMensual, turno, categoria, mes });
+const resolver = ({
+  estadoMensual,
+  turno = "tarde",
+  categoria,
+  mes = "2026-08",
+  mesReferencia = "2026-08"
+}) => obtenerConfiguracionPlanillaEfectiva({
+  estadoMensual,
+  turno,
+  categoria,
+  mes,
+  mesReferencia
+});
 
 let total = 0;
 const probar = async (nombre, prueba) => {
@@ -44,6 +59,54 @@ await probar("2 legacy Licenciados usa estructura 34A", () => {
 await probar("3 leer legacy no crea configuracionPlanilla", () => {
   resolver({ estadoMensual: legacy, categoria: "enfermero" });
   assert.equal(Object.hasOwn(legacy, "configuracionPlanilla"), false);
+});
+
+await probar("3b Mañana conserva la persona de boxes 20/22/24 al reetiquetar un mes editable", () => {
+  const persona = { id: "persona-boxes", nombre: "Persona Boxes", categoria: "enfermero" };
+  for (const etiquetaGuardada of [
+    "enfermero.sector.boxes_20_22_24",
+    "boxes_20_22_24",
+    "20-22-24",
+    "20-22+24",
+    "19-22+24",
+    "19-20+22-24",
+    "20+22-24"
+  ]) {
+    const estado = crearEstadoMensualVacio();
+    const snapshot = crearSnapshotConfiguracionPlanilla({
+      turno: "manana",
+      categoria: "enfermero",
+      mes: "2026-08"
+    });
+    snapshot.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24").etiqueta = "19-22+24";
+    estado.configuracionPlanilla = { enfermero: snapshot };
+    const efectiva = resolver({
+      estadoMensual: estado,
+      turno: "manana",
+      categoria: "enfermero"
+    });
+    const estructura = resolverEstructuraCalendario({
+      configuracionEfectiva: efectiva,
+      ordenVisualLegacy: configuracionSectores.enfermero.ordenVisual
+    });
+    const asignaciones = construirAsignacionesDiariasCalendario({
+      filasCalendario: estructura.filas,
+      filasConfiguracion: estructura.filasConfiguracion,
+      planillaPeriodoEfectiva: {
+        [etiquetaGuardada]: { personaId: persona.id, nombre: persona.nombre }
+      },
+      personal: [persona],
+      turnantes: estructura.turnantes
+    });
+    const finales = incorporarPersonasSinAsignar({ asignaciones, personas: [persona] });
+    const fila = finales.find(({ sectorId }) => sectorId === "boxes_20_22_24");
+    assert.equal(fila.etiqueta, "19-20+22-24");
+    assert.equal(fila.filaId, "enfermero.sector.boxes_20_22_24");
+    assert.equal(fila.enfermero?.id, persona.id);
+    assert.equal(finales.some(({ nombre, enfermero }) =>
+      nombre === "SIN ASIGNAR" && enfermero?.id === persona.id), false);
+    assert.equal(finales.filter(({ enfermero }) => enfermero?.id === persona.id).length, 1);
+  }
 });
 await probar("4 T6 legacy sigue funcionando", () => {
   const estado = crearEstadoMensualVacio();
@@ -164,10 +227,10 @@ try {
       ordenVisualLegacy: configuracionSectores.enfermero.ordenVisual
     });
     const esperado = configuracionSectores.enfermero.ordenVisual.map((item) =>
-      item === "14-19" ? "14-18" : item === "20-22+24" ? "19-22+24" : item
+      item === "14-19" ? "14-18" : item === "20+22-24" ? "19-20+22-24" : item
     );
     assert.deepEqual(estructura.ordenVisual, esperado);
-    assert.equal(estructura.ordenVisual.indexOf("14-18") < estructura.ordenVisual.indexOf("19-22+24"), true);
+    assert.equal(estructura.ordenVisual.indexOf("14-18") < estructura.ordenVisual.indexOf("19-20+22-24"), true);
   });
 } finally {
   await servidor.close();

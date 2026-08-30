@@ -45,16 +45,17 @@ const ordenarDestinosYDonante = (orden, primero, segundo, donante) => [
   donante
 ];
 const resolverEnfermeros = (prioridadSectorIds) => {
-  const donante = persona("donante-sillon-2");
+  const turnante = persona("turnante-enfermero");
   const asignaciones = [
+    { tipo: "turnante", turnanteId: "turnante_1", nombre: "T1", enfermero: turnante },
     { tipo: "sector", sectorId: "rea_2", nombre: "REA 2", enfermero: null },
     { tipo: "sector", sectorId: "explora_2", nombre: "EXPLORA 2", enfermero: null },
-    { tipo: "sector", sectorId: "sillon_2", nombre: "SILLÓN 2", enfermero: donante }
+    { tipo: "sector", sectorId: "sillon_2", nombre: "SILLÓN 2", enfermero: null }
   ];
   return resolverTurnantesYCoberturasOperativas({
     asignaciones,
     extras: [],
-    personal: [donante],
+    personal: [turnante],
     esPersonaDisponible: () => true,
     prioridadSectorIds,
     sectorIdsDonantes: configuracionSectores.enfermero.sectoresDonantesIds
@@ -92,7 +93,7 @@ probar("mañana prioriza operativamente REA 2 antes que Explora 2", () => {
   );
   const snapshot = crearSnapshot("manana", "enfermero", prioridad);
   const resultado = resolverEnfermeros(obtenerPrioridad({ turno: "manana", categoria: "enfermero", snapshot }));
-  assert.equal(destinoDe(resultado, "donante-sillon-2"), "rea_2");
+  assert.equal(destinoDe(resultado, "turnante-enfermero"), "rea_2");
 });
 
 probar("tarde prioriza operativamente Explora 2 antes que REA 2", () => {
@@ -104,7 +105,7 @@ probar("tarde prioriza operativamente Explora 2 antes que REA 2", () => {
   );
   const snapshot = crearSnapshot("tarde", "enfermero", prioridad);
   const resultado = resolverEnfermeros(obtenerPrioridad({ turno: "tarde", categoria: "enfermero", snapshot }));
-  assert.equal(destinoDe(resultado, "donante-sillon-2"), "explora_2");
+  assert.equal(destinoDe(resultado, "turnante-enfermero"), "explora_2");
 });
 
 probar("la misma distribución produce decisiones opuestas según el turno mensual", () => {
@@ -117,8 +118,8 @@ probar("la misma distribución produce decisiones opuestas según el turno mensu
     turno: "tarde", categoria: "enfermero",
     snapshot: crearSnapshot("tarde", "enfermero", ordenarDestinosYDonante(fallback, "explora_2", "rea_2", "sillon_2"))
   });
-  assert.equal(destinoDe(resolverEnfermeros(manana), "donante-sillon-2"), "rea_2");
-  assert.equal(destinoDe(resolverEnfermeros(tarde), "donante-sillon-2"), "explora_2");
+  assert.equal(destinoDe(resolverEnfermeros(manana), "turnante-enfermero"), "rea_2");
+  assert.equal(destinoDe(resolverEnfermeros(tarde), "turnante-enfermero"), "explora_2");
 });
 
 probar("snapshot legacy conserva una resolución concreta del fallback global", () => {
@@ -126,18 +127,19 @@ probar("snapshot legacy conserva una resolución concreta del fallback global", 
   delete snapshot.prioridadCoberturaSectorIds;
   const prioridad = obtenerPrioridad({ turno: "tarde", categoria: "enfermero", snapshot });
   assert.deepEqual(prioridad, configuracionSectores.enfermero.prioridadSectoresIds);
-  const donante = persona("donante-rea-2");
+  const turnante = persona("turnante-legacy");
   const resultado = resolverTurnantesYCoberturasOperativas({
     asignaciones: [
+      { tipo: "turnante", turnanteId: "turnante_1", nombre: "T1", enfermero: turnante },
       { tipo: "sector", sectorId: "sillon_2", nombre: "SILLÓN 2", enfermero: null },
       { tipo: "sector", sectorId: "explora_2", nombre: "EXPLORA 2", enfermero: null },
-      { tipo: "sector", sectorId: "rea_2", nombre: "REA 2", enfermero: donante }
+      { tipo: "sector", sectorId: "rea_2", nombre: "REA 2", enfermero: null }
     ],
-    extras: [], personal: [donante], esPersonaDisponible: () => true,
+    extras: [], personal: [turnante], esPersonaDisponible: () => true,
     prioridadSectorIds: prioridad,
     sectorIdsDonantes: configuracionSectores.enfermero.sectoresDonantesIds
   }).asignaciones;
-  assert.equal(destinoDe(resultado, "donante-rea-2"), "sillon_2");
+  assert.equal(destinoDe(resultado, "turnante-legacy"), "sillon_2");
 });
 
 probar("Enfermeros pasa la prioridad efectiva al resolver operativo", () => {
@@ -191,14 +193,15 @@ probar("renombrar etiquetas no cambia la decisión por sectorId", () => {
   const snapshot = crearSnapshot("manana", "enfermero", prioridad);
   snapshot.filas = snapshot.filas.map((fila) => ({ ...fila, etiqueta: `Renombrado ${fila.sectorId || fila.turnanteId}` }));
   const resultado = resolverEnfermeros(obtenerPrioridad({ turno: "manana", categoria: "enfermero", snapshot }));
-  assert.equal(destinoDe(resultado, "donante-sillon-2"), "rea_2");
+  assert.equal(destinoDe(resultado, "turnante-enfermero"), "rea_2");
 });
 
-probar("donantes, parejas y reposición 37B.5 permanecen fuera del cambio", () => {
+probar("Enfermeros conserva parejas y no configura donantes generales", () => {
   const fuente = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
   assert.match(fuente, /sectorIdsDonantes: tipo === "enfermero" && !esDiaParo\s*\? sectoresDonantesIds/);
   assert.match(fuente, /aplicarPrioridadCoberturaParejas\(\{/);
   assert.doesNotMatch(fuente, /prioridadCoberturaSectorIds.*sectoresDonantesIds/);
+  assert.deepEqual(configuracionSectores.enfermero.sectoresDonantesIds, []);
   assert.equal(fs.readFileSync("src/utils/distribucionTurnantesCoberturas.js", "utf8").includes("cedidoAPareja"), true);
 });
 

@@ -4,6 +4,7 @@ import {
 } from "./extrasPersonas.js";
 import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
 import { aplicarPrioridadGeneralPorSectorId } from "./prioridadesSectores.js";
+import { PAREJAS_COBERTURA_ENFERMEROS } from "./coberturaParejasEnfermeros.js";
 
 const lista = (valor) => Array.isArray(valor) ? valor : [];
 
@@ -68,6 +69,9 @@ export const resolverTurnantesYCoberturasOperativas = ({
   };
 
   const idsDonantes = new Set(lista(sectorIdsDonantes));
+  const idsOrigenPareja = new Set(
+    PAREJAS_COBERTURA_ENFERMEROS.map(({ origenSectorId }) => origenSectorId)
+  );
   const ordenarPorPrioridad = (filas) => {
     const porId = new Map(filas.flatMap((fila) => fila?.sectorId ? [[fila.sectorId, fila]] : []));
     const ordenadas = lista(prioridadSectorIds).flatMap((sectorId) =>
@@ -77,7 +81,7 @@ export const resolverTurnantesYCoberturasOperativas = ({
     return [...ordenadas, ...filas.filter((fila) => !incluidas.has(fila))];
   };
   const sectoresPrioritariosDirectos = ordenarPorPrioridad(sectores)
-    .filter((fila) => !idsDonantes.has(fila.sectorId));
+    .filter((fila) => !idsDonantes.has(fila.sectorId) && !idsOrigenPareja.has(fila.sectorId));
   sectoresPrioritariosDirectos.forEach((fila) => {
     if (!fila.enfermero && fila.reemplazo && !fila.vacioManual) {
       fila.enfermero = tomarTurnante();

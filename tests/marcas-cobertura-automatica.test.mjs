@@ -36,7 +36,7 @@ const cubrirPorPrioridad = (origenSectorId) => {
   return aplicarPrioridadGeneralPorSectorId({
     asignaciones: [fila("destino_prioritario"), fila(origenSectorId, titular)],
     prioridadSectorIds: ["destino_prioritario", origenSectorId],
-    donanteSectorIds: [origenSectorId]
+    donanteSectorIds: []
   });
 };
 
@@ -59,19 +59,23 @@ for (const [sectorId, destinoSectorId, marca] of [
     assert.equal(origen.enfermero, null);
     assert.equal(resultado.filter((item) => item.enfermero?.id === sectorId).length, 1);
   });
-  probar(`${sectorId} cedido por prioridad general recibe ${marca}`, () => {
+  probar(`${sectorId} no cede por prioridad general ni fabrica ${marca}`, () => {
     const resultado = cubrirPorPrioridad(sectorId);
     const destino = resultado.find((item) => item.sectorId === "destino_prioritario");
-    assert.equal(destino.origenCoberturaAutomaticaSectorId, sectorId);
-    assert.equal(obtenerNombreAsignacionCalendario(destino), `Persona ${sectorId} (${marca})`);
+    const origen = resultado.find((item) => item.sectorId === sectorId);
+    assert.equal(destino.enfermero, null);
+    assert.equal(destino.origenCoberturaAutomaticaSectorId, undefined);
+    assert.equal(origen.enfermero?.id, sectorId);
+    assert.equal(obtenerNombreAsignacionCalendario(origen), `Persona ${sectorId}`);
   });
 }
 
-probar("PRE INT 2 cedido no obtiene marca visual", () => {
-  const destino = cubrirPorPrioridad("pre_int_2")[0];
-  assert.equal(destino.origenCoberturaAutomaticaSectorId, "pre_int_2");
-  assert.equal(obtenerMarcaOrigenCoberturaAutomatica(destino), null);
-  assert.equal(obtenerNombreAsignacionCalendario(destino), "Persona pre_int_2");
+probar("PRE INT 2 tampoco cede por prioridad general", () => {
+  const resultado = cubrirPorPrioridad("pre_int_2");
+  assert.equal(resultado[0].enfermero, null);
+  assert.equal(resultado[1].enfermero?.id, "pre_int_2");
+  assert.equal(obtenerMarcaOrigenCoberturaAutomatica(resultado[1]), null);
+  assert.equal(obtenerNombreAsignacionCalendario(resultado[1]), "Persona pre_int_2");
 });
 
 probar("Turnante que repone origen conserva sólo T", () => {

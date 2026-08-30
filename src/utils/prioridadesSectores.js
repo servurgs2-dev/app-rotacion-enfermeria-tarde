@@ -16,7 +16,7 @@ export const aplicarPrioridadGeneralPorSectorId = ({
   const resultado = lista(asignaciones).map((fila) => ({ ...fila }));
   const porId = new Map(resultado.flatMap((fila) => fila?.sectorId ? [[fila.sectorId, fila]] : []));
   const prioridad = lista(prioridadSectorIds).filter((id) => porId.has(id));
-  const donantes = Array.isArray(donanteSectorIds) && donanteSectorIds.length
+  const donantes = Array.isArray(donanteSectorIds)
     ? new Set(donanteSectorIds)
     : null;
   prioridad.forEach((sectorId, indice) => {

@@ -91,10 +91,10 @@ const resolverEscenarioConfigurado = ({ crearTitular, turnantes = [persona("turn
   }).asignaciones;
 };
 
-probar("caso real: explora_2 cubre sillon_2 antes del Turnante explícito", () => {
+probar("Explora 2 permanece en su sector y el Turnante cubre Sillones 2", () => {
   const flujo = crearEscenario();
-  assert.equal(flujo.resultado.find((fila) => fila.sectorId === "sillon_2")?.enfermero, flujo.explora2);
-  assert.equal(flujo.resultado.some((fila) => fila.enfermero === flujo.turnante), true);
+  assert.equal(flujo.resultado.find((fila) => fila.sectorId === "explora_2")?.enfermero, flujo.explora2);
+  assert.equal(flujo.resultado.find((fila) => fila.sectorId === "sillon_2")?.enfermero, flujo.turnante);
 });
 
 probar("Salud Mental queda cubierta antes de reponer REA 2 con un Turnante", () => {
@@ -129,7 +129,7 @@ probar("un Turnante cubre 20-22-24 sin desplazar al titular de Pre Int 2", () =>
   assert.equal(resultado.find((fila) => fila.sectorId === "boxes_20_22_24")?.enfermero?.id, "turnante-configurado");
 });
 
-probar("Salud Mental usa un donante configurado si no queda cobertura directa", () => {
+probar("Salud Mental queda vacante sin cobertura directa y REA 2 permanece", () => {
   const titularRea2 = persona("donante-rea-2");
   const resultado = resolverEscenarioConfigurado({
     turnantes: [],
@@ -139,7 +139,8 @@ probar("Salud Mental usa un donante configurado si no queda cobertura directa", 
       return persona(`titular-${fila.sectorId}`);
     }
   });
-  assert.equal(resultado.find((fila) => fila.sectorId === "salud_mental")?.enfermero, titularRea2);
+  assert.equal(resultado.find((fila) => fila.sectorId === "salud_mental")?.enfermero, null);
+  assert.equal(resultado.find((fila) => fila.sectorId === "rea_2")?.enfermero, titularRea2);
   assert.equal(resultado.filter((fila) => fila.enfermero === titularRea2).length, 1);
 });
 
@@ -168,10 +169,8 @@ probar("una vacante de reemplazo en REA 2 no consume el Turnante antes que Salud
   assert.equal(resultado.find((fila) => fila.sectorId === "rea_2")?.enfermero, null);
 });
 
-probar("el catálogo de donantes no incluye sectores prioritarios", () => {
-  assert.deepEqual(new Set(donantesEnfermeros), new Set(["rea_2", "pre_int_2", "explora_2", "sillon_2"]));
-  assert.equal(donantesEnfermeros.includes("salud_mental"), false);
-  assert.equal(donantesEnfermeros.includes("boxes_20_22_24"), false);
+probar("Enfermeros no configura donantes generales", () => {
+  assert.deepEqual(donantesEnfermeros, []);
 });
 
 probar("un Turnante sin vacante permanece sin consumir", () => {
@@ -195,9 +194,9 @@ probar("un Turnante sin vacante permanece sin consumir", () => {
   assert.equal([...resolucion.usados].some((clave) => clave.includes("turnante-sin-usar")), false);
 });
 
-probar("la persona cedida conserva identidad y aparece una sola vez", () => {
+probar("la persona de Explora 2 conserva identidad y aparece una sola vez", () => {
   const flujo = crearEscenario();
-  assert.equal(flujo.resultado.find((fila) => fila.sectorId === "sillon_2")?.enfermero.id, "persona-explora-2");
+  assert.equal(flujo.resultado.find((fila) => fila.sectorId === "explora_2")?.enfermero.id, "persona-explora-2");
   assert.equal(flujo.resultado.filter((fila) => fila.enfermero?.id === "persona-explora-2").length, 1);
 });
 
@@ -208,16 +207,16 @@ probar("la resolución diaria no muta Planilla ni Personal", () => {
   assert.equal(flujo.personal.some((actual) => actual.id === flujo.explora2.id), true);
 });
 
-probar("la prioridad usa sectorId aunque cambien todas las etiquetas", () => {
+probar("las etiquetas renombradas no habilitan donación general", () => {
   const flujo = crearEscenario({ renombrar: true });
-  assert.equal(flujo.resultado.find((fila) => fila.sectorId === "sillon_2")?.enfermero, flujo.explora2);
+  assert.equal(flujo.resultado.find((fila) => fila.sectorId === "explora_2")?.enfermero, flujo.explora2);
 });
 
-probar("un Extra externo no desplaza al donante configurado", () => {
+probar("un Extra externo cubre la vacante sin desplazar a Explora 2", () => {
   const extra = persona("extra-externo", { tipoExtra: TIPOS_EXTRA.REFUERZO, origenExtra: "externo" });
   const flujo = crearEscenario({ extras: [extra] });
-  assert.equal(flujo.resultado.find((fila) => fila.sectorId === "sillon_2")?.enfermero, flujo.explora2);
-  assert.notEqual(flujo.resultado.find((fila) => fila.sectorId === "sillon_2")?.enfermero, extra);
+  assert.equal(flujo.resultado.find((fila) => fila.sectorId === "explora_2")?.enfermero, flujo.explora2);
+  assert.equal(flujo.resultado.find((fila) => fila.sectorId === "sillon_2")?.enfermero, extra);
 });
 
 probar("una persona ausente o no disponible no puede ceder cobertura", () => {
@@ -269,46 +268,12 @@ for (const pareja of PAREJAS_COBERTURA_ENFERMEROS) {
       ajustarSectores: (sectores) => aplicarPrioridadCoberturaParejas({ asignaciones: sectores })
     }).asignaciones;
     assert.equal(resultado.find((fila) => fila.sectorId === pareja.destinoSectorId)?.enfermero, origen);
+    assert.equal(resultado.find((fila) => fila.sectorId === pareja.origenSectorId)?.enfermero, turnante);
     assert.equal(resultado.filter((fila) => fila.enfermero === origen).length, 1);
   });
 }
 
-const donanteCruzadoPara = (origenSectorId) =>
-  [...donantesEnfermeros].reverse().find((sectorId) =>
-    sectorId !== origenSectorId &&
-    prioridadEnfermeros.indexOf(sectorId) > prioridadEnfermeros.indexOf(origenSectorId)
-  ) || donantesEnfermeros.find((sectorId) => sectorId !== origenSectorId);
-
-for (const pareja of PAREJAS_COBERTURA_ENFERMEROS) {
-  probar(`Turnante repone ${pareja.origenSectorId} sin cascada tras promoverlo`, () => {
-    const promovido = persona(`promovido-${pareja.origenSectorId}`);
-    const turnante = persona(`turnante-${pareja.origenSectorId}`);
-    const donanteSectorId = donanteCruzadoPara(pareja.origenSectorId);
-    const titularDonante = persona(`titular-${donanteSectorId}`);
-    const resultado = resolverTurnantesYCoberturasOperativas({
-      asignaciones: [
-        { tipo: "turnante", turnanteId: "turnante_1", nombre: "T1", enfermero: turnante },
-        { tipo: "sector", sectorId: pareja.destinoSectorId, nombre: pareja.destinoSectorId, enfermero: null },
-        { tipo: "sector", sectorId: pareja.origenSectorId, nombre: pareja.origenSectorId, enfermero: promovido },
-        { tipo: "sector", sectorId: donanteSectorId, nombre: donanteSectorId, enfermero: titularDonante }
-      ],
-      extras: [],
-      personal: [promovido, turnante, titularDonante],
-      esPersonaDisponible: () => true,
-      prioridadSectorIds: prioridadEnfermeros,
-      sectorIdsDonantes: donantesEnfermeros,
-      ajustarSectores: (sectores) => aplicarPrioridadCoberturaParejas({ asignaciones: sectores })
-    }).asignaciones;
-    assert.equal(resultado.find((fila) => fila.sectorId === pareja.destinoSectorId)?.enfermero, promovido);
-    assert.equal(resultado.find((fila) => fila.sectorId === pareja.origenSectorId)?.enfermero, turnante);
-    assert.equal(resultado.find((fila) => fila.sectorId === donanteSectorId)?.enfermero, titularDonante);
-    for (const actual of [promovido, turnante, titularDonante]) {
-      assert.equal(resultado.filter((fila) => fila.enfermero === actual).length, 1);
-    }
-  });
-}
-
-probar("sin Turnante ni Extra la reposición continúa con un donante válido", () => {
+probar("sin Turnante ni Extra el origen de pareja queda vacante sin mover REA 2", () => {
   const pareja = PAREJAS_COBERTURA_ENFERMEROS.find(
     ({ origenSectorId }) => origenSectorId === "sillon_2"
   );
@@ -328,11 +293,11 @@ probar("sin Turnante ni Extra la reposición continúa con un donante válido", 
     ajustarSectores: (sectores) => aplicarPrioridadCoberturaParejas({ asignaciones: sectores })
   }).asignaciones;
   assert.equal(resultado.find((fila) => fila.sectorId === "sillon_1")?.enfermero, promovido);
-  assert.equal(resultado.find((fila) => fila.sectorId === "sillon_2")?.enfermero, titularRea2);
-  assert.equal(resultado.find((fila) => fila.sectorId === "rea_2")?.enfermero, null);
+  assert.equal(resultado.find((fila) => fila.sectorId === "sillon_2")?.enfermero, null);
+  assert.equal(resultado.find((fila) => fila.sectorId === "rea_2")?.enfermero, titularRea2);
 });
 
-probar("un Extra repone directamente el sector 2 antes de mover otro donante", () => {
+probar("un Extra repone directamente el sector 2 sin mover REA 2", () => {
   const pareja = PAREJAS_COBERTURA_ENFERMEROS.find(
     ({ origenSectorId }) => origenSectorId === "sillon_2"
   );

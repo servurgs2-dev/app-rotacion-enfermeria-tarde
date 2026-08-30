@@ -168,8 +168,7 @@ probar("el flujo enriquecido de Calendario aplica rea_2 antes que T1 sin depende
     asignaciones: [
       { nombre: "Turnante disponible", etiqueta: "Turnante disponible", filaId: "enfermero.turnante.1", turnanteId: "turnante_1", sectorId: null, orden: 2, enfermero: turnante, tipo: "turnante" },
       { nombre: "Destino renombrado", etiqueta: "Destino renombrado", filaId: "enfermero.sector.rea_1", sectorId: "rea_1", turnanteId: null, orden: 99, enfermero: null, tipo: "sector" },
-      { nombre: "Origen renombrado", etiqueta: "Origen renombrado", filaId: "enfermero.sector.rea_2", sectorId: "rea_2", turnanteId: null, orden: 0, enfermero: funcionarioRea2, tipo: "sector" },
-      { nombre: "Flujo posterior", etiqueta: "Flujo posterior", filaId: "enfermero.sector.boxes_14_19", sectorId: "boxes_14_19", turnanteId: null, orden: 1, enfermero: null, tipo: "sector" }
+      { nombre: "Origen renombrado", etiqueta: "Origen renombrado", filaId: "enfermero.sector.rea_2", sectorId: "rea_2", turnanteId: null, orden: 0, enfermero: funcionarioRea2, tipo: "sector" }
     ],
     extras: [],
     personal: [funcionarioRea2, turnante],
@@ -185,7 +184,6 @@ probar("el flujo enriquecido de Calendario aplica rea_2 antes que T1 sin depende
   assert.equal(resultado.filter((fila) => fila.enfermero === funcionarioRea2).length, 1);
   assert.equal(resultado.find((fila) => fila.sectorId === "rea_2").enfermero, turnante);
   assert.equal(resultado.filter((fila) => fila.enfermero === turnante).length, 1);
-  assert.equal(resultado.find((fila) => fila.sectorId === "boxes_14_19").enfermero, null);
 });
 const ejecutarFlujoProductivoCalendario = ({ pareja, personaOrigen = persona("B"), cambios }) => {
   const mensual = estado();

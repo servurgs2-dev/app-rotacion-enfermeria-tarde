@@ -2,7 +2,7 @@ export const configuracionSectores = {
   enfermero: {
     sectoresCriticosIds: ["rea_1", "explora_1", "boxes_1_3_21", "pre_int_1", "dx_25_30", "boxes_8_13", "boxes_4_7", "sillon_1", "boxes_14_19", "boxes_20_22_24", "salud_mental"],
     prioridadSectoresIds: ["rea_1", "boxes_1_3_21", "boxes_4_7", "boxes_8_13", "boxes_14_19", "boxes_20_22_24", "dx_25_30", "sillon_1", "explora_1", "pre_int_1", "salud_mental", "pre_int_2", "sillon_2", "explora_2", "rea_2"],
-    sectoresDonantesIds: ["rea_2", "pre_int_2", "explora_2", "sillon_2"],
+    sectoresDonantesIds: [],
     sectoresFijos: [
       "REA 1", "EXPLORA 1", "1-3 + 21", "PRE INT 1", "DX 25-30",
       "8-13", "4-7", "SILLÓN 1", "14-19", "REA 2",

@@ -23,21 +23,21 @@ probar("ya no existe menú ni botón de puntos suspensivos", () => {
   assert.doesNotMatch(calendario, /accionesRapidas/);
 });
 
-probar("la X roja sólo se monta para una persona elegible", () => {
+probar("la acción ámbar sólo se monta para una persona elegible", () => {
   assert.match(vista, /\{fila\.puedeMarcarNoDisponible && \(/);
   assert.match(calendario, /const puedeMarcarNoDisponible = !soloLecturaEfectiva/);
   assert.match(calendario, /personaPersonal &&[\s\S]*!esExtraDelDia/);
   assert.match(calendario, /!estaCertificadoHoy\(personaPersonal\)/);
 });
 
-probar("la X abre directamente el PanelNoDisponible existente", () => {
+probar("el ícono abre directamente el PanelNoDisponible existente", () => {
   assert.match(vista, /onGestionarNoDisponible\(fila\.personaGestionNoDisponible, fila\.registroNoDisponible\)/);
   assert.match(calendario, /onGestionarNoDisponible=\{abrirFormularioNoDisponible\}/);
   assert.equal((calendario.match(/<PanelNoDisponible/g) || []).length, 1);
   assert.match(vista, /Marcar a \$\{fila\.textoPersona\} como no disponible/);
 });
 
-probar("la X no dispara selección ni elimina Personal o Planilla", () => {
+probar("el ícono no dispara selección ni elimina Personal o Planilla", () => {
   assert.match(vista, /onClick=\{\(evento\) => \{[\s\S]*evento\.stopPropagation\(\);[\s\S]*onGestionarNoDisponible/);
   assert.match(vista, /onClick=\{\(\) => onSeleccionar\(fila\.original\)\}/);
   assert.doesNotMatch(vista, /setPersonal|setPlanilla|eliminarPersona|borrarPersona/);
@@ -67,13 +67,48 @@ probar("el bloque inferior reutiliza la eliminación productiva", () => {
   assert.doesNotMatch(bloques, /setCalendario|quitarPersonaDeListaReferencias|filter\(/);
 });
 
-probar("la X es el único iniciador mobile y el bloque sólo gestiona registros existentes", () => {
+probar("el ícono es el único iniciador mobile y el bloque sólo gestiona registros existentes", () => {
   assert.doesNotMatch(bloques, /Gestionar personal|candidatosNoDisponibles|onGestionarNoDisponible/);
   assert.doesNotMatch(calendario, /candidatosNoDisponiblesMobile/);
   assert.match(bloques, /Editar motivo/);
   assert.match(bloques, />Quitar<\/button>/);
   assert.match(bloques, /Eliminar certificación del día/);
   assert.match(vista, /Marcar a \$\{fila\.textoPersona\} como no disponible/);
+});
+
+probar("la acción usa un SVG local de persona con salida y no una X", () => {
+  const inicio = vista.indexOf("function IconoSacarDeDistribucion");
+  const fin = vista.indexOf("function TarjetaSectorMobile", inicio);
+  const icono = vista.slice(inicio, fin);
+  assert.match(icono, /<svg/);
+  assert.match(icono, /aria-hidden="true"/);
+  assert.match(icono, /viewBox="0 0 24 24"/);
+  assert.match(icono, /width="22"/);
+  assert.match(icono, /height="22"/);
+  assert.match(icono, /<circle/);
+  assert.ok((icono.match(/<path/g) || []).length >= 2);
+  assert.doesNotMatch(icono, />\s*X\s*</);
+});
+
+probar("el botón conserva accesibilidad, área táctil y cambia rojo por ámbar", () => {
+  const inicio = vista.indexOf('aria-label={`Marcar a ${fila.textoPersona} como no disponible`}');
+  const fin = vista.indexOf("</button>", inicio);
+  const boton = vista.slice(inicio, fin);
+  assert.match(boton, /title="Marcar no disponible"/);
+  assert.match(boton, /min-h-11/);
+  assert.match(boton, /min-w-11/);
+  assert.match(boton, /border-amber-300/);
+  assert.match(boton, /bg-amber-50/);
+  assert.match(boton, /text-amber-800/);
+  assert.doesNotMatch(boton, /red-/);
+  assert.match(boton, /<IconoSacarDeDistribucion \/>/);
+});
+
+probar("no se agrega una dependencia de íconos ni se modifica desktop", () => {
+  const paquete = fs.readFileSync("package.json", "utf8");
+  assert.doesNotMatch(vista, /from ["'](?:lucide-react|react-icons|@heroicons)/);
+  assert.doesNotMatch(paquete, /lucide-react|react-icons|@heroicons/);
+  assert.doesNotMatch(calendario, /IconoSacarDeDistribucion/);
 });
 
 probar("quitar una referencia vuelve a hacer elegible a esa persona", () => {

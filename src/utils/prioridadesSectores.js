@@ -32,7 +32,10 @@ export const aplicarPrioridadGeneralPorSectorId = ({
         esPersonaDisponible(origen.enfermero)
       ) {
         destino.enfermero = origen.enfermero;
+        destino.origenCoberturaAutomaticaSectorId =
+          origen.origenCoberturaAutomaticaSectorId || origen.sectorId;
         origen.enfermero = null;
+        delete origen.origenCoberturaAutomaticaSectorId;
         origen.sacrificado = true;
         break;
       }

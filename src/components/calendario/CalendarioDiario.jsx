@@ -137,6 +137,11 @@ import {
   obtenerIdentidadesTurnantes,
   obtenerNombreConMarcaTurnante
 } from "../../utils/etiquetaTurnante.js";
+import {
+  aplicarProcedenciaCoberturaAutomaticaPersistida,
+  obtenerNombreAsignacionCalendario,
+  obtenerProcedenciasCoberturaAutomaticaActivas
+} from "../../utils/procedenciaCoberturaAutomatica.js";
 import VistaDistribucionMobile from "./mobile/VistaDistribucionMobile.jsx";
 import BloquesOperativosMobile from "./mobile/BloquesOperativosMobile.jsx";
 import {
@@ -229,6 +234,7 @@ function CalendarioDiario({
 const {
   cambiosDia = {},
   procedenciaCambiosDia = {},
+  procedenciaCoberturaAutomaticaDia = {},
   cambiosParoDia = {},
   noDisponibles = {},
   extras = {},
@@ -1108,6 +1114,12 @@ reintegradosSinSectorHoy.forEach((persona) => {
   });
 });
 
+asignacionParaMostrar = aplicarProcedenciaCoberturaAutomaticaPersistida({
+  asignaciones: asignacionParaMostrar,
+  procedenciasPorPersonaId: procedenciaCoberturaAutomaticaDia[keyDia],
+  cambiosDia: cambiosDia[keyDia]
+});
+
 const resultadoOrdenado = [];
 
 ordenVisualActivo.forEach((item) => {
@@ -1774,7 +1786,7 @@ useEffect(() => {
         )
       : null;
     const textoPersona = item.enfermero
-      ? obtenerNombreConMarcaTurnante(item.enfermero)
+      ? obtenerNombreAsignacionCalendario(item)
       : sectorLiberadoPorAusencia
         ? "Sin asignar — ausencia"
         : noDisponibleDelSector
@@ -2032,6 +2044,9 @@ useEffect(() => {
       const personasAsignadas = movimientosReales
         .map((movimiento) => movimiento.persona)
         .filter(Boolean);
+      const procedenciasActivas = obtenerProcedenciasCoberturaAutomaticaActivas(
+        asignacionOrdenada
+      );
 
       setCalendario((prev) => {
         if (prev !== calendario) return prev;
@@ -2057,6 +2072,10 @@ useEffect(() => {
                   )
                 )
               )
+            },
+            procedenciaCoberturaAutomaticaDia: {
+              ...(prev.procedenciaCoberturaAutomaticaDia || {}),
+              [keyDia]: procedenciasActivas
             }
           } : {}),
           asistenciaDia: quitarPersonasDeSinAsignar({
@@ -2520,7 +2539,7 @@ useEffect(() => {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="text-sm text-slate-600">
             {item.enfermero
-              ? obtenerNombreConMarcaTurnante(item.enfermero)
+              ? obtenerNombreAsignacionCalendario(item)
               : sectorLiberadoPorAusencia
                 ? "Sin asignar — ausencia"
                 : noDisponibleDelSector

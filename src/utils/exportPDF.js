@@ -12,7 +12,7 @@ import {
   resolverPersonaDesdeReferencia
 } from "./referenciasPersonas.js";
 import { resolverPersonaDeCertificacion } from "./certificacionesPersonas.js";
-import { obtenerNombreConMarcaTurnante } from "./etiquetaTurnante.js";
+import { obtenerNombreAsignacionCalendario } from "./procedenciaCoberturaAutomatica.js";
 import {
   obtenerConfiguracionPlanillaEfectiva,
   obtenerFilasActivas,
@@ -646,7 +646,7 @@ export const prepararFilasCalendarioPDF = (asignaciones) =>
     .filter((item) => item?.nombre && item.tipo !== "divider")
     .map((item) => [
       String(item.nombre).toUpperCase(),
-      String(obtenerNombreConMarcaTurnante(item.enfermero) ||
+      String(obtenerNombreAsignacionCalendario(item) ||
         item.etiquetaVacio ||
         "Sin cobertura").toUpperCase()
     ]);

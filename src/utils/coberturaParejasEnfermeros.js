@@ -110,7 +110,9 @@ export const aplicarPrioridadCoberturaParejas = ({
     destino.enfermero = origen.enfermero;
     destino.coberturaDesdePareja = origen.nombre;
     destino.origenLogicoPareja = origenSectorId;
+    destino.origenCoberturaAutomaticaSectorId = origenSectorId;
     origen.enfermero = null;
+    delete origen.origenCoberturaAutomaticaSectorId;
     origen.cedidoAPareja = destino.nombre;
   });
 

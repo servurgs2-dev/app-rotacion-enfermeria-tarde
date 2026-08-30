@@ -55,6 +55,7 @@ export const crearRotacion3DiasVacia = () => ({
 const crearCalendarioCategoriaVacio = () => ({
   cambiosDia: {},
   procedenciaCambiosDia: {},
+  procedenciaCoberturaAutomaticaDia: {},
   cambiosParoDia: {},
   extras: {},
   noDisponibles: {},

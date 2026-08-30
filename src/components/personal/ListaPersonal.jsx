@@ -64,11 +64,13 @@ function ListaPersonal({
   const [errorEdicion, setErrorEdicion] = useState("");
   const [verificandoExclusividad, setVerificandoExclusividad] = useState(false);
   const [limpiezaPersonal, setLimpiezaPersonal] = useState(null);
+  const [personaPendienteEliminar, setPersonaPendienteEliminar] = useState(null);
   const [editorVigencias, setEditorVigencias] = useState(null);
   const [editorVigenciasSupervision, setEditorVigenciasSupervision] = useState(null);
   const [movimientoPadronBase, setMovimientoPadronBase] = useState(null);
   const validacionNombreIdRef = useRef(0);
   const validacionEnCursoRef = useRef(false);
+  const eliminacionPersonaEnCursoRef = useRef(false);
   const perfilValido = validarPerfil(perfil);
   const puedeEditarVigenciasPropias = Boolean(
     perfilValido?.activo && perfilValido.rol === ROLES_APLICACION.LICENCIADO
@@ -105,7 +107,11 @@ function ListaPersonal({
   ].join("|");
 
   useEffect(() => {
-    const timeout = setTimeout(() => setLimpiezaPersonal(null), 0);
+    const timeout = setTimeout(() => {
+      setLimpiezaPersonal(null);
+      setPersonaPendienteEliminar(null);
+      eliminacionPersonaEnCursoRef.current = false;
+    }, 0);
     return () => clearTimeout(timeout);
   }, [claveContextoLimpieza]);
 
@@ -255,6 +261,51 @@ function ListaPersonal({
     }
     onLimpiarPersonal();
     setLimpiezaPersonal(null);
+  };
+
+  const solicitarEliminarPersona = (persona) => {
+    if (soloLectura) return;
+    eliminacionPersonaEnCursoRef.current = false;
+    setPersonaPendienteEliminar({
+      persona,
+      contextoClave: claveContextoLimpieza,
+      personalEsperado: personal,
+      error: ""
+    });
+  };
+
+  const cancelarEliminarPersona = () => {
+    setPersonaPendienteEliminar(null);
+    eliminacionPersonaEnCursoRef.current = false;
+  };
+
+  const confirmarEliminarPersona = () => {
+    if (eliminacionPersonaEnCursoRef.current) return;
+    const pendiente = personaPendienteEliminar;
+    const personaId = String(pendiente?.persona?.id ?? "").trim();
+    const coincidencias = personal.filter(
+      (persona) => String(persona?.id ?? "").trim() === personaId
+    );
+    if (
+      !pendiente ||
+      pendiente.contextoClave !== claveContextoLimpieza ||
+      pendiente.personalEsperado !== personal ||
+      soloLectura ||
+      coincidencias.length !== 1 ||
+      coincidencias[0] !== pendiente.persona
+    ) {
+      setPersonaPendienteEliminar((actual) => actual
+        ? {
+            ...actual,
+            error: "El Personal cambió mientras confirmabas. Revisá nuevamente."
+          }
+        : actual);
+      return;
+    }
+
+    eliminacionPersonaEnCursoRef.current = true;
+    setPersonaPendienteEliminar(null);
+    onEliminarPersona(pendiente.persona);
   };
 
   const iniciarEdicionNombre = (persona) => {
@@ -447,6 +498,21 @@ function ListaPersonal({
           textoConfirmar="Sí, eliminar todo el Personal"
           onCancelar={() => setLimpiezaPersonal(null)}
           onConfirmar={confirmarLimpiezaPersonal}
+        />
+      )}
+
+      {personaPendienteEliminar?.contextoClave === claveContextoLimpieza && (
+        <PanelConfirmacionLimpieza
+          titulo="Eliminar funcionario"
+          descripcion={`¿Eliminar a ${personaPendienteEliminar.persona.nombre} de Personal?`}
+          detalles={personaPendienteEliminar.persona.funcionario
+            ? [`Funcionario: ${personaPendienteEliminar.persona.funcionario}`]
+            : []}
+          advertencia="Se quitará del padrón del mes actual y se limpiarán sus asignaciones y registros asociados en este turno."
+          error={personaPendienteEliminar.error}
+          textoConfirmar="Eliminar"
+          onCancelar={cancelarEliminarPersona}
+          onConfirmar={confirmarEliminarPersona}
         />
       )}
 
@@ -701,15 +767,17 @@ function ListaPersonal({
 
 <td className="px-3 py-2">
   <button
+    type="button"
     disabled={soloLectura || !esFisicaEnTurnoVisualizado}
     className="text-red-500 hover:text-red-700 transition"
+    aria-label={`Eliminar a ${p.nombre}`}
     onClick={() => {
       if (!esFisicaEnTurnoVisualizado) return;
       if (idsDuplicados.has(String(personaOperacion?.id ?? "").trim())) {
         setErrorIdentidad(MENSAJE_IDENTIDAD_DUPLICADA);
         return;
       }
-      onEliminarPersona(personaOperacion);
+      solicitarEliminarPersona(personaOperacion);
     }}
   >
     ❌

@@ -140,7 +140,8 @@ probar("aparición transversal conserva EditorVigencias", () => assert.match(lis
   /!esFisicaEnTurnoVisualizado[\s\S]*Editar mi turno/));
 probar("aparición transversal no ejecuta eliminación legacy", () => {
   assert.match(lista, /disabled=\{soloLectura \|\| !esFisicaEnTurnoVisualizado\}/);
-  assert.match(lista, /if \(!esFisicaEnTurnoVisualizado\) return;[\s\S]*onEliminarPersona\(personaOperacion\)/);
+  assert.match(lista, /if \(!esFisicaEnTurnoVisualizado\) return;[\s\S]*solicitarEliminarPersona\(personaOperacion\)/);
+  assert.match(lista, /onEliminarPersona\(pendiente\.persona\)/);
 });
 probar("aparición transversal no edita identidad legacy", () => assert.equal(
   (lista.match(/disabled=\{soloLectura \|\| !esFisicaEnTurnoVisualizado\}/g) || []).length >= 7,

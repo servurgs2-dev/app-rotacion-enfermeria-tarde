@@ -9,7 +9,7 @@ import {
   configuracionesDotacionIguales,
   crearFuenteEdicionConfiguracionDotacion,
   crearBorradorConfiguracionDotacion,
-  esMesHistoricoSupervision,
+  puedeEditarMesSupervision,
   mensajeHumanoErrorGuardadoConfiguracionDotacion,
   prepararGuardadoBorradorConfiguracionDotacion,
   resolverSincronizacionEditorConfiguracionDotacion,
@@ -178,7 +178,7 @@ function EditorConfiguracionDotacionSupervision({ configuracionMes }) {
     borradorActivo,
     fuenteActiva.configuracion
   );
-  const soloLectura = esMesHistoricoSupervision(configuracionMes.mes);
+  const soloLectura = !puedeEditarMesSupervision(configuracionMes.mes);
   const puedeGuardar = !soloLectura && conCambios && validacion.ok &&
     !guardando && !configuracionMes.recargando;
 

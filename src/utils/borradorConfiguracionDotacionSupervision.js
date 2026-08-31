@@ -2,6 +2,10 @@ import {
   copiarConfiguracionDotacion,
   validarConfiguracionDotacion
 } from "./dotacionSupervision.js";
+import {
+  esMesHistoricoCerrado,
+  estaEnVentanaEditableTemporal
+} from "./periodosMensuales.js";
 
 export const TURNOS_EDITOR_DOTACION_SUPERVISION = Object.freeze([
   "noche",
@@ -157,7 +161,18 @@ export const esMesHistoricoSupervision = (mes, ahora = new Date()) => {
   }).formatToParts(ahora);
   const ano = partes.find(({ type }) => type === "year")?.value;
   const mesActual = partes.find(({ type }) => type === "month")?.value;
-  return typeof mes === "string" && mes < `${ano}-${mesActual}`;
+  return esMesHistoricoCerrado({ mes, mesReferencia: `${ano}-${mesActual}` });
+};
+
+export const puedeEditarMesSupervision = (mes, ahora = new Date()) => {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Montevideo",
+    year: "numeric",
+    month: "2-digit"
+  }).formatToParts(ahora);
+  const ano = partes.find(({ type }) => type === "year")?.value;
+  const mesActual = partes.find(({ type }) => type === "month")?.value;
+  return estaEnVentanaEditableTemporal({ mes, mesReferencia: `${ano}-${mesActual}` });
 };
 
 export const resolverRevisionEsperadaConfiguracionDotacion = ({
@@ -173,7 +188,7 @@ export const prepararGuardadoBorradorConfiguracionDotacion = ({
   configuracionInicial,
   ahora = new Date()
 } = {}) => {
-  if (esMesHistoricoSupervision(mes, ahora)) {
+  if (!puedeEditarMesSupervision(mes, ahora)) {
     return { ok: false, codigo: "MES_HISTORICO_PROTEGIDO" };
   }
   const validacion = validarBorradorConfiguracionDotacion(borrador);

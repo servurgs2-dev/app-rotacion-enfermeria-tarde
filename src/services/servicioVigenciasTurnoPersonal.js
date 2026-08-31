@@ -2,8 +2,18 @@ import {
   validarRangosTurnoPropio,
   validarVigenciasPersonaMes
 } from "../utils/vigenciasTurnoPersonal.js";
+import { puedeMutarPeriodoMensual } from "../utils/proteccionTemporalMensual.js";
 
 const CLAVES_RANGO_PERSISTIDO = ["desde", "hasta", "turno"];
+
+const exigirPeriodoEditable = (mes, mesReferencia) => {
+  if (!puedeMutarPeriodoMensual({ mes, mesReferencia })) {
+    throw crearErrorDominio(
+      "El período está fuera de la ventana habilitada para editar vigencias.",
+      "MES_FUERA_DE_VENTANA"
+    );
+  }
+};
 
 const crearErrorDominio = (mensaje, codigo, detalles) => {
   const error = new TypeError(mensaje);
@@ -199,11 +209,13 @@ export const crearServicioVigenciasTurnoPersonal = (repositorio) => {
 
   const guardarVigenciasTurnoPersonaMes = async ({
     mes,
+    mesReferencia,
     personaId,
     vigencias,
     revisionEsperada
   } = {}) => {
     const { mes: periodo, personaId: identidad } = normalizarContexto({ mes, personaId });
+    exigirPeriodoEditable(periodo, mesReferencia);
     const revision = normalizarRevisionVigenciasTurno(revisionEsperada);
     const compactas = compactarVigencias({ mes: periodo, personaId: identidad, vigencias });
     const respuesta = contenidoRpc(await repositorio.guardarFilaVigenciasTurnoPersonaMes({
@@ -238,10 +250,12 @@ export const crearServicioVigenciasTurnoPersonal = (repositorio) => {
 
   const eliminarVigenciasTurnoPersonaMes = async ({
     mes,
+    mesReferencia,
     personaId,
     revisionEsperada
   } = {}) => {
     const { mes: periodo, personaId: identidad } = normalizarContexto({ mes, personaId });
+    exigirPeriodoEditable(periodo, mesReferencia);
     const revision = normalizarRevisionVigenciasTurno(revisionEsperada, { permitirCero: false });
     const respuesta = contenidoRpc(await repositorio.eliminarFilaVigenciasTurnoPersonaMes({
       mes: periodo,
@@ -278,11 +292,13 @@ export const crearServicioVigenciasTurnoPersonal = (repositorio) => {
 
   const guardarVigenciasTurnoPersonaMesTurnoPropio = async ({
     mes,
+    mesReferencia,
     personaId,
     rangos,
     revisionEsperada
   } = {}) => {
     const { mes: periodo, personaId: identidad } = normalizarContexto({ mes, personaId });
+    exigirPeriodoEditable(periodo, mesReferencia);
     const revision = normalizarRevisionVigenciasTurno(revisionEsperada);
     const validacion = validarRangosTurnoPropio({ mes: periodo, rangos });
     if (!validacion.valido) {

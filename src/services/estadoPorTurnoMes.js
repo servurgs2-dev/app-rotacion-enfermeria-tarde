@@ -12,5 +12,6 @@ export const {
   cargarEstadoPorTurnoMesConRevision,
   guardarEstadoPorTurnoMes,
   guardarEstadoTurnoMesConRevision,
-  cargarEstadosTurnosPorMes
+  cargarEstadosTurnosPorMes,
+  listarMesesExistentesPorTurno
 } = crearRepositorioEstadoPorTurnoMes(supabase);

@@ -1,9 +1,11 @@
-import { cargarEstadoMensual } from "./estadoMensual.js";
+import { crearServicioDescubrimientoMeses } from "../utils/descubrimientoMeses.js";
+import { cargarEstadoMensual, listarMesesEstadoMensual } from "./estadoMensual.js";
 import {
   cargarEstadoPorTurnoMes,
   cargarEstadoPorTurnoMesConRevision,
   guardarEstadoPorTurnoMes,
-  guardarEstadoTurnoMesConRevision as guardarEstadoPorTurnoMesVersionado
+  guardarEstadoTurnoMesConRevision as guardarEstadoPorTurnoMesVersionado,
+  listarMesesExistentesPorTurno
 } from "./estadoPorTurnoMes.js";
 
 const TURNO_CON_RESPALDO_HISTORICO = "tarde";
@@ -54,6 +56,11 @@ export const {
   cargarNuevo: cargarEstadoPorTurnoMes,
   guardarNuevo: guardarEstadoPorTurnoMes,
   cargarHistorico: cargarEstadoMensual
+});
+
+export const listarMesesExistentes = crearServicioDescubrimientoMeses({
+  listarNuevos: listarMesesExistentesPorTurno,
+  listarLegacyTarde: listarMesesEstadoMensual
 });
 
 export const crearServicioEstadoTurnosConRevision = ({

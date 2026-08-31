@@ -294,8 +294,8 @@ probar("reinicio revalida turno, mes, permiso, conflicto y revisión", () => {
     "turnoActivo",
     "mesActivo",
     "revisionConfirmada",
-    "puedeEditarActivo",
-    "modoSoloLecturaEfectiva",
+    "puedeMutarClaveMensual",
+    "reinicioMes.mesActivo",
     "metadatos?.conflicto"
   ]) assert.ok(bloque.includes(patron), patron);
 });

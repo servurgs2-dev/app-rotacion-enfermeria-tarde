@@ -81,12 +81,19 @@ probar("borrador inválido no prepara RPC", () => {
     configuracionInicial: base, ahora: new Date("2026-08-24T15:00:00Z")
   }).codigo, "CONFIGURACION_INVALIDA");
 });
-probar("mes histórico no prepara RPC", () => assert.equal(
+probar("mes histórico cerrado no prepara RPC", () => assert.equal(
   prepararGuardadoBorradorConfiguracionDotacion({
-    mes: "2026-07", origen: "persistida", revision: "2", borrador: editado,
+    mes: "2026-06", origen: "persistida", revision: "2", borrador: editado,
     configuracionInicial: base, ahora: new Date("2026-08-24T15:00:00Z")
   }).codigo,
   "MES_HISTORICO_PROTEGIDO"
+));
+probar("mes anterior inmediato conserva preparación", () => assert.equal(
+  prepararGuardadoBorradorConfiguracionDotacion({
+    mes: "2026-07", origen: "persistida", revision: "2", borrador: editado,
+    configuracionInicial: base, ahora: new Date("2026-08-24T15:00:00Z")
+  }).ok,
+  true
 ));
 probar("éxito RPC se interpreta", () => assert.deepEqual(
   interpretarRespuestaGuardadoConfiguracionDotacion({

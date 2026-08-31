@@ -85,7 +85,7 @@ probar("las herramientas permanecen montadas y no se duplican", () => {
   assert.equal((app.match(/<ListaPersonal/g) || []).length, 1);
   assert.equal((app.match(/<Estadisticas/g) || []).length, 1);
   assert.equal((app.match(/<HistorialCambios/g) || []).length, 1);
-  assert.match(app, /subvistaMas === "personal" \? "" : "hidden"/);
+  assert.match(app, /subvistaMas === "personal" && !mesActivoSinInformacion \? "" : "hidden"/);
   assert.match(app, /subvistaMas === "estadisticas" \? "" : "hidden"/);
 });
 

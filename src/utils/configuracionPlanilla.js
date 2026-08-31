@@ -12,6 +12,7 @@ import {
   VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
 } from "./estructuraLicenciadosDinamica.js";
 import { normalizar } from "./texto.js";
+import { esMesHistoricoCerrado } from "./periodosMensuales.js";
 
 export const TIPOS_FILA_PLANILLA = Object.freeze({
   SECTOR: "sector",
@@ -151,13 +152,6 @@ const copiarFilaSnapshot = (fila) => Object.fromEntries(
 );
 
 const tieneTexto = (valor) => typeof valor === "string" && valor.trim().length > 0;
-const PATRON_MES = /^\d{4}-(0[1-9]|1[0-2])$/;
-
-const obtenerMesActualLocal = () => {
-  const hoy = new Date();
-  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
-};
-
 const resolverEtiquetasVigentesMesEditable = ({
   filas,
   categoria,
@@ -165,10 +159,7 @@ const resolverEtiquetasVigentesMesEditable = ({
   mes,
   mesReferencia
 }) => {
-  const mesActual = PATRON_MES.test(mesReferencia || "")
-    ? mesReferencia
-    : obtenerMesActualLocal();
-  if (categoria !== "enfermero" || mes < mesActual) return filas;
+  if (categoria !== "enfermero" || esMesHistoricoCerrado({ mes, mesReferencia })) return filas;
   return filas.map((fila) => fila?.sectorId === "boxes_20_22_24"
     ? {
         ...fila,

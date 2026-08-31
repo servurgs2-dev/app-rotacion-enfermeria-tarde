@@ -163,8 +163,10 @@ probar("lista visible usa padrón y conserva el array físico para operaciones",
   assert.match(lista, /const filtrados = personalVisible\.filter/);
   assert.match(lista, /const personalFisicoPorId = new Map\(personal\.map/);
 });
-probar("App pasa perfil e histórico existentes", () => assert.match(app,
-  /perfil=\{perfil\}[\s\S]*modoHistorico=\{mesActivo < mesActual\}/));
+probar("App pasa perfil y el histórico cerrado central", () => {
+  assert.match(app, /const mesHistoricoCerradoActivo = esMesHistoricoCerrado/);
+  assert.match(app, /perfil=\{perfil\}[\s\S]*modoHistorico=\{mesHistoricoCerradoActivo\}/);
+});
 probar("Enfermería no monta editor y Supervisión usa componente separado", () => {
   assert.match(wrapper, /guardarVigenciasTurnoPersonaMesTurnoPropio/);
   assert.match(lista, /EditorVigenciasSupervision/);

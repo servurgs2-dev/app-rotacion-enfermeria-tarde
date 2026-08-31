@@ -222,7 +222,7 @@ probar("20 snapshots históricos conservan su etiqueta congelada y la identidad"
     const resultado = obtenerConfiguracionPlanillaEfectiva({
       estadoMensual: { configuracionPlanilla: { enfermero: snapshot } },
       ...contextoHistorico,
-      mesReferencia: "2026-08"
+      mesReferencia: "2026-09"
     });
     const fila = resultado.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
     assert.equal(fila.etiqueta, etiquetaHistorica);
@@ -251,6 +251,23 @@ probar("21 mes editable reetiqueta la copia efectiva sin mutar el snapshot prepa
     assert.equal(filaEfectiva.filaId, "enfermero.sector.boxes_20_22_24");
     assert.equal(filaPersistida.etiqueta, etiquetaAnterior);
   }
+});
+
+probar("22 mes anterior inmediato usa etiqueta vigente sin reescribir snapshot", () => {
+  const contexto = { turno: "manana", categoria: "enfermero", mes: "2026-08" };
+  const snapshot = crearSnapshotConfiguracionPlanilla(contexto);
+  const filaPersistida = snapshot.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
+  filaPersistida.etiqueta = "19-22+24";
+  const resultado = obtenerConfiguracionPlanillaEfectiva({
+    estadoMensual: { configuracionPlanilla: { enfermero: snapshot } },
+    ...contexto,
+    mesReferencia: "2026-09"
+  });
+  assert.equal(
+    resultado.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24").etiqueta,
+    "19-20+22-24"
+  );
+  assert.equal(filaPersistida.etiqueta, "19-22+24");
 });
 
 console.log(`\nEtapa 34B1: ${total} pruebas de snapshot aprobadas.`);

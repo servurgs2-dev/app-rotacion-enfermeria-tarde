@@ -1,3 +1,5 @@
+import { puedeMutarEstadoMensual } from "./proteccionTemporalMensual.js";
+
 const REVISION_POSITIVA = /^[1-9]\d*$/;
 
 export const normalizarCargaVersionada = (resultado) => {
@@ -29,6 +31,8 @@ export const seleccionarEstadoCargaVersionada = (resultado, crearEstadoVacio) =>
 };
 
 export const evaluarDisponibilidadRestauracion = ({
+  mes,
+  mesReferencia,
   esSupervision,
   coincideContexto,
   metadatos,
@@ -45,6 +49,22 @@ export const evaluarDisponibilidadRestauracion = ({
       permitida: false,
       codigo: "otro_contexto",
       mensaje: "Para restaurar esta revisión, primero abrí ese turno y mes en la aplicación."
+    };
+  }
+  const autorizacionTemporal = puedeMutarEstadoMensual({
+    mes,
+    mesReferencia,
+    existeRemoto: metadatos?.existeRemoto === true
+  });
+  if (!autorizacionTemporal) {
+    return {
+      permitida: false,
+      codigo: metadatos?.existeRemoto === true
+        ? "periodo_protegido"
+        : "mes_inexistente",
+      mensaje: metadatos?.existeRemoto === true
+        ? "Este período está fuera de la ventana habilitada para restauraciones."
+        : "No existe un estado mensual remoto que pueda restaurarse."
     };
   }
   if (bloqueadaTrasRestauracion) {

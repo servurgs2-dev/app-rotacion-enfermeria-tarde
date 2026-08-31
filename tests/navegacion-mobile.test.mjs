@@ -43,9 +43,9 @@ probar("App conserva una sola arquitectura de navegación con Inicio inicial", (
 });
 
 probar("Calendario, Planilla y Novedades tienen vistas exclusivas", () => {
-  assert.match(app, /vistaActiva === "calendario" \? "" : "hidden"/);
-  assert.match(app, /vistaActiva === "planilla" \? "" : "hidden"/);
-  assert.match(app, /vistaActiva === "novedades" \? "" : "hidden"/);
+  assert.match(app, /vistaActiva === "calendario" && !mesActivoSinInformacion \? "" : "hidden"/);
+  assert.match(app, /vistaActiva === "planilla" && !mesActivoSinInformacion \? "" : "hidden"/);
+  assert.match(app, /vistaActiva === "novedades" && !mesActivoSinInformacion \? "" : "hidden"/);
   assert.equal((app.match(/<CalendarioDiario/g) || []).length, 2, "conserva ambas categorías del Calendario");
   assert.equal((app.match(/<PlanillaMensual/g) || []).length, 2, "conserva ambas categorías de Planilla");
   assert.equal((app.match(/<Novedades/g) || []).length, 1);
@@ -69,7 +69,7 @@ probar("Inicio ofrece accesos rápidos sin duplicar módulos", () => {
 });
 
 probar("turno, mes, histórico y paneles globales conservan sus conexiones", () => {
-  assert.match(app, /value=\{mesActivo\}/);
+  assert.match(app, /<NavegadorMeses[\s\S]*mesActivo=\{mesActivo\}/);
   assert.match(app, /onClick=\{cambiarTurno\}/);
   assert.match(app, /soloLectura=\{modoSoloLecturaEfectiva\}/);
   assert.match(app, /<PanelConflictoEdicion/);

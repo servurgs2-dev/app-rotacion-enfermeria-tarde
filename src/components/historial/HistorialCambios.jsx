@@ -380,6 +380,7 @@ function HistorialCambios({
     let resultado;
     try {
       resultado = await restaurarRevision({
+        mes: revision.mes,
         historialId: revision.id,
         revisionEsperada: preflight.revisionEsperada
       });

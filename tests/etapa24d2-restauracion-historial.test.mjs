@@ -33,11 +33,14 @@ const prueba = (nombre, ejecutar) => {
 };
 
 const metadatosDisponibles = {
+  existeRemoto: true,
   revisionConfirmada: "9007199254740993",
   estado: "guardado",
   conflicto: null
 };
 const evaluar = (cambios = {}) => evaluarDisponibilidadRestauracion({
+  mes: "2026-09",
+  mesReferencia: "2026-09",
   esSupervision: true,
   coincideContexto: true,
   metadatos: metadatosDisponibles,
@@ -142,7 +145,9 @@ prueba("UI muestra truncado con totales completos", () => assert.match(panel, /t
 prueba("componente usa restaurarRevision", () => assert.match(historial, /await restaurarRevision\(\{/));
 prueba("envía historialId", () => assert.match(historial, /historialId: revision\.id/));
 prueba("envía revisionEsperada", () => assert.match(historial, /revisionEsperada: preflight\.revisionEsperada/));
-for (const campo of ["data:", "turno:", "mes:", "autor:", "accion:"]) {
+prueba("envía mes sólo para la defensa temporal cliente", () =>
+  assert.match(historial, /mes: revision\.mes/));
+for (const campo of ["data:", "turno:", "autor:", "accion:"]) {
   prueba(`llamada no envía ${campo}`, () => {
     const inicio = historial.indexOf("await restaurarRevision({");
     const llamada = historial.slice(inicio, historial.indexOf("});", inicio) + 3);

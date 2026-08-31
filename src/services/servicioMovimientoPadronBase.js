@@ -1,3 +1,5 @@
+import { puedeMutarPeriodoMensual } from "../utils/proteccionTemporalMensual.js";
+
 const TURNOS = new Set(["manana", "tarde", "vespertino", "noche"]);
 const CODIGOS_BACKEND = Object.freeze([
   "PERMISO_SUPERVISION_REQUERIDO",
@@ -122,6 +124,7 @@ export const crearServicioMovimientoPadronBase = (repositorio) => {
 
   const moverPersonaPadronBaseTurnoMes = async ({
     mes,
+    mesReferencia,
     personaId,
     turnoOrigen,
     turnoDestino,
@@ -136,6 +139,12 @@ export const crearServicioMovimientoPadronBase = (repositorio) => {
     };
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(contexto.mes)) {
       throw crearError("El mes no tiene formato YYYY-MM.", "MES_INVALIDO");
+    }
+    if (!puedeMutarPeriodoMensual({ mes: contexto.mes, mesReferencia })) {
+      throw crearError(
+        "No se puede cambiar el turno base fuera de la ventana temporal editable.",
+        "MES_HISTORICO_PROTEGIDO"
+      );
     }
     if (!TURNOS.has(contexto.turnoOrigen)) {
       throw crearError("El turno de origen no es válido.", "TURNO_ORIGEN_INVALIDO");

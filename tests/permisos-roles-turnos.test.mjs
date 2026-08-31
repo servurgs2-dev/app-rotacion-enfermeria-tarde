@@ -96,8 +96,10 @@ probar("selector conserva los cuatro turnos para roles lectores", () =>
   assert.match(selector, /ORDEN_TURNOS\.map\(\(turnoId\) => turnos\[turnoId\]\)/));
 probar("App calcula modo solo lectura por perfil y turno", () =>
   assert.match(app, /const modoSoloLectura = esSoloLectura\(perfil, turnoActivo\)/));
-probar("App protege guardado con permiso de turno", () =>
-  assert.match(app, /if \(!data \|\| !puedeEditarTurno\(perfil, turnoId\)\)/));
+probar("App protege guardado con permiso de turno y período mensual", () => {
+  assert.match(app, /return puedeEditarTurno\(perfil, turnoId\) && puedeMutarEstadoMensual/);
+  assert.match(app, /if \(!data \|\| !puedeMutarClaveMensual\(\{ clave, turnoId, mes \}\)\)/);
+});
 probar("Panel sólo se muestra a Supervisión", () =>
   assert.match(app, /mostrarSupervision=\{esPerfilSupervision\(perfil\)\}/));
 probar("Panel sólo se monta para Supervisión", () =>

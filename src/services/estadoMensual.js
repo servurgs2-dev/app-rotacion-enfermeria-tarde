@@ -1,7 +1,9 @@
 import { supabase } from "../supabase.js";
 import { normalizarEstadoMensual } from "../utils/estadoMensual.js";
+import { validarMes as validarMesCentral } from "../utils/periodosMensuales.js";
 
 const validarMes = (mes) => {
+  validarMesCentral(mes);
   if (typeof mes !== "string" || !mes.trim()) {
     throw new TypeError("El mes debe ser un string no vacío.");
   }
@@ -39,10 +41,23 @@ export const crearRepositorioEstadoMensual = (clienteSupabase) => {
     if (error) throw error;
   };
 
-  return { cargarEstadoMensual, guardarEstadoMensual };
+  const listarMesesEstadoMensual = async () => {
+    const { data, error } = await clienteSupabase
+      .from("estado_por_mes")
+      .select("mes");
+
+    if (error) throw error;
+    return [...new Set((Array.isArray(data) ? data : []).map((fila) => {
+      validarMes(fila?.mes);
+      return fila.mes;
+    }))].sort((mesA, mesB) => mesB.localeCompare(mesA));
+  };
+
+  return { cargarEstadoMensual, guardarEstadoMensual, listarMesesEstadoMensual };
 };
 
 export const {
   cargarEstadoMensual,
-  guardarEstadoMensual
+  guardarEstadoMensual,
+  listarMesesEstadoMensual
 } = crearRepositorioEstadoMensual(supabase);

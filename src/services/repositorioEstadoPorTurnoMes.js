@@ -1,5 +1,6 @@
 import { TURNOS } from "../config/turnos.js";
 import { normalizarEstadoMensual } from "../utils/estadoMensual.js";
+import { validarMes as validarMesCentral } from "../utils/periodosMensuales.js";
 
 const validarTurno = (turnoId) => {
   if (typeof turnoId !== "string" || !turnoId.trim()) {
@@ -15,6 +16,7 @@ const validarTurno = (turnoId) => {
 };
 
 const validarMes = (mes) => {
+  validarMesCentral(mes);
   if (
     typeof mes !== "string" ||
     !/^\d{4}-(0[1-9]|1[0-2])$/.test(mes.trim())
@@ -23,6 +25,29 @@ const validarMes = (mes) => {
   }
 
   return mes.trim();
+};
+
+export const agruparMesesExistentesPorTurno = (filas = []) => {
+  const turnosPorMes = new Map();
+  filas.forEach((fila) => {
+    const mes = validarMes(fila?.mes);
+    const turno = validarTurno(fila?.turno);
+    if (!turnosPorMes.has(mes)) turnosPorMes.set(mes, new Set());
+    turnosPorMes.get(mes).add(turno);
+  });
+  const ordenTurnos = Object.keys(TURNOS);
+  return [...turnosPorMes.entries()]
+    .sort(([mesA], [mesB]) => mesB.localeCompare(mesA))
+    .map(([mes, turnos]) => ({
+      mes,
+      turnos: ordenTurnos.filter((turno) => turnos.has(turno))
+    }));
+};
+
+export const existeMesParaTurno = (meses, mes, turnoId) => {
+  validarMes(mes);
+  const turno = validarTurno(turnoId);
+  return Boolean(meses?.find((item) => item.mes === mes)?.turnos?.includes(turno));
 };
 
 export const normalizarRevisionConcurrencia = (
@@ -212,11 +237,21 @@ export const crearRepositorioEstadoPorTurnoMes = (
     );
   };
 
+  const listarMesesExistentesPorTurno = async () => {
+    const { data, error } = await clienteSupabase
+      .from("estado_por_turno_mes")
+      .select("turno, mes");
+
+    if (error) throw error;
+    return agruparMesesExistentesPorTurno(Array.isArray(data) ? data : []);
+  };
+
   return {
     cargarEstadoPorTurnoMes,
     cargarEstadoPorTurnoMesConRevision,
     guardarEstadoPorTurnoMes,
     guardarEstadoTurnoMesConRevision,
-    cargarEstadosTurnosPorMes
+    cargarEstadosTurnosPorMes,
+    listarMesesExistentesPorTurno
   };
 };

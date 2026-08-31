@@ -43,7 +43,7 @@ const crearEstado = () => {
 const ordenar = (asignaciones, estado, tipo = "enfermero") =>
   obtenerAsignacionesCalendarioPDF({ asignaciones, estadoMensual: estado, tipo, ...contexto });
 
-probar("orden histórico y etiquetas permanecen iguales con IDs", () => {
+probar("PDF diario conserva el orden operativo recibido aunque difiera del mensual", () => {
   const estado = crearEstado();
   const filas = obtenerFilasActivas(estado.configuracionPlanilla.enfermero.filas)
     .filter((fila) => fila.tipo === "sector")
@@ -55,8 +55,8 @@ probar("orden histórico y etiquetas permanecen iguales con IDs", () => {
     tipo: "sector"
   }));
   const resultado = ordenar(asignaciones, estado);
-  assert.deepEqual(resultado.map((fila) => fila.sectorId), filas.map((fila) => fila.sectorId));
-  assert.deepEqual(resultado.map((fila) => fila.nombre), filas.map((fila) => fila.etiqueta));
+  assert.deepEqual(resultado, asignaciones);
+  assert.notDeepEqual(resultado.map((fila) => fila.sectorId), filas.map((fila) => fila.sectorId));
 });
 
 probar("sector renombrado conserva identidad, posición, texto y persona", () => {
@@ -82,33 +82,30 @@ probar("sector renombrado conserva identidad, posición, texto y persona", () =>
   }));
   const resultado = ordenar(asignaciones, estado);
   for (const [sectorId, etiqueta] of renombrados) {
-    const indiceEsperado = [...filas].sort((a, b) => a.orden - b.orden)
-      .findIndex((fila) => fila.sectorId === sectorId);
+    const indiceEsperado = asignaciones.findIndex((fila) => fila.sectorId === sectorId);
     assert.equal(resultado[indiceEsperado].sectorId, sectorId);
     assert.equal(resultado[indiceEsperado].nombre, etiqueta);
     assert.equal(resultado[indiceEsperado].enfermero.id, sectorId);
   }
 });
 
-probar("Drag & Drop configurado conserva identidad y define el orden vigente", () => {
+probar("Drag & Drop mensual no reordena la secuencia diaria final", () => {
   const estado = crearEstado();
   const filas = estado.configuracionPlanilla.enfermero.filas;
   filas.reverse().forEach((fila, indice) => { fila.orden = indice; });
   const sectores = filas.filter((fila) => fila.tipo === "sector");
   const asignaciones = sectores.map((fila) => ({ nombre: fila.etiqueta, sectorId: fila.sectorId, tipo: "sector" }));
-  assert.deepEqual(ordenar([...asignaciones].reverse(), estado).map((fila) => fila.sectorId), sectores.map((fila) => fila.sectorId));
+  const ordenDiario = [...asignaciones].reverse();
+  assert.deepEqual(ordenar(ordenDiario, estado), ordenDiario);
 });
 
-probar("fila inactiva no reaparece por sectorId ni alias histórico", () => {
+probar("PDF diario no agrega ni elimina filas de la secuencia final", () => {
   const estado = crearEstado();
   estado.configuracionPlanilla.enfermero.filas.find((fila) => fila.sectorId === "rea_1").activo = false;
-  const resultado = ordenar([
-    { nombre: "Crítico A", sectorId: "rea_1", tipo: "sector" },
-    { nombre: "REA 1", tipo: "sector" },
+  const finales = [
     { nombre: "REA 2", sectorId: "rea_2", tipo: "sector" }
-  ], estado);
-  assert.equal(resultado.some((fila) => fila.sectorId === "rea_1" || fila.nombre === "REA 1"), false);
-  assert.equal(resultado.some((fila) => fila.sectorId === "rea_2"), true);
+  ];
+  assert.deepEqual(ordenar(finales, estado), finales);
 });
 
 for (const modo of MODOS_REDISTRIBUCION) {

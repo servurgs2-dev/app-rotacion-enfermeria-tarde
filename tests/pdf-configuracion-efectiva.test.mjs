@@ -142,7 +142,7 @@ await probar("18 PDF legacy mantiene orden histórico", () => {
     configuracionSectores.enfermero.ordenPDF
   );
 });
-await probar("19 PDF diario con snapshot usa estructura nueva", () => {
+await probar("19 PDF diario de septiembre conserva el orden operativo recibido", () => {
   const asignaciones = snapshotEnfermero.filas
     .filter((fila) => fila.tipo === "sector")
     .map((fila) => ({ nombre: fila.etiqueta, enfermero: null, tipo: "sector" }));
@@ -153,11 +153,11 @@ await probar("19 PDF diario con snapshot usa estructura nueva", () => {
     mesActivo: "2026-09",
     tipo: "enfermero"
   });
-  assert.deepEqual(ordenadas.slice(0, 2).map((fila) => fila.nombre), [
+  assert.deepEqual(ordenadas, asignaciones);
+  assert.notDeepEqual(ordenadas.slice(0, 2).map((fila) => fila.nombre), [
     snapshotEnfermero.filas[1].etiqueta,
     snapshotEnfermero.filas[0].etiqueta
   ]);
-  assert.equal(ordenadas.some((fila) => fila.nombre === snapshotEnfermero.filas[2].etiqueta), false);
 });
 await probar("20 PDF de Planilla usa etiqueta de boxes por turno", () => {
   assert.equal(filasPlanilla("enfermero", legacy, "manana").includes("14-18"), true);
@@ -181,11 +181,11 @@ await probar("20a PDF diario conserva la etiqueta efectiva recibida desde Calend
 await probar("20aa PDF distingue snapshot histórico congelado de snapshot editable", () => {
   const historico = crearEstadoMensualVacio();
   const snapshotHistorico = crearSnapshotConfiguracionPlanilla({
-    turno: "manana", categoria: "enfermero", mes: "2026-07"
+    turno: "manana", categoria: "enfermero", mes: "2026-06"
   });
   snapshotHistorico.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24").etiqueta = "19-22+24";
   historico.configuracionPlanilla = { enfermero: snapshotHistorico };
-  assert.equal(filasPlanilla("enfermero", historico, "manana", "2026-07").includes("19-22+24"), true);
+  assert.equal(filasPlanilla("enfermero", historico, "manana", "2026-06").includes("19-22+24"), true);
 
   const preparado = crearEstadoMensualVacio();
   const snapshotPreparado = crearSnapshotConfiguracionPlanilla({

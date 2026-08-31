@@ -733,9 +733,10 @@ probar("PDF mensual v2 conserva filas base, T3 y T4 opcional sin destinos diario
   assert.equal(filasConT4.filter((fila) => fila === "T4").length, 1);
 });
 
-probar("exportPDF no reejecuta perfiles diarios y gatea sólo Licenciados v2", () => {
+probar("exportPDF no reordena la secuencia diaria con configuración mensual", () => {
   const fuente = fs.readFileSync("src/utils/exportPDF.js", "utf8");
-  assert.match(fuente, /tipo === "licenciado"[\s\S]*resolverVersionEstructuraLicenciados\(configuracionEfectiva\)/);
+  assert.match(fuente, /obtenerAsignacionesCalendarioPDF[\s\S]*return Array\.isArray\(asignaciones\) \? asignaciones : \[\]/);
+  assert.doesNotMatch(fuente, /clavesSectoresActivos|resolverEstructuraCalendario/);
   assert.doesNotMatch(fuente, /resolverCalendarioLicenciadosDinamico|resolverPerfilEstructuraLicenciadosDia/);
 });
 

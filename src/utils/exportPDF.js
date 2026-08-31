@@ -19,17 +19,6 @@ import {
   obtenerAliasesSector,
   obtenerSectorIdPorNombreHistorico
 } from "./configuracionPlanilla.js";
-import { resolverEstructuraCalendario } from "./estructuraCalendario.js";
-import {
-  resolverVersionEstructuraLicenciados,
-  VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
-} from "./estructuraLicenciadosDinamica.js";
-import {
-  crearIdentidadSector,
-  crearIdentidadTurnante,
-  obtenerClaveIdentidadOperativa,
-  resolverIdentidadOperativaAsignacion
-} from "./identidadOperativaAsignaciones.js";
 
 
 // 🔹 PLANILLA
@@ -651,69 +640,10 @@ export const prepararFilasCalendarioPDF = (asignaciones) =>
         "Sin cobertura").toUpperCase()
     ]);
 
-export const obtenerAsignacionesCalendarioPDF = ({
-  asignaciones,
-  estadoMensual,
-  turnoId,
-  mesActivo,
-  tipo
-} = {}) => {
-  const asignacionesActuales = Array.isArray(asignaciones) ? asignaciones : [];
-  const configuracionEfectiva = obtenerConfiguracionPlanillaEfectiva({
-    estadoMensual,
-    turno: turnoId,
-    categoria: tipo,
-    mes: mesActivo
-  });
-  if (!configuracionEfectiva || configuracionEfectiva.schemaVersion === null) {
-    return asignacionesActuales;
-  }
-  if (
-    tipo === "licenciado" &&
-    resolverVersionEstructuraLicenciados(configuracionEfectiva) ===
-      VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
-  ) {
-    // Calendario ya resolvió perfil, cobertura y movimientos: el PDF diario
-    // conserva esa representación final, incluidos los destinos sin fila mensual.
-    return asignacionesActuales;
-  }
-
-  const estructura = resolverEstructuraCalendario({ configuracionEfectiva });
-  const claveFilaConfigurada = (fila) => obtenerClaveIdentidadOperativa(
-    fila.tipo === "sector"
-      ? crearIdentidadSector(fila.sectorId)
-      : crearIdentidadTurnante(fila.turnanteId)
-  );
-  const clavesConfiguradas = new Set(
-    configuracionEfectiva.filas.map(claveFilaConfigurada).filter(Boolean)
-  );
-  const clavesSectoresActivos = estructura.filasConfiguracion
-    .filter((fila) => fila.tipo === "sector")
-    .map(claveFilaConfigurada)
-    .filter(Boolean);
-  const clavesAsignaciones = asignacionesActuales.map((asignacion) =>
-    obtenerClaveIdentidadOperativa(resolverIdentidadOperativaAsignacion(asignacion))
-  );
-  const usados = new Set();
-  const ordenadas = clavesSectoresActivos.flatMap((claveSector) => {
-    const indice = asignacionesActuales.findIndex((asignacion, indiceActual) =>
-      !usados.has(indiceActual) &&
-      clavesAsignaciones[indiceActual] === claveSector
-    );
-    if (indice < 0) return [];
-    usados.add(indice);
-    return [asignacionesActuales[indice]];
-  });
-  asignacionesActuales.forEach((asignacion, indice) => {
-    if (
-      !usados.has(indice) &&
-      asignacion?.tipo !== "divider" &&
-      !clavesConfiguradas.has(clavesAsignaciones[indice])
-    ) {
-      ordenadas.push(asignacion);
-    }
-  });
-  return ordenadas;
+export const obtenerAsignacionesCalendarioPDF = ({ asignaciones } = {}) => {
+  // CalendarioDiario ya resolvió la secuencia operativa final del día.
+  // El PDF diario debe conservarla sin reinterpretarla con el orden mensual.
+  return Array.isArray(asignaciones) ? asignaciones : [];
 };
 
 const dibujarListaCompactaPDF = ({

@@ -15,6 +15,48 @@ import {
 
 const esObjeto = (valor) => Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
 const clonarSerializable = (valor) => JSON.parse(JSON.stringify(valor));
+export const VERSION_SNAPSHOT_CIERRE_ACTUAL = 2;
+
+const CAMPOS_IDENTIDAD_ASIGNACION_V2 = Object.freeze([
+  "sectorId",
+  "filaId",
+  "turnanteId",
+  "groupId",
+  "syntheticId",
+  "destinoId"
+]);
+
+const copiarCamposDefinidos = (origen, campos) => Object.fromEntries(
+  campos
+    .filter((campo) => origen?.[campo] !== undefined && origen?.[campo] !== null)
+    .map((campo) => [campo, origen[campo]])
+);
+
+const crearReferenciaPersonaSnapshotV2 = (persona) => {
+  const referencia = crearReferenciaPersona(persona);
+  if (!referencia) return null;
+  return {
+    ...referencia,
+    ...(persona?.esTurnante === true ? { esTurnante: true } : {}),
+    ...(persona?.esExtra === true ? { esExtra: true } : {})
+  };
+};
+
+const crearAsignacionSnapshotV2 = (asignacion) => ({
+  sector: asignacion.nombre,
+  ...(asignacion.etiqueta !== undefined ? { etiqueta: asignacion.etiqueta } : {}),
+  persona: crearReferenciaPersonaSnapshotV2(asignacion.enfermero),
+  tipo: asignacion.tipo || "sector",
+  ...copiarCamposDefinidos(asignacion, CAMPOS_IDENTIDAD_ASIGNACION_V2),
+  ...(asignacion.origenCoberturaAutomaticaSectorId
+    ? { origenCoberturaAutomaticaSectorId: asignacion.origenCoberturaAutomaticaSectorId }
+    : {}),
+  ...(asignacion.reemplazo ? { reemplazo: true } : {}),
+  ...(asignacion.sacrificado ? { sacrificado: true } : {}),
+  ...(asignacion.coberturaLibreSM ? { coberturaLibreSM: true } : {}),
+  ...(asignacion.vacioManual ? { vacioManual: true } : {}),
+  ...(asignacion.etiquetaVacio !== undefined ? { etiquetaVacio: asignacion.etiquetaVacio } : {})
+});
 const normalizarResponsableCierre = (referencia) => {
   const personaId = String(referencia?.personaId ?? "").trim();
   if (!personaId) return null;
@@ -88,6 +130,7 @@ export const crearSnapshotCierreTurno = ({
       ));
 
   return clonarSerializable({
+    versionSnapshot: VERSION_SNAPSHOT_CIERRE_ACTUAL,
     fecha,
     tipo,
     resumen: {
@@ -96,14 +139,7 @@ export const crearSnapshotCierreTurno = ({
     },
     asignaciones: (Array.isArray(asignaciones) ? asignaciones : [])
       .filter((asignacion) => asignacion?.tipo !== "divider")
-      .map((asignacion) => ({
-        sector: asignacion.nombre,
-        persona: crearReferenciaPersona(asignacion.enfermero),
-        tipo: asignacion.tipo || "sector",
-        ...(asignacion.reemplazo ? { reemplazo: true } : {}),
-        ...(asignacion.sacrificado ? { sacrificado: true } : {}),
-        ...(asignacion.coberturaLibreSM ? { coberturaLibreSM: true } : {})
-      })),
+      .map(crearAsignacionSnapshotV2),
     asistencia: asistenciaPrevistas,
     personasPrevistas: referenciasUnicas(previstas),
     libres: referenciasUnicas(libres),
@@ -188,19 +224,60 @@ export const reabrirFechaCategoria = ({
   };
 };
 
-export const snapshotAAsignacionesVisibles = (snapshot) =>
-  (Array.isArray(snapshot?.asignaciones) ? snapshot.asignaciones : []).map(
+export const snapshotAAsignacionesVisibles = (snapshot) => {
+  const esVersion2 = Number(snapshot?.versionSnapshot) === VERSION_SNAPSHOT_CIERRE_ACTUAL;
+  return (Array.isArray(snapshot?.asignaciones) ? snapshot.asignaciones : []).map(
     (asignacion) => ({
       nombre: asignacion.sector,
       enfermero: asignacion.persona
-        ? { id: asignacion.persona.personaId, nombre: asignacion.persona.nombre }
+        ? {
+            id: asignacion.persona.personaId,
+            nombre: asignacion.persona.nombre,
+            ...(esVersion2 && asignacion.persona.esTurnante === true ? { esTurnante: true } : {}),
+            ...(esVersion2 && asignacion.persona.esExtra === true ? { esExtra: true } : {})
+          }
         : null,
       tipo: asignacion.tipo,
+      ...(esVersion2 ? copiarCamposDefinidos(asignacion, [
+        "etiqueta",
+        ...CAMPOS_IDENTIDAD_ASIGNACION_V2,
+        "origenCoberturaAutomaticaSectorId",
+        "etiquetaVacio"
+      ]) : {}),
       reemplazo: asignacion.reemplazo,
       sacrificado: asignacion.sacrificado,
-      coberturaLibreSM: asignacion.coberturaLibreSM
+      coberturaLibreSM: asignacion.coberturaLibreSM,
+      ...(esVersion2 && asignacion.vacioManual ? { vacioManual: true } : {})
     })
   );
+};
+
+const copiarListaSnapshot = (valor) => clonarSerializable(Array.isArray(valor) ? valor : []);
+
+export const resolverDatosPresentacionCierreTurno = ({
+  snapshot,
+  reconstruccion = {}
+} = {}) => {
+  if (!snapshot) {
+    return {
+      fuente: "reconstruccion_operativa",
+      ...reconstruccion
+    };
+  }
+  return {
+    fuente: "snapshot_cierre",
+    asignaciones: snapshotAAsignacionesVisibles(snapshot),
+    resumen: esObjeto(snapshot.resumen) ? clonarSerializable(snapshot.resumen) : null,
+    asistencia: esObjeto(snapshot.asistencia) ? clonarSerializable(snapshot.asistencia) : {},
+    personasPrevistas: copiarListaSnapshot(snapshot.personasPrevistas),
+    libres: copiarListaSnapshot(snapshot.libres),
+    licencias: copiarListaSnapshot(snapshot.licencias),
+    certificaciones: copiarListaSnapshot(snapshot.certificaciones),
+    noDisponibles: copiarListaSnapshot(snapshot.noDisponibles),
+    extrasRegistrados: copiarListaSnapshot(snapshot.extrasRegistrados),
+    sectoresSinCobertura: copiarListaSnapshot(snapshot.sectoresSinCobertura)
+  };
+};
 
 export const quitarCierresDeEstadoCopiado = (estado) => {
   const copia = clonarSerializable(estado);

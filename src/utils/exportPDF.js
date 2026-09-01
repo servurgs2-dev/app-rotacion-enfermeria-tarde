@@ -630,6 +630,38 @@ export const prepararCertificacionesDiaPDF = ({
   );
 };
 
+export const resolverCertificacionesCalendarioPDF = ({
+  enfermeros = {},
+  licenciados = {},
+  certificaciones = [],
+  fecha,
+  personal = []
+} = {}) => {
+  const fuentes = [
+    [enfermeros, "Enfermero"],
+    [licenciados, "Licenciado"]
+  ];
+  const categoriasCongeladas = new Set(
+    fuentes
+      .filter(([fuente]) => Array.isArray(fuente.certificacionesCongeladas))
+      .map(([, categoria]) => categoria)
+  );
+  const actuales = prepararCertificacionesDiaPDF({ certificaciones, fecha, personal })
+    .filter((certificacion) => !categoriasCongeladas.has(certificacion.categoria));
+  const congeladas = fuentes.flatMap(([fuente, categoria]) =>
+    Array.isArray(fuente.certificacionesCongeladas)
+      ? fuente.certificacionesCongeladas.flatMap((referencia) => {
+          const nombre = String(referencia?.nombre || "").trim();
+          return nombre ? [{ nombre, categoria, texto: `${nombre} - ${categoria}` }] : [];
+        })
+      : []
+  );
+  return [...new Map([...actuales, ...congeladas].map((item) => [
+    `${item.categoria}:${item.nombre}`,
+    item
+  ])).values()];
+};
+
 export const prepararFilasCalendarioPDF = (asignaciones) =>
   (Array.isArray(asignaciones) ? asignaciones : [])
     .filter((item) => item?.nombre && item.tipo !== "divider")
@@ -759,7 +791,9 @@ export const crearCalendarioDiarioPDF = ({
   const libresLicenciados = licenciados.libres || [];
   const filasEnfermeros = prepararFilasCalendarioPDF(asignacionesEnfermeros);
   const filasLicenciados = prepararFilasCalendarioPDF(asignacionesLicenciados);
-  const certificacionesDia = prepararCertificacionesDiaPDF({
+  const certificacionesDia = resolverCertificacionesCalendarioPDF({
+    enfermeros,
+    licenciados,
     certificaciones,
     fecha,
     personal

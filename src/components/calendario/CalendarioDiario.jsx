@@ -91,7 +91,7 @@ import {
   obtenerResponsablesCierre,
   obtenerUltimaVersionCierre,
   reabrirFechaCategoria,
-  snapshotAAsignacionesVisibles
+  resolverDatosPresentacionCierreTurno
 } from "../../utils/cierreTurno.js";
 import {
   esDistribucionOpcion1,
@@ -220,7 +220,8 @@ function CalendarioDiario({
   turnoActivo = "",
   soloLectura = false,
   usuarioActual = "",
-  puedeReabrirCierre = false
+  puedeReabrirCierre = false,
+  modoHistorico = false
 }) {
   const personalFiltrado = useMemo(
     () => personal.filter((p) => p?.categoria === tipo),
@@ -1610,9 +1611,34 @@ const personasPrevistas = obtenerPersonasPrevistasConAusentes({
   asignaciones: asignacionOrdenada,
   ausentes: ausentesDelDia
     });
+const snapshotPresentacion = bloqueadoPorCierre && snapshotCierre
+  ? snapshotCierre
+  : null;
+const datosPresentacionDia = resolverDatosPresentacionCierreTurno({
+  snapshot: snapshotPresentacion,
+  reconstruccion: {
+    asignaciones: asignacionOrdenada,
+    asistencia: asistenciaFecha,
+    personasPrevistas,
+    libres,
+    licencias: personalFiltrado.filter(estaDeLicenciaHoy),
+    certificaciones: certificados,
+    noDisponibles: noDisponiblesPresentacion.map((registro) => registro.persona).filter(Boolean),
+    extrasRegistrados: Array.isArray(extras[keyDia]) ? extras[keyDia].filter(Boolean) : []
+  }
+});
+const asignacionesMostradas = datosPresentacionDia.asignaciones;
+const personasPrevistasMostradas = datosPresentacionDia.personasPrevistas;
+const asistenciaMostrada = datosPresentacionDia.asistencia;
+const libresMostrados = datosPresentacionDia.libres;
+const licenciasMostradas = datosPresentacionDia.licencias;
+const certificacionesMostradas = datosPresentacionDia.certificaciones;
+const noDisponiblesMostrados = datosPresentacionDia.noDisponibles;
+const extrasMostrados = datosPresentacionDia.extrasRegistrados;
 
 useEffect(() => {
-  const asignacionesParaPDF = asignacionOrdenada.map((item) => {
+  const asignacionesParaPDF = asignacionesMostradas.map((item) => {
+    if (snapshotPresentacion) return item;
     if (item.tipo === "divider" || item.enfermero) return item;
     const liberadoPorAusencia = ausentesDelDia.some(
       (ausente) => normalizar(ausente.sectorOrigen) === normalizar(item.nombre)
@@ -1627,42 +1653,50 @@ useEffect(() => {
       ? { ...item, etiquetaVacio: `Sin cobertura — ${noDisponible.motivoBreve}` }
       : item;
   });
-  const libresParaPDF = filtrarPersonasNoCertificadas({
-    personas: libres,
-    estaCertificada: estaCertificadoHoy
-  }).filter(
-    (persona) =>
-      !estaDeLicenciaHoy(persona) &&
-      !(noDisponibles[keyDia] || []).some((referencia) =>
-        referenciaCorrespondeAPersona(
-          referencia,
-          persona,
-          personalFiltrado
-        )
-      )
-  );
+  const libresParaPDF = snapshotPresentacion
+    ? libresMostrados
+    : filtrarPersonasNoCertificadas({
+        personas: libresMostrados,
+        estaCertificada: estaCertificadoHoy
+      }).filter(
+        (persona) =>
+          !estaDeLicenciaHoy(persona) &&
+          !(noDisponibles[keyDia] || []).some((referencia) =>
+            referenciaCorrespondeAPersona(
+              referencia,
+              persona,
+              personalFiltrado
+            )
+          )
+      );
   const datosParaPDF = {
     asignaciones: asignacionesParaPDF,
     libres: libresParaPDF,
+    ...(snapshotPresentacion ? { certificacionesCongeladas: certificacionesMostradas } : {}),
+    fuentePresentacion: snapshotPresentacion ? "snapshot_cierre" : "reconstruccion_operativa",
     resumenInicio: {
-      asignaciones: asignacionOrdenada,
-      personasPrevistas,
-      asistencia: asistenciaFecha,
+      asignaciones: asignacionesMostradas,
+      personasPrevistas: personasPrevistasMostradas,
+      asistencia: asistenciaMostrada,
       libres: libresParaPDF,
       ausentes: [
-        ...ausentesDelDia.map((registro) => registro.persona).filter(Boolean),
-        ...personalFiltrado.filter(estaDeLicenciaHoy),
-        ...certificados,
-        ...noDisponiblesPresentacion.map((registro) => registro.persona).filter(Boolean)
+        ...(snapshotPresentacion
+          ? []
+          : ausentesDelDia.map((registro) => registro.persona).filter(Boolean)),
+        ...licenciasMostradas,
+        ...certificacionesMostradas,
+        ...noDisponiblesMostrados
       ],
-      extras: Array.isArray(extras[keyDia]) ? extras[keyDia].filter(Boolean) : [],
-      sectoresCriticosSinCobertura: obtenerSectoresCriticosSinCobertura({
-        asignaciones: asignacionOrdenada,
-        sectoresCriticosIds: esDiaParo ? [] : sectoresCriticosIds,
-        sectoresCriticosLegacy: esDiaParo ? sectoresCriticos : [],
-        categoria: tipo,
-        versionEstructura: configuracionEfectiva
-      })
+      extras: extrasMostrados,
+      sectoresCriticosSinCobertura: snapshotPresentacion
+        ? (snapshotPresentacion.sectoresSinCobertura || [])
+        : obtenerSectoresCriticosSinCobertura({
+            asignaciones: asignacionesMostradas,
+            sectoresCriticosIds: esDiaParo ? [] : sectoresCriticosIds,
+            sectoresCriticosLegacy: esDiaParo ? sectoresCriticos : [],
+            categoria: tipo,
+            versionEstructura: configuracionEfectiva
+          })
     },
     keyDia
   };
@@ -1676,24 +1710,27 @@ useEffect(() => {
     }
   }
 }, [
-  asignacionOrdenada,
-  asistenciaFecha,
+  asignacionesMostradas,
+  asistenciaMostrada,
   ausentesDelDia,
-  certificados,
+  certificacionesMostradas,
   configuracionEfectiva,
   esDiaParo,
   estaCertificadoHoy,
   estaDeLicenciaHoy,
-  extras,
+  extrasMostrados,
   keyDia,
-  libres,
+  libresMostrados,
+  licenciasMostradas,
   noDisponibles,
+  noDisponiblesMostrados,
   noDisponiblesPresentacion,
   onDataReady,
   personalFiltrado,
-  personasPrevistas,
+  personasPrevistasMostradas,
   sectoresCriticos,
   sectoresCriticosIds,
+  snapshotPresentacion,
   tipo
 ]);
 
@@ -1751,9 +1788,6 @@ useEffect(() => {
     asistencia: asistenciaFecha,
     ...datosResumenTurno
   });
-  const asignacionesMostradas = bloqueadoPorCierre && snapshotCierre
-    ? snapshotAAsignacionesVisibles(snapshotCierre)
-    : asignacionOrdenada;
   const sectoresCriticosSinCobertura = obtenerSectoresCriticosSinCobertura({
     asignaciones: asignacionesMostradas,
     sectoresCriticosIds: esDiaParo ? [] : sectoresCriticosIds,
@@ -1770,9 +1804,6 @@ useEffect(() => {
   const resumenMostrado = bloqueadoPorCierre && snapshotCierre
     ? snapshotCierre.resumen
     : resumenTurno;
-  const asistenciaMostrada = bloqueadoPorCierre && snapshotCierre
-    ? snapshotCierre.asistencia
-    : asistenciaFecha;
   const asignacionesPresentacionMobile = asignacionesMostradas.map((item, indice) => {
     if (item.tipo === "divider") {
       return { tipo: "divider", clave: `divider-${indice}` };
@@ -2333,6 +2364,16 @@ useEffect(() => {
       <h2 className="text-xl font-semibold text-slate-800">
   Distribución diaria
 </h2>
+      {snapshotPresentacion && (
+        <p className="mt-2 w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
+          Fotografía guardada
+        </p>
+      )}
+      {modoHistorico && !snapshotPresentacion && (
+        <p className="mt-2 w-fit rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
+          Reconstruido a partir de registros disponibles
+        </p>
+      )}
       {estadoCargaVigencias?.cargando && (
         <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
           Cargando pertenencia de turnos del día. Mientras tanto se muestra el padrón base.

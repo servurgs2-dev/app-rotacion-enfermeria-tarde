@@ -3052,6 +3052,7 @@ return (
     turnoActivo={turnoActivo}
     usuarioActual={perfil.usuario}
     puedeReabrirCierre={esPerfilSupervision(perfil)}
+    modoHistorico={mesHistoricoCerradoActivo}
   key={`enfermeros|${turnoActivo}|${mesActivo}|${keyDiaFromDate(fecha)}|${modoSoloLecturaEfectiva}`}
     personal={personalCalendario}
     estadoMensual={mesData}
@@ -3113,6 +3114,7 @@ return (
     turnoActivo={turnoActivo}
     usuarioActual={perfil.usuario}
     puedeReabrirCierre={esPerfilSupervision(perfil)}
+    modoHistorico={mesHistoricoCerradoActivo}
   key={`licenciados|${turnoActivo}|${mesActivo}|${keyDiaFromDate(fecha)}|${modoSoloLecturaEfectiva}`}
     personal={personalCalendario}
     estadoMensual={mesData}

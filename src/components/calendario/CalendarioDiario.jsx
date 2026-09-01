@@ -198,6 +198,7 @@ const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
 function CalendarioDiario({
   personal = [],
   estadoMensual,
+  padronVigencias = null,
   planilla = {},
   tipo,
   mesActivo = "",
@@ -446,7 +447,8 @@ const estaNoDisponiblePorNovedad = (persona) => persona && !evaluarDisponibilida
   novedades,
   persona,
   fecha: keyDia,
-  turno: turnoActivo
+  turno: turnoActivo,
+  padronVigencias
 }).disponible;
 
 const estaNoDisponible = (persona) =>

@@ -354,6 +354,36 @@ const certificacionesCalendarioLectura = useMemo(() => estadosVigenciasCalendari
       Array.isArray(estado?.certificaciones) ? estado.certificaciones : []
     )
   : certificacionesMes, [certificacionesMes, estadosVigenciasCalendario]);
+const crearRegistrosNovedadesDesdeEstados = useCallback((campo, fallback) =>
+  estadosVigenciasCalendario
+    ? Object.entries(estadosVigenciasCalendario).flatMap(([turnoOrigenEstado, estado]) =>
+        (Array.isArray(estado?.[campo]) ? estado[campo] : []).map((registro) => ({
+          ...registro,
+          turnoOrigenEstado
+        }))
+      )
+    : fallback,
+  [estadosVigenciasCalendario]
+);
+const licenciasNovedadesLectura = useMemo(
+  () => crearRegistrosNovedadesDesdeEstados("licencias", licenciasMes),
+  [crearRegistrosNovedadesDesdeEstados, licenciasMes]
+);
+const certificacionesNovedadesLectura = useMemo(
+  () => crearRegistrosNovedadesDesdeEstados("certificaciones", certificacionesMes),
+  [certificacionesMes, crearRegistrosNovedadesDesdeEstados]
+);
+const personalNovedadesLectura = useMemo(() => {
+  const personasPadron = vigenciasPersonal.padron?.personas?.map((entrada) => entrada.persona) || [];
+  const personasEstados = estadosVigenciasCalendario
+    ? Object.values(estadosVigenciasCalendario).flatMap((estado) =>
+        Array.isArray(estado?.personal) ? estado.personal : []
+      )
+    : personal;
+  return [...new Map([...personasPadron, ...personasEstados, ...personal]
+    .filter((persona) => persona?.id)
+    .map((persona) => [String(persona.id), persona])).values()];
+}, [estadosVigenciasCalendario, personal, vigenciasPersonal.padron]);
 const resumenInicio = useMemo(() => crearResumenInicioTurno({
   enfermeros: dataPDFEnf.keyDia === keyDiaActual
     ? dataPDFEnf.resumenInicio
@@ -402,8 +432,7 @@ const cargarNovedades = useCallback(async () => {
   setErrorNovedades("");
   try {
     const resultado = await listarNovedadesPersonal({
-      ...obtenerRangoMesNovedades(mesActivo),
-      turno: turnoActivo
+      ...obtenerRangoMesNovedades(mesActivo)
     });
     if (contextoNovedadesRef.current.mes !== mesActivo || contextoNovedadesRef.current.turno !== turnoActivo || contextoNovedadesRef.current.solicitud !== solicitud) return;
     setNovedadesPersonal(resultado);
@@ -442,6 +471,7 @@ const guardarListaParo = async ({ fecha, personasSeleccionadas, observacion }) =
   const resultado = await sincronizarListaParo({
     fecha,
     turno: turnoActivo,
+    padronVigencias: vigenciasPersonal.padron,
     personasSeleccionadas,
     observacion
   });
@@ -467,6 +497,7 @@ const guardarOlvidoTarjeta = async ({ persona, fecha, observacion }) => {
     persona,
     fecha,
     turno: turnoActivo,
+    padronVigencias: vigenciasPersonal.padron,
     observacion
   });
   setNovedadesPersonal((actuales) => [creada, ...actuales]);
@@ -477,7 +508,8 @@ const guardarCambioHorario = async (entrada) => {
   if (!puedeMutarMesActivo()) return null;
   const guardada = await guardarCambioHorarioPersonal({
     ...entrada,
-    turno: turnoActivo
+    turno: turnoActivo,
+    padronVigencias: vigenciasPersonal.padron
   });
   setNovedadesPersonal((actuales) => {
     const existe = actuales.some((novedad) => novedad.id === guardada.id);
@@ -524,22 +556,38 @@ const actualizarLicenciasMes = (actualizacion) => {
 };
 
 const editarRegistroLegacyMes = (campo, novedad, actualizacion) => {
-  const estadoActual = estadoPorTurnoMesRef.current[claveActiva] || crearEstadoMensualVacio();
+  const turnoOrigen = novedad?.turnoOrigenEstado || turnoActivo;
+  const claveOrigen = crearClaveTurnoMes(turnoOrigen, mesActivo);
+  if (!puedeMutarClaveMensual({ clave: claveOrigen, turnoId: turnoOrigen, mes: mesActivo })) {
+    throw new Error("No tenés permisos para editar el registro en su estado de origen.");
+  }
+  const estadoActual = estadoPorTurnoMesRef.current[claveOrigen];
+  if (!estadoActual) throw new Error("Cargá el turno de origen antes de editar este registro.");
   const registros = Array.isArray(estadoActual[campo]) ? estadoActual[campo] : [];
   const resultado = reemplazarRegistroLegacyProyectado({ registros, novedad, actualizacion });
   if (resultado.error) throw new Error(resultado.error);
-  const actualizar = campo === "licencias" ? actualizarLicenciasMes : actualizarCertificacionesMes;
-  actualizar(resultado.registros);
+  setEstadoPorTurnoMes((prev) => ({
+    ...prev,
+    [claveOrigen]: { ...(prev[claveOrigen] || estadoActual), [campo]: resultado.registros }
+  }));
   return resultado.registros;
 };
 
 const eliminarRegistroLegacyMes = (campo, novedad) => {
-  const estadoActual = estadoPorTurnoMesRef.current[claveActiva] || crearEstadoMensualVacio();
+  const turnoOrigen = novedad?.turnoOrigenEstado || turnoActivo;
+  const claveOrigen = crearClaveTurnoMes(turnoOrigen, mesActivo);
+  if (!puedeMutarClaveMensual({ clave: claveOrigen, turnoId: turnoOrigen, mes: mesActivo })) {
+    throw new Error("No tenés permisos para eliminar el registro en su estado de origen.");
+  }
+  const estadoActual = estadoPorTurnoMesRef.current[claveOrigen];
+  if (!estadoActual) throw new Error("Cargá el turno de origen antes de eliminar este registro.");
   const registros = Array.isArray(estadoActual[campo]) ? estadoActual[campo] : [];
   const resultado = eliminarRegistroLegacyProyectado({ registros, novedad });
   if (resultado.error) throw new Error(resultado.error);
-  const actualizar = campo === "licencias" ? actualizarLicenciasMes : actualizarCertificacionesMes;
-  actualizar(resultado.registros);
+  setEstadoPorTurnoMes((prev) => ({
+    ...prev,
+    [claveOrigen]: { ...(prev[claveOrigen] || estadoActual), [campo]: resultado.registros }
+  }));
   return resultado.registros;
 };
 
@@ -2738,9 +2786,10 @@ return (
       <div id="novedades-principal" className={vistaActiva === "novedades" && !mesActivoSinInformacion ? "" : "hidden"}>
         <h2 className="mb-4 text-xl font-semibold text-slate-800">📋 Novedades</h2>
         <Novedades
-          personal={personal}
-          licencias={licenciasMes}
-          certificaciones={certificacionesMes}
+          personal={personalNovedadesLectura}
+          licencias={licenciasNovedadesLectura}
+          certificaciones={certificacionesNovedadesLectura}
+          padronVigencias={vigenciasPersonal.padron}
           turnoActivo={turnoActivo}
           fechaActiva={keyDiaActual}
           mesActivo={mesActivo}
@@ -2761,6 +2810,11 @@ return (
           onEliminarLicencia={(novedad) => eliminarRegistroLegacyMes("licencias", novedad)}
           onEditarCertificacion={(novedad, certificacion) => editarRegistroLegacyMes("certificaciones", novedad, certificacion)}
           onEliminarCertificacion={(novedad) => eliminarRegistroLegacyMes("certificaciones", novedad)}
+          puedeEditarRegistroLegacy={(novedad) => {
+            const turnoOrigen = novedad?.turnoOrigenEstado || turnoActivo;
+            const claveOrigen = crearClaveTurnoMes(turnoOrigen, mesActivo);
+            return puedeMutarClaveMensual({ clave: claveOrigen, turnoId: turnoOrigen, mes: mesActivo });
+          }}
         />
       </div>
 
@@ -3056,6 +3110,7 @@ return (
   key={`enfermeros|${turnoActivo}|${mesActivo}|${keyDiaFromDate(fecha)}|${modoSoloLecturaEfectiva}`}
     personal={personalCalendario}
     estadoMensual={mesData}
+    padronVigencias={vigenciasPersonal.padron}
     planilla={planillaEnfermeros}
     tipo="enfermero"
     mesActivo={mesActivo}
@@ -3118,6 +3173,7 @@ return (
   key={`licenciados|${turnoActivo}|${mesActivo}|${keyDiaFromDate(fecha)}|${modoSoloLecturaEfectiva}`}
     personal={personalCalendario}
     estadoMensual={mesData}
+    padronVigencias={vigenciasPersonal.padron}
     planilla={planillaLicenciados}
     tipo="licenciado"
     mesActivo={mesActivo}

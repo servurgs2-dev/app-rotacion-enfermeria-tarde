@@ -1,6 +1,7 @@
 import {
   crearOlvidoTarjetaPersonal,
   ESTADOS_NOVEDAD_PERSONAL,
+  novedadCorrespondeTurnoEfectivo,
   TIPOS_NOVEDAD_PERSONAL,
   validarTransicionEstadoNovedad
 } from "../utils/novedadesPersonal.js";
@@ -9,21 +10,21 @@ export const crearRegistradorOlvidoTarjeta = (repositorio) => async ({
   persona,
   fecha,
   turno,
+  padronVigencias,
   observacion = ""
 } = {}) => {
   const resultado = crearOlvidoTarjetaPersonal({ persona, fecha, turno, observacion });
   if (resultado.error) throw new Error(resultado.error);
   const existentes = await repositorio.listar({
     fechaDesde: fecha,
-    fechaHasta: fecha,
-    turno
+    fechaHasta: fecha
   });
   const duplicado = existentes.find((novedad) =>
     novedad.tipo === TIPOS_NOVEDAD_PERSONAL.OLVIDO_TARJETA &&
     novedad.personaId === resultado.novedad.personaId &&
     novedad.fechaDesde === fecha &&
     novedad.fechaHasta === fecha &&
-    novedad.turno === turno &&
+    novedadCorrespondeTurnoEfectivo({ novedad, turno, padronVigencias, fechaDesde: fecha, fechaHasta: fecha }) &&
     novedad.estado !== ESTADOS_NOVEDAD_PERSONAL.CANCELADA
   );
   if (duplicado) {

@@ -170,14 +170,14 @@ export const crearCambioHorarioPersonal = ({
   });
 };
 
-export const obtenerCambioHorarioActivo = ({ novedades = [], persona, fecha, turno = "" } = {}) =>
+export const obtenerCambioHorarioActivo = ({ novedades = [], persona, fecha, turno = "", padronVigencias = null } = {}) =>
   (Array.isArray(novedades) ? novedades : []).find((novedad) =>
     novedadCorrespondeAPersona(novedad, persona) &&
     novedad.tipo === TIPOS_NOVEDAD_PERSONAL.CAMBIO_HORARIO &&
     novedad.estado === ESTADOS_NOVEDAD_PERSONAL.ACTIVA &&
     novedad.fechaDesde === fecha &&
     novedad.fechaHasta === fecha &&
-    (!turno || novedad.turno === turno) &&
+    novedadCorrespondeTurnoEfectivo({ novedad, turno, padronVigencias, fechaDesde: fecha, fechaHasta: fecha }) &&
     !validarHorarioExcepcional(novedad.datos)
   ) || null;
 
@@ -222,11 +222,11 @@ export const validarTransicionEstadoNovedad = (novedad, estadoDestino) => {
     : `No se puede cambiar un Olvido de tarjeta de ${novedad.estado} a ${estadoDestino}.`;
 };
 
-export const contarOlvidosTarjetaPendientes = (novedades = [], turnoActivo = "") =>
+export const contarOlvidosTarjetaPendientes = (novedades = [], turnoActivo = "", padronVigencias = null) =>
   (Array.isArray(novedades) ? novedades : []).filter((novedad) =>
     novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.OLVIDO_TARJETA &&
     novedad?.estado === ESTADOS_NOVEDAD_PERSONAL.PENDIENTE &&
-    Boolean(turnoActivo && novedad?.turno === turnoActivo)
+    novedadCorrespondeTurnoEfectivo({ novedad, turno: turnoActivo, padronVigencias })
   ).length;
 
 export const crearAdhesionParoPersonal = ({
@@ -247,18 +247,25 @@ export const crearAdhesionParoPersonal = ({
   estado: ESTADOS_NOVEDAD_PERSONAL.ACTIVA
 });
 
-export const esAdhesionParoActiva = (novedad, { fecha, turno } = {}) =>
+export const esAdhesionParoActiva = (novedad, { fecha, turno, padronVigencias } = {}) =>
   novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.ADHESION_PARO &&
   novedad?.estado === ESTADOS_NOVEDAD_PERSONAL.ACTIVA &&
   novedad?.fechaDesde === fecha &&
   novedad?.fechaHasta === fecha &&
-  (!turno || novedad?.turno === turno);
+  novedadCorrespondeTurnoEfectivo({
+    novedad,
+    turno,
+    padronVigencias,
+    fechaDesde: fecha,
+    fechaHasta: fecha
+  });
 
 export const planificarListaAdhesionParo = ({
   novedades = [],
   personasSeleccionadas = [],
   fecha,
   turno,
+  padronVigencias = null,
   observacion = ""
 } = {}) => {
   const seleccionadas = new Map(
@@ -268,7 +275,7 @@ export const planificarListaAdhesionParo = ({
   );
   const activasPorPersona = new Map();
   (Array.isArray(novedades) ? novedades : [])
-    .filter((novedad) => esAdhesionParoActiva(novedad, { fecha, turno }))
+    .filter((novedad) => esAdhesionParoActiva(novedad, { fecha, turno, padronVigencias }))
     .forEach((novedad) => {
       const personaId = texto(novedad.personaId);
       if (!personaId) return;
@@ -319,7 +326,8 @@ const crearLegacy = ({ registro, persona, tipo, indice, origen }) => ({
   tipo,
   fechaDesde: registro?.desde || "",
   fechaHasta: registro?.hasta || registro?.desde || "",
-  turno: null,
+  turno: texto(registro?.turnoOrigenEstado) || null,
+  turnoOrigenEstado: texto(registro?.turnoOrigenEstado) || null,
   categoria: persona?.categoria || registro?.categoria || null,
   observacion: "",
   afectaDisponibilidad: true,
@@ -413,11 +421,18 @@ export const obtenerNovedadesPersonaEnFecha = ({
   personal = [],
   persona,
   fecha,
-  turno = ""
+  turno = "",
+  padronVigencias = null
 } = {}) => [...novedades, ...crearNovedadesLegacy({ licencias, certificaciones, personal })]
   .filter((novedad) => novedadCorrespondeAPersona(novedad, persona))
   .filter((novedad) => novedad.fechaDesde <= fecha && fecha <= novedad.fechaHasta)
-  .filter((novedad) => !turno || !novedad.turno || novedad.turno === turno);
+  .filter((novedad) => novedadCorrespondeTurnoEfectivo({
+    novedad,
+    turno,
+    padronVigencias,
+    fechaDesde: fecha,
+    fechaHasta: fecha
+  }));
 
 export const evaluarDisponibilidadPorNovedades = (contexto = {}) => {
   const novedades = obtenerNovedadesPersonaEnFecha(contexto);
@@ -462,10 +477,56 @@ export const obtenerRangoMesNovedades = (mes) => {
   };
 };
 
-export const filtrarNovedadesPorTurnoActivo = (novedades = [], turnoActivo = "") =>
+export const obtenerTurnosEfectivosNovedad = ({
+  novedad,
+  padronVigencias,
+  fechaDesde = novedad?.fechaDesde,
+  fechaHasta = novedad?.fechaHasta
+} = {}) => {
+  const personaId = texto(novedad?.personaId);
+  const entrada = padronVigencias?.porPersonaId?.[personaId] ||
+    padronVigencias?.personas?.find((persona) => texto(persona?.personaId) === personaId);
+  const desde = texto(fechaDesde);
+  const hasta = texto(fechaHasta);
+  if (entrada && !entrada.invalida && desde && hasta) {
+    const turnos = new Set((entrada.vigencias || []).flatMap((vigencia) =>
+      texto(vigencia?.desde) <= hasta && texto(vigencia?.hasta) >= desde && texto(vigencia?.turno)
+        ? [texto(vigencia.turno)]
+        : []
+    ));
+    if (turnos.size > 0) return turnos;
+  }
+  return new Set([
+    texto(novedad?.turno),
+    texto(novedad?.turnoOrigenEstado)
+  ].filter(Boolean));
+};
+
+export const novedadCorrespondeTurnoEfectivo = ({
+  novedad,
+  turno,
+  padronVigencias,
+  fechaDesde,
+  fechaHasta
+} = {}) => {
+  const turnoConsultado = texto(turno);
+  if (!turnoConsultado) return true;
+  const turnos = obtenerTurnosEfectivosNovedad({
+    novedad,
+    padronVigencias,
+    fechaDesde,
+    fechaHasta
+  });
+  return turnos.has(turnoConsultado) || (turnos.size === 0 && novedad?.soloLectura === true);
+};
+
+export const filtrarNovedadesPorTurnoActivo = (
+  novedades = [],
+  turnoActivo = "",
+  padronVigencias = null
+) =>
   (Array.isArray(novedades) ? novedades : []).filter((novedad) =>
-    novedad?.soloLectura === true ||
-    Boolean(turnoActivo && novedad?.turno === turnoActivo)
+    novedadCorrespondeTurnoEfectivo({ novedad, turno: turnoActivo, padronVigencias })
   );
 
 export const filtrarNovedadesVisibles = (novedades = []) =>

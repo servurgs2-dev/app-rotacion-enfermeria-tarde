@@ -44,6 +44,7 @@ function Novedades({
   personal = [],
   licencias = [],
   certificaciones = [],
+  padronVigencias = null,
   turnoActivo,
   fechaActiva = "",
   mesActivo = "",
@@ -63,7 +64,8 @@ function Novedades({
   onEditarLicencia = async () => null,
   onEliminarLicencia = async () => null,
   onEditarCertificacion = async () => null,
-  onEliminarCertificacion = async () => null
+  onEliminarCertificacion = async () => null,
+  puedeEditarRegistroLegacy = () => true
 }) {
   const [cancelandoId, setCancelandoId] = useState("");
   const [actualizandoId, setActualizandoId] = useState("");
@@ -89,7 +91,8 @@ function Novedades({
 
   const lista = useMemo(() => filtrarNovedadesVisibles(filtrarNovedadesPorTurnoActivo(
     novedadesConsolidadas,
-    turnoActivo
+    turnoActivo,
+    padronVigencias
   ))
     .filter((novedad) => !filtros.fecha || (
       novedad.fechaDesde <= filtros.fecha && filtros.fecha <= novedad.fechaHasta
@@ -100,10 +103,10 @@ function Novedades({
       novedad.personaNombre.toLocaleLowerCase("es").includes(
         filtros.funcionario.toLocaleLowerCase("es")
       ))
-    .sort((a, b) => b.fechaDesde.localeCompare(a.fechaDesde)), [filtros, novedadesConsolidadas, turnoActivo]);
+    .sort((a, b) => b.fechaDesde.localeCompare(a.fechaDesde)), [filtros, novedadesConsolidadas, padronVigencias, turnoActivo]);
   const olvidosPendientes = useMemo(
-    () => contarOlvidosTarjetaPendientes(novedades, turnoActivo),
-    [novedades, turnoActivo]
+    () => contarOlvidosTarjetaPendientes(novedades, turnoActivo, padronVigencias),
+    [novedades, padronVigencias, turnoActivo]
   );
 
   const abrirAccion = (accion) => {
@@ -214,6 +217,7 @@ function Novedades({
           novedades={novedadesConsolidadas}
           personal={personal}
           turnoActivo={turnoActivo}
+          padronVigencias={padronVigencias}
           mesActivo={mesActivo}
         />
       )}
@@ -291,6 +295,7 @@ function Novedades({
           licencias={licencias}
           certificaciones={certificaciones}
           turnoActivo={turnoActivo}
+          padronVigencias={padronVigencias}
           fechaInicial={fechaActiva}
           mesActivo={mesActivo}
           soloLectura={soloLectura}
@@ -381,7 +386,7 @@ function Novedades({
                 {novedad.tipo === "olvido_tarjeta" && novedad.estado === "pendiente" && <span className="rounded bg-amber-200 px-2 py-1 font-semibold text-amber-950">Pendiente · Requiere acción</span>}
                 {novedad.soloLectura && <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">Registro histórico vigente</span>}
               </div>
-              {!soloLectura && ["licencia", "certificacion"].includes(novedad.tipo) && ["licencias_legacy", "certificaciones_legacy"].includes(novedad.origen) && (
+              {!soloLectura && puedeEditarRegistroLegacy(novedad) && ["licencia", "certificacion"].includes(novedad.tipo) && ["licencias_legacy", "certificaciones_legacy"].includes(novedad.origen) && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" onClick={() => editarLegacy(novedad)} className="min-h-11 rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700">
                     Editar {novedad.tipo === "licencia" ? "licencia" : "certificación"}

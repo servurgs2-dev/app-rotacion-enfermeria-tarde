@@ -55,6 +55,25 @@ probar("la intersección incluye rangos que empiezan antes o terminan después",
   assert.equal(contarJornadasEnInterseccion(reporte.registros[0], "2026-08-30", "2026-08-31"), 2);
 });
 
+probar("un rango que cruza vigencias aparece en el reporte de cada turno con el mismo registro", () => {
+  const padronVigencias = {
+    porPersonaId: {
+      ana: { persona: ana, personaId: "ana", vigencias: [
+        { turno: "tarde", desde: "2026-08-01", hasta: "2026-08-14" },
+        { turno: "manana", desde: "2026-08-15", hasta: "2026-08-31" }
+      ] }
+    }
+  };
+  const [licencia] = crearNovedadesLegacy({
+    licencias: [{ id: "lic-cruzada", personaId: "ana", nombre: "Ana", desde: "2026-08-10", hasta: "2026-08-20", turnoOrigenEstado: "tarde" }],
+    personal
+  });
+  const tarde = construirReporteNovedades({ novedades: [licencia], turnoActivo: "tarde", padronVigencias, desde: "2026-08-01", hasta: "2026-08-31" });
+  const manana = construirReporteNovedades({ novedades: [licencia], turnoActivo: "manana", padronVigencias, desde: "2026-08-01", hasta: "2026-08-31" });
+  assert.equal(tarde.registros[0].id, licencia.id);
+  assert.equal(manana.registros[0].id, licencia.id);
+});
+
 probar("filtra categoría, persona, tipo e impacto combinadamente", () => {
   const novedades = [...legacy, ...central];
   assert.equal(construirReporteNovedades({ novedades, ...filtrosBase, categoria: "licenciado" }).registros.length, 3);

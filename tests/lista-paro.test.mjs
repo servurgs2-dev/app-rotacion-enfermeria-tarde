@@ -112,7 +112,7 @@ await probar("la base impide duplicar una adhesión activa y conserva canceladas
   assert.doesNotMatch(sql, /delete|drop table|alter table/i);
 });
 
-await probar("la sincronización consulta el turno activo antes de crear o cancelar", async () => {
+await probar("la sincronización consulta la fecha en todos los turnos antes de crear o cancelar", async () => {
   const llamadas = [];
   const existentes = [adhesion(juan), adhesion(pedro)];
   const repo = {
@@ -121,7 +121,7 @@ await probar("la sincronización consulta el turno activo antes de crear o cance
     async cancelar(id) { llamadas.push(["cancelar", id]); return { ...existentes.find((novedad) => novedad.id === id), estado: "cancelada" }; }
   };
   const resultado = await crearSincronizadorListaParo(repo)({ fecha, turno, personasSeleccionadas: [juan, maria] });
-  assert.deepEqual(llamadas[0], ["listar", { fechaDesde: fecha, fechaHasta: fecha, turno }]);
+  assert.deepEqual(llamadas[0], ["listar", { fechaDesde: fecha, fechaHasta: fecha }]);
   assert.deepEqual(llamadas.slice(1), [["cancelar", adhesion(pedro).id], ["crear", maria.id]]);
   assert.equal(resultado.creadas.length, 1);
   assert.equal(resultado.canceladas.length, 1);

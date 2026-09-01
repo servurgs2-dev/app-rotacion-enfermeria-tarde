@@ -56,6 +56,7 @@ export const obtenerDetalleReporteNovedad = (novedad) => {
 export const construirReporteNovedades = ({
   novedades = [],
   turnoActivo = "",
+  padronVigencias = null,
   desde = "",
   hasta = "",
   categoria = "",
@@ -65,7 +66,11 @@ export const construirReporteNovedades = ({
 } = {}) => {
   const rangoValido = fechaValida(desde) && fechaValida(hasta) && desde <= hasta;
   const registros = (rangoValido
-    ? filtrarNovedadesVisibles(filtrarNovedadesPorTurnoActivo(novedades, turnoActivo))
+    ? filtrarNovedadesVisibles(filtrarNovedadesPorTurnoActivo(
+        novedades,
+        turnoActivo,
+        padronVigencias
+      ))
       .filter((novedad) => TIPOS_PERMITIDOS.has(novedad?.tipo))
       .filter((novedad) => novedad.fechaDesde <= hasta && (novedad.fechaHasta || novedad.fechaDesde) >= desde)
       .filter((novedad) => !categoria || novedad.categoria === categoria)

@@ -129,8 +129,8 @@ probar("App actualiza estructuras mensuales sin registrar copias centrales", () 
   assert.match(app, /onGuardarCertificacion=\{\(certificacion\) => actualizarCertificacionesMes/);
   assert.match(app, /onEditarLicencia=.*editarRegistroLegacyMes\("licencias"/);
   assert.match(app, /onEliminarCertificacion=.*eliminarRegistroLegacyMes\("certificaciones"/);
-  assert.match(app, /const resultado = reemplazarRegistroLegacyProyectado\(\{ registros, novedad, actualizacion \}\);\s+if \(resultado\.error\) throw new Error\(resultado\.error\);\s+const actualizar/);
-  assert.match(app, /const resultado = eliminarRegistroLegacyProyectado\(\{ registros, novedad \}\);\s+if \(resultado\.error\) throw new Error\(resultado\.error\);\s+const actualizar/);
+  assert.match(app, /const turnoOrigen = novedad\?\.turnoOrigenEstado \|\| turnoActivo;[\s\S]*const resultado = reemplazarRegistroLegacyProyectado\(\{ registros, novedad, actualizacion \}\);[\s\S]*\[claveOrigen\].*\[campo\]: resultado\.registros/);
+  assert.match(app, /const turnoOrigen = novedad\?\.turnoOrigenEstado \|\| turnoActivo;[\s\S]*const resultado = eliminarRegistroLegacyProyectado\(\{ registros, novedad \}\);[\s\S]*\[claveOrigen\].*\[campo\]: resultado\.registros/);
   assert.match(app, /licencias: nuevas/);
   assert.match(app, /certificaciones: nuevas/);
   assert.doesNotMatch(app, /registrarNovedadPersonal\(licencia\)|registrarNovedadPersonal\(certificacion\)/);
@@ -145,7 +145,7 @@ probar("un solo flujo de alta se muestra a la vez y solo lectura oculta acciones
   assert.match(fuente, /accionAbierta === "certificacion"/);
   assert.match(fuente, /Editar \{novedad\.tipo === "licencia"/);
   assert.match(fuente, /Eliminar \$\{novedad\.tipo === "licencia"/);
-  assert.match(fuente, /!soloLectura && \["licencia", "certificacion"\]/);
+  assert.match(fuente, /!soloLectura && puedeEditarRegistroLegacy\(novedad\) && \["licencia", "certificacion"\]/);
   assert.match(fuente, /filtrarNovedadesVisibles\(filtrarNovedadesPorTurnoActivo/);
   assert.doesNotMatch(fuente, /novedad\.estado === "cancelada" \? "border-slate/);
   assert.match(fuente, /Eliminar suspensión/);

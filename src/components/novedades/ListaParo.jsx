@@ -22,6 +22,7 @@ function ListaParo({
   licencias = [],
   certificaciones = [],
   turnoActivo,
+  padronVigencias,
   fechaInicial = "",
   mesActivo = "",
   soloLectura = false,
@@ -32,7 +33,8 @@ function ListaParo({
     (Array.isArray(novedades) ? novedades : [])
       .filter((novedad) => esAdhesionParoActiva(novedad, {
         fecha: fechaElegida,
-        turno: turnoActivo
+        turno: turnoActivo,
+        padronVigencias
       }))
       .map((novedad) => novedad.personaId)
   )];
@@ -58,7 +60,8 @@ function ListaParo({
     personal,
     persona,
     fecha,
-    turno: turnoActivo
+    turno: turnoActivo,
+    padronVigencias
   })
     .filter((novedad) => novedad.tipo !== TIPOS_NOVEDAD_PERSONAL.ADHESION_PARO)
     .filter((novedad) => novedad.afectaDisponibilidad === true)

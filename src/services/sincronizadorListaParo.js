@@ -3,19 +3,20 @@ import { planificarListaAdhesionParo } from "../utils/novedadesPersonal.js";
 export const crearSincronizadorListaParo = (repositorioNovedades) => async ({
   fecha,
   turno,
+  padronVigencias,
   personasSeleccionadas,
   observacion = ""
 } = {}) => {
   const existentes = await repositorioNovedades.listar({
     fechaDesde: fecha,
-    fechaHasta: fecha,
-    turno
+    fechaHasta: fecha
   });
   const plan = planificarListaAdhesionParo({
     novedades: existentes,
     personasSeleccionadas,
     fecha,
     turno,
+    padronVigencias,
     observacion
   });
   const canceladas = [];

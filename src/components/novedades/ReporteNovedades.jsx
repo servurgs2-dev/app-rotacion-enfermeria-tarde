@@ -35,7 +35,7 @@ const fechaCorta = (fecha) => {
   return anio && mes && dia ? `${dia}/${mes}/${anio}` : "Sin fecha";
 };
 
-function ReporteNovedades({ novedades = [], personal = [], turnoActivo = "", mesActivo = "" }) {
+function ReporteNovedades({ novedades = [], personal = [], turnoActivo = "", padronVigencias = null, mesActivo = "" }) {
   const limitesMes = useMemo(() => obtenerRangoMesNovedades(mesActivo), [mesActivo]);
   const [filtros, setFiltros] = useState({
     desde: limitesMes.fechaDesde,
@@ -48,8 +48,9 @@ function ReporteNovedades({ novedades = [], personal = [], turnoActivo = "", mes
   const reporte = useMemo(() => construirReporteNovedades({
     novedades,
     turnoActivo,
+    padronVigencias,
     ...filtros
-  }), [filtros, novedades, turnoActivo]);
+  }), [filtros, novedades, padronVigencias, turnoActivo]);
   const turnoEtiqueta = TURNOS[turnoActivo] || turnoActivo;
   const personaSeleccionada = personal.find((persona) => String(persona.id) === String(filtros.personaId));
 

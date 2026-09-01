@@ -1,16 +1,23 @@
 import {
   crearCambioHorarioPersonal,
   ESTADOS_NOVEDAD_PERSONAL,
-  TIPOS_NOVEDAD_PERSONAL
+  TIPOS_NOVEDAD_PERSONAL,
+  novedadCorrespondeTurnoEfectivo
 } from "../utils/novedadesPersonal.js";
 
-const esMismoCambioActivo = (novedad, cambio) =>
+const esMismoCambioActivo = (novedad, cambio, padronVigencias) =>
   novedad.tipo === TIPOS_NOVEDAD_PERSONAL.CAMBIO_HORARIO &&
   novedad.estado === ESTADOS_NOVEDAD_PERSONAL.ACTIVA &&
   novedad.personaId === cambio.personaId &&
   novedad.fechaDesde === cambio.fechaDesde &&
   novedad.fechaHasta === cambio.fechaHasta &&
-  novedad.turno === cambio.turno;
+  novedadCorrespondeTurnoEfectivo({
+    novedad,
+    turno: cambio.turno,
+    padronVigencias,
+    fechaDesde: cambio.fechaDesde,
+    fechaHasta: cambio.fechaHasta
+  });
 
 export const crearGuardadorCambioHorario = (repositorio) => async (entrada = {}) => {
   const resultado = crearCambioHorarioPersonal(entrada);
@@ -18,10 +25,13 @@ export const crearGuardadorCambioHorario = (repositorio) => async (entrada = {})
   const cambio = resultado.novedad;
   const existentes = await repositorio.listar({
     fechaDesde: cambio.fechaDesde,
-    fechaHasta: cambio.fechaHasta,
-    turno: cambio.turno
+    fechaHasta: cambio.fechaHasta
   });
-  const existente = existentes.find((novedad) => esMismoCambioActivo(novedad, cambio));
+  const existente = existentes.find((novedad) => esMismoCambioActivo(
+    novedad,
+    cambio,
+    entrada.padronVigencias
+  ));
   return existente
     ? repositorio.actualizarContenido(existente.id, {
         observacion: cambio.observacion,

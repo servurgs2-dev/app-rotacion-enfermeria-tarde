@@ -129,7 +129,7 @@ await probar("el alta consulta y rechaza duplicado no cancelado", async () => {
   const existente = crearOlvido();
   let creado = false;
   const registrar = crearRegistradorOlvidoTarjeta({
-    async listar(filtros) { assert.deepEqual(filtros, { fechaDesde: fecha, fechaHasta: fecha, turno }); return [existente]; },
+    async listar(filtros) { assert.deepEqual(filtros, { fechaDesde: fecha, fechaHasta: fecha }); return [existente]; },
     async crear() { creado = true; }
   });
   await assert.rejects(() => registrar({ persona: juan, fecha, turno }), /Ya existe/);

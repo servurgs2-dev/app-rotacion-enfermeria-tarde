@@ -1,3 +1,5 @@
+import ModalMobileShell from "./ModalMobileShell.jsx";
+
 function PanelConfirmacionLimpieza({
   titulo,
   descripcion,
@@ -9,13 +11,10 @@ function PanelConfirmacionLimpieza({
   onConfirmar
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="titulo-confirmacion-limpieza"
+    <ModalMobileShell
+      ariaLabelledby="titulo-confirmacion-limpieza"
+      panelClassName="px-5 pt-5 sm:px-5 sm:pt-5 sm:pb-5"
     >
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
         <h3
           id="titulo-confirmacion-limpieza"
           className="text-lg font-semibold text-slate-900"
@@ -57,8 +56,7 @@ function PanelConfirmacionLimpieza({
             {textoConfirmar}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalMobileShell>
   );
 }
 

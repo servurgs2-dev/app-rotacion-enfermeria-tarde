@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CORREO_INSTITUCIONAL } from "../../config/destinatariosCorreo.js";
 import { enviarPDFCorreo } from "../../services/enviarPDFCorreo.js";
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
 
 const formatearTamano = (bytes) => {
   if (!Number.isFinite(bytes) || bytes < 0) return "";
@@ -72,13 +73,12 @@ export default function ModalEnviarPDF({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="titulo-envio-pdf"
-        className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
-      >
+    <ModalMobileShell
+      ariaLabelledby="titulo-envio-pdf"
+      backdropClassName="bg-slate-950/50"
+      maxWidthClassName="max-w-xl"
+      panelClassName="px-5 pt-5 sm:px-5 sm:pt-5 sm:pb-5"
+    >
         <h2 id="titulo-envio-pdf" className="text-lg font-semibold text-slate-900">
           Enviar PDF por correo
         </h2>
@@ -135,7 +135,6 @@ export default function ModalEnviarPDF({
             </button>
           )}
         </div>
-      </section>
-    </div>
+    </ModalMobileShell>
   );
 }

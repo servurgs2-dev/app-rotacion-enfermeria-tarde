@@ -100,13 +100,14 @@ probar("la interfaz exige motivo y compañero para confirmar cobertura", () => {
   assert.match(panel, /disabled=\{!puedeConfirmar\}/);
 });
 
-probar("el formulario es un modal fijo, centrado y adaptable", () => {
+probar("el formulario utiliza el shell mobile centrado y adaptable", () => {
   const panel = fs.readFileSync("src/components/calendario/PanelExtraLibre.jsx", "utf8");
-  assert.match(panel, /fixed inset-0 z-50 flex items-center justify-center/);
-  assert.match(panel, /role="dialog"/);
-  assert.match(panel, /aria-modal="true"/);
-  assert.match(panel, /w-full max-w-lg overflow-y-auto/);
-  assert.match(panel, /max-h-\[calc\(100vh-/);
+  const shell = fs.readFileSync("src/components/ui/ModalMobileShell.jsx", "utf8");
+  assert.match(panel, /<ModalMobileShell/);
+  assert.match(panel, /ariaLabelledby="titulo-extra-libre"/);
+  assert.match(shell, /role="dialog"/);
+  assert.match(shell, /aria-modal="true"/);
+  assert.match(shell, /max-h-\[calc\(100dvh-/);
 });
 
 probar("Escape cierra el modal por la misma cancelación segura", () => {

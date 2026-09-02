@@ -1,4 +1,5 @@
 import { describirRedistribucion } from "../../utils/redistribucionEnfermeros.js";
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
 
 export default function PanelConfirmacionRedistribucion({
   tipo,
@@ -14,13 +15,11 @@ export default function PanelConfirmacionRedistribucion({
       : "¿Aplicar Redistribución opción 1?";
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="titulo-redistribucion"
+    <ModalMobileShell
+      ariaLabelledby="titulo-redistribucion"
+      backdropClassName="bg-slate-950/55"
+      panelClassName="px-5 pt-5 shadow-2xl sm:px-5 sm:pt-5 sm:pb-5"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
         <h2 id="titulo-redistribucion" className="text-lg font-semibold text-slate-900">
           {titulo}
         </h2>
@@ -55,7 +54,6 @@ export default function PanelConfirmacionRedistribucion({
               : "Sí, aplicar redistribución"}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalMobileShell>
   );
 }

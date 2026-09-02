@@ -6,6 +6,7 @@ import { obtenerMensajeMovimientoPadronBase } from "../src/services/servicioMovi
 
 const lista = fs.readFileSync("src/components/personal/ListaPersonal.jsx", "utf8");
 const modal = fs.readFileSync("src/components/personal/MoverTurnoBaseSupervision.jsx", "utf8");
+const modalShell = fs.readFileSync("src/components/ui/ModalMobileShell.jsx", "utf8");
 const app = fs.readFileSync("src/App.jsx", "utf8");
 const conjunto = `${lista}\n${modal}\n${app}`;
 const persona = { id: "P", nombre: "Romina", categoria: "licenciado", funcionario: "100" };
@@ -55,9 +56,10 @@ test("32 movimiento no limpia Calendario", () => assert.doesNotMatch(modal, /set
 test("33 CAS muestra mensaje y acción Recargar", () => assert.match(modal, /cambiaron mientras[\s\S]+Recargar/));
 test("34 errores backend usan mensajes del service", () => assert.match(modal, /obtenerMensajeMovimientoPadronBase/));
 test("35 modal es mobile-first y accesible", () => {
-  assert.match(modal, /items-end[\s\S]+sm:items-center/);
-  assert.match(modal, /max-h-\[92vh\]/);
-  assert.match(modal, /aria-modal="true"/);
+  assert.match(modal, /<ModalMobileShell/);
+  assert.match(modalShell, /items-end[\s\S]+sm:items-center/);
+  assert.match(modalShell, /100dvh/);
+  assert.match(modalShell, /aria-modal="true"/);
 });
 test("36 cancelar no ejecuta el RPC", () => assert.match(modal, /onClick=\{onCerrar\}>Cancelar/));
 test("37 preflight no muta el origen", () => {

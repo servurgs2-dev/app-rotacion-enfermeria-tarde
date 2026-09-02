@@ -11,6 +11,7 @@ import {
   resolverVersionEstructuraLicenciados,
   VERSION_ESTRUCTURA_LICENCIADOS_DINAMICA
 } from "../../utils/estructuraLicenciadosDinamica.js";
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
 
 const CATEGORIAS_PRIORIDAD = Object.freeze(["enfermero", "licenciado"]);
 
@@ -124,13 +125,12 @@ function PanelPrepararMes({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-3"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="titulo-preparar-mes"
+    <ModalMobileShell
+      ariaLabelledby="titulo-preparar-mes"
+      backdropClassName="bg-slate-900/50"
+      maxWidthClassName="max-w-4xl"
+      panelClassName="px-5 pt-5 sm:px-5 sm:pt-5 sm:pb-5"
     >
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
         <h3 id="titulo-preparar-mes" className="text-xl font-bold text-slate-900">
           Preparar mes siguiente
         </h3>
@@ -350,8 +350,7 @@ function PanelPrepararMes({
                     : "La configuración v2 requiere revisión antes de preparar."}
             </p>
         </div>
-      </div>
-    </div>
+    </ModalMobileShell>
   );
 }
 

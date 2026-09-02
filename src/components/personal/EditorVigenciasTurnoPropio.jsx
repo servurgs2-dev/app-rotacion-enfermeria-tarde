@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { TURNOS } from "../../config/turnos.js";
 import { guardarVigenciasTurnoPersonaMesTurnoPropio } from "../../services/vigenciasTurnoPersonal.js";
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
 import {
   obtenerMensajeErrorVigenciasTurnoPropio,
   prepararEditorVigenciasTurnoPropio
@@ -74,8 +75,10 @@ export default function EditorVigenciasTurnoPropio({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-2 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="titulo-vigencias-turno-propio">
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
+    <ModalMobileShell
+      ariaLabelledby="titulo-vigencias-turno-propio"
+      backdropClassName="bg-slate-950/40"
+    >
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 id="titulo-vigencias-turno-propio" className="font-semibold text-slate-900">Editar mi turno</h3>
@@ -136,7 +139,6 @@ export default function EditorVigenciasTurnoPropio({
           <button type="button" onClick={onCerrar} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Cancelar</button>
           {!bloqueado && <button type="button" onClick={guardar} disabled={guardando || !cambios || !validacion.valido || conflicto} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300">{guardando ? "Guardando…" : "Guardar"}</button>}
         </div>
-      </div>
-    </div>
+    </ModalMobileShell>
   );
 }

@@ -9,6 +9,7 @@ import { resolverPersonalMensualPorTurno } from "../src/utils/padronVigenciasTur
 
 const lista = fs.readFileSync("src/components/personal/ListaPersonal.jsx", "utf8");
 const editor = fs.readFileSync("src/components/personal/EditorVigenciasSupervision.jsx", "utf8");
+const modalShell = fs.readFileSync("src/components/ui/ModalMobileShell.jsx", "utf8");
 const editorPropio = fs.readFileSync("src/components/personal/EditorVigenciasTurnoPropio.jsx", "utf8");
 const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
 let total = 0;
@@ -213,7 +214,8 @@ probar("mensajes remotos son humanos", () => {
 });
 probar("UI no muestra JSON SQL ni RPC", () => assert.doesNotMatch(editor, /<pre|SQLERRM|p_revision|guardar_vigencias_turno/));
 probar("editor es mobile-first", () => {
-  assert.match(editor, /w-full max-w-lg/);
+  assert.match(editor, /<ModalMobileShell/);
+  assert.match(modalShell, /w-full[\s\S]+maxWidthClassName/);
   assert.match(editor, /grid-cols-1[\s\S]*min-\[390px\]:grid-cols-2/);
 });
 probar("acciones legacy transversales continúan bloqueadas", () => {

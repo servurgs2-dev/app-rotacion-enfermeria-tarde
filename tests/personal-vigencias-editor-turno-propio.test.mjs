@@ -8,6 +8,7 @@ import { validarRangosTurnoPropio } from "../src/utils/vigenciasTurnoPersonal.js
 
 const lista = fs.readFileSync("src/components/personal/ListaPersonal.jsx", "utf8");
 const editor = fs.readFileSync("src/components/personal/EditorVigenciasTurnoPropio.jsx", "utf8");
+const modalShell = fs.readFileSync("src/components/ui/ModalMobileShell.jsx", "utf8");
 const app = fs.readFileSync("src/App.jsx", "utf8");
 const hook = fs.readFileSync("src/hooks/usePadronVigenciasPersonalMes.js", "utf8");
 const wrapper = fs.readFileSync("src/services/vigenciasTurnoPersonal.js", "utf8");
@@ -154,7 +155,8 @@ probar("error de identidad tiene mensaje humano", () => assert.match(
 probar("UI no muestra JSON técnico", () => assert.doesNotMatch(editor,
   /<pre|persona_id|p_revision_esperada/));
 probar("editor es compacto mobile-first", () => {
-  assert.match(editor, /w-full max-w-lg/);
+  assert.match(editor, /<ModalMobileShell/);
+  assert.match(modalShell, /w-full[\s\S]+maxWidthClassName/);
   assert.match(editor, /grid-cols-1[\s\S]*min-\[390px\]:grid-cols-2/);
   assert.doesNotMatch(editor, /min-w-\[[5-9]\d\dpx\]|w-\[[5-9]\d\dpx\]/);
 });

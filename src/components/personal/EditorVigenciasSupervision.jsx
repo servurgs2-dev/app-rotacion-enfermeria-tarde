@@ -4,6 +4,7 @@ import {
   eliminarVigenciasTurnoPersonaMes,
   guardarVigenciasTurnoPersonaMes
 } from "../../services/vigenciasTurnoPersonal.js";
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
 import {
   obtenerMensajeErrorVigenciasSupervision,
   prepararEditorVigenciasSupervision,
@@ -114,8 +115,10 @@ export default function EditorVigenciasSupervision({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-2 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="titulo-vigencias-supervision">
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
+    <ModalMobileShell
+      ariaLabelledby="titulo-vigencias-supervision"
+      backdropClassName="bg-slate-950/40"
+    >
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 id="titulo-vigencias-supervision" className="font-semibold text-slate-900">Editar vigencias</h3>
@@ -204,7 +207,6 @@ export default function EditorVigenciasSupervision({
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </ModalMobileShell>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
 
 const PanelExtraLibre = ({
   formulario,
@@ -24,13 +25,11 @@ const PanelExtraLibre = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3 sm:p-4">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="titulo-extra-libre"
-        className="max-h-[calc(100vh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-2xl sm:max-h-[calc(100vh-2rem)]"
-      >
+    <ModalMobileShell
+      ariaLabelledby="titulo-extra-libre"
+      backdropClassName="bg-slate-950/55"
+      panelClassName="rounded-xl border border-blue-200 bg-blue-50 px-4 pt-4 shadow-2xl sm:rounded-xl sm:px-4 sm:pt-4 sm:pb-4"
+    >
         <h4 id="titulo-extra-libre" className="font-semibold text-blue-950">
           Funcionario que viene en su libre
         </h4>
@@ -102,8 +101,7 @@ const PanelExtraLibre = ({
           Confirmar
         </button>
         </div>
-      </section>
-    </div>
+    </ModalMobileShell>
   );
 };
 

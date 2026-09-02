@@ -1,3 +1,5 @@
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
+
 function PanelIntercambioPlanilla({
   periodos,
   periodoClave,
@@ -16,13 +18,12 @@ function PanelIntercambioPlanilla({
   const opcionesDestino = opciones.filter((opcion) => opcion.fila !== filaOrigen);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="titulo-intercambio-planilla"
+    <ModalMobileShell
+      ariaLabelledby="titulo-intercambio-planilla"
+      backdropClassName="bg-slate-900/50"
+      maxWidthClassName="max-w-xl"
+      panelClassName="px-5 pt-5 sm:px-5 sm:pt-5 sm:pb-5"
     >
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
         <h3 id="titulo-intercambio-planilla" className="text-lg font-semibold text-slate-900">
           ⇄ Intercambiar personas
         </h3>
@@ -101,8 +102,7 @@ function PanelIntercambioPlanilla({
             Confirmar intercambio
           </button>
         </div>
-      </div>
-    </div>
+    </ModalMobileShell>
   );
 }
 

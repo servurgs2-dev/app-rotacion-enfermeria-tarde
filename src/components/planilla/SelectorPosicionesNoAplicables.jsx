@@ -1,3 +1,5 @@
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
+
 function SelectorPosicionesNoAplicables({
   filas,
   filasVacias,
@@ -16,13 +18,12 @@ function SelectorPosicionesNoAplicables({
   const criticos = seleccionadas.filter((fila) => sectoresCriticos.includes(fila));
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="titulo-posiciones-no-aplicables"
+    <ModalMobileShell
+      ariaLabelledby="titulo-posiciones-no-aplicables"
+      backdropClassName="bg-slate-900/50"
+      maxWidthClassName="max-w-2xl"
+      panelClassName="px-5 pt-5 sm:px-5 sm:pt-5 sm:pb-5"
     >
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
         <h3 id="titulo-posiciones-no-aplicables" className="text-lg font-semibold text-slate-900">
           Posiciones no aplicables
         </h3>
@@ -93,8 +94,7 @@ function SelectorPosicionesNoAplicables({
             Confirmar y generar
           </button>
         </div>
-      </div>
-    </div>
+    </ModalMobileShell>
   );
 }
 

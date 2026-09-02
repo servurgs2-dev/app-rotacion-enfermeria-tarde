@@ -4,6 +4,7 @@ import {
   OPCIONES_MOTIVO_NO_DISPONIBLE
 } from "../../utils/noDisponiblesMotivos.js";
 import SelectorFuncionarioOtroTurno from "./SelectorFuncionarioOtroTurno.jsx";
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
 
 const TURNOS = [
   ["manana", "Mañana"],
@@ -37,13 +38,10 @@ export default function PanelNoDisponible({
   const certificacionDia = formulario.motivo === MOTIVOS_NO_DISPONIBLE.CERTIFICACION_DIA;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="titulo-no-disponible"
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
-      >
+    <ModalMobileShell
+      ariaLabelledby="titulo-no-disponible"
+      panelClassName="px-5 pt-5 sm:px-5 sm:pt-5 sm:pb-5"
+    >
         <h3 id="titulo-no-disponible" className="text-lg font-semibold text-slate-900">
           {formulario.editando ? "Editar No disponible" : "Marcar No disponible"}
         </h3>
@@ -211,7 +209,6 @@ export default function PanelNoDisponible({
             </button>
           </div>
         </div>
-      </section>
-    </div>
+    </ModalMobileShell>
   );
 }

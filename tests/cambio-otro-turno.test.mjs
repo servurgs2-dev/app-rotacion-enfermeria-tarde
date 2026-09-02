@@ -295,7 +295,7 @@ assert.match(selectorCompartido, /Número de funcionario \(opcional\)/);
 assert.match(panel, /Turno de origen \(opcional\)/);
 assert.match(panel, /Eliminar también el Extra/);
 assert.match(panel, /Mantener al Extra como refuerzo/);
-assert.match(panel, /max-h-\[90vh\]/, "el modal conserva scroll móvil");
+assert.match(panel, /ModalMobileShell/, "el modal delega el scroll móvil al shell común");
 assert.match(panel, /Escape/, "el modal cierra con Escape");
 const panelExtra = readFileSync(new URL("../src/components/calendario/PanelAgregarExtra.jsx", import.meta.url), "utf8");
 assert.match(panel, /SelectorFuncionarioOtroTurno/);

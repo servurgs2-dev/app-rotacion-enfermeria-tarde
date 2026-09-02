@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { TURNOS } from "../../config/turnos.js";
 import { obtenerMensajeMovimientoPadronBase } from "../../services/servicioMovimientoPadronBase.js";
 import { presentarBloqueosMovimientoPadronBase } from "../../utils/presentacionDependenciasMovimientoPadronBase.js";
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
 
 const nombreMes = (mes) => {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes || "")) return mes || "";
@@ -97,8 +98,10 @@ function MoverTurnoBaseSupervision({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-mover-turno-base">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:max-w-lg sm:rounded-2xl sm:p-6">
+    <ModalMobileShell
+      ariaLabelledby="titulo-mover-turno-base"
+      panelClassName="sm:px-6 sm:pt-6 sm:pb-6"
+    >
         <h3 id="titulo-mover-turno-base" className="text-lg font-semibold text-slate-900">
           Cambio de padrón base — {nombreMes(mes)}
         </h3>
@@ -160,8 +163,7 @@ function MoverTurnoBaseSupervision({
             {guardando ? "Cambiando turno base…" : confirmando ? "Confirmar cambio" : "Cambiar turno base"}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalMobileShell>
   );
 }
 

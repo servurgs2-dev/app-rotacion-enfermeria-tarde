@@ -1,3 +1,5 @@
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
+
 function PanelReiniciarMes({
   turnoNombre,
   periodoVisible,
@@ -10,13 +12,12 @@ function PanelReiniciarMes({
   const confirmacionValida = textoConfirmacion.trim() === "REINICIAR";
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="titulo-reiniciar-mes"
+    <ModalMobileShell
+      ariaLabelledby="titulo-reiniciar-mes"
+      backdropClassName="bg-slate-950/50"
+      maxWidthClassName="max-w-xl"
+      panelClassName="px-5 pt-5 sm:px-5 sm:pt-5 sm:pb-5"
     >
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
         <h2 id="titulo-reiniciar-mes" className="text-lg font-semibold text-slate-900">
           ¿Reiniciar completamente {periodoVisible}?
         </h2>
@@ -74,8 +75,7 @@ function PanelReiniciarMes({
             Sí, reiniciar mes completo
           </button>
         </div>
-      </div>
-    </div>
+    </ModalMobileShell>
   );
 }
 

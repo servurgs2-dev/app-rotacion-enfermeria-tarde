@@ -1,4 +1,5 @@
 import SelectorFuncionarioOtroTurno from "./SelectorFuncionarioOtroTurno.jsx";
+import ModalMobileShell from "../ui/ModalMobileShell.jsx";
 
 export default function PanelAgregarExtra({
   formulario,
@@ -10,13 +11,10 @@ export default function PanelAgregarExtra({
 }) {
   if (!formulario) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="titulo-agregar-extra"
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
-      >
+    <ModalMobileShell
+      ariaLabelledby="titulo-agregar-extra"
+      panelClassName="px-5 pt-5 sm:px-5 sm:pt-5 sm:pb-5"
+    >
         <h3 id="titulo-agregar-extra" className="text-lg font-semibold text-slate-900">
           Agregar Extra
         </h3>
@@ -82,7 +80,6 @@ export default function PanelAgregarExtra({
             Agregar Extra
           </button>
         </div>
-      </section>
-    </div>
+    </ModalMobileShell>
   );
 }

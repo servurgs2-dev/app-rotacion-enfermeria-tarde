@@ -4,9 +4,16 @@ import {
 } from "./identidadPersonas.js";
 import { resolverPersonaDesdeReferencia } from "./referenciasPersonas.js";
 import { normalizar } from "./texto.js";
+import { MOTIVOS_NO_DISPONIBLE } from "./noDisponiblesMotivos.js";
 
 const texto = (valor) => String(valor ?? "").trim();
 const esObjeto = (valor) => Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
+const MOTIVOS_NO_DISPONIBLE_PROYECTABLES = new Set([
+  MOTIVOS_NO_DISPONIBLE.FALTA_CON_AVISO,
+  MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO,
+  MOTIVOS_NO_DISPONIBLE.ADHESION_PARO,
+  MOTIVOS_NO_DISPONIBLE.OTRO
+]);
 
 const nombreNormalizado = (valor) => (normalizar(valor) || "").replace(/\s+/g, " ");
 
@@ -255,13 +262,23 @@ const auditarCalendario = ({ estado, personaId, personal, categoria, bloqueos, i
       const esTitular = relacion.coincide;
       const esCobertura = texto(registro?.personaCoberturaId) === personaId;
       if (!esTitular && !esCobertura) return;
-      agregar(bloqueos, {
+      const proyectable = esTitular && !esCobertura && relacion.moderna &&
+        !texto(registro?.personaCoberturaId) &&
+        registro?.vinculacionCambioOtroTurno !== true &&
+        MOTIVOS_NO_DISPONIBLE_PROYECTABLES.has(registro?.motivo);
+      agregar(proyectable ? informativas : bloqueos, {
         ...datosDiagnosticoReferencia(
-          relacion.ambigua && esTitular
+          proyectable
+            ? { ...relacion, moderna: true }
+            : relacion.ambigua && esTitular
             ? relacion
             : { ambigua: false, moderna: true },
-          "REFERENCIAS_CALENDARIO_LOCAL_PENDIENTES",
-          "La no disponibilidad se aplica usando el padrón físico del turno."
+          proyectable
+            ? "NO_DISPONIBLE_PROYECTABLE_POR_VIGENCIA"
+            : "REFERENCIAS_CALENDARIO_LOCAL_PENDIENTES",
+          proyectable
+            ? "La no disponibilidad conserva su origen y se aplica según la vigencia efectiva."
+            : "La no disponibilidad posee un vínculo operativo ligado al Calendario del turno."
         ),
         ambito: "calendario",
         categoria,
@@ -301,13 +318,18 @@ const auditarCalendario = ({ estado, personaId, personal, categoria, bloqueos, i
         resolverRelacionReferencia(referencia, personaId, personal)
       );
       if (!relaciones.some(({ coincide }) => coincide)) return;
-      agregar(informativas, {
+      const vinculado = Boolean(extra?.vinculacionCambioOtroTurno || extra?.personaCubiertaId);
+      agregar(vinculado ? bloqueos : informativas, {
         codigo: relaciones.some(({ ambigua }) => ambigua)
           ? "EXTRA_REFERENCIA_LEGACY_AMBIGUA"
-          : "EXTRA_RELACIONADO_PERSONA",
+          : vinculado
+            ? "REFERENCIAS_CALENDARIO_LOCAL_PENDIENTES"
+            : "EXTRA_RELACIONADO_PERSONA",
         ambito: "extras",
         categoria,
-        detalle: "El Extra conserva identidad y contexto propios; no se mueve ni se reescribe.",
+        detalle: vinculado
+          ? "El Extra está vinculado a una cobertura que debe resolverse antes de mover el padrón base."
+          : "El Extra conserva identidad y contexto propios; no se mueve ni se reescribe.",
         ruta: `${fecha} / Extra`,
         rutaInterna: `calendario.${clave}.extras.${fecha}.${indice}`
       });

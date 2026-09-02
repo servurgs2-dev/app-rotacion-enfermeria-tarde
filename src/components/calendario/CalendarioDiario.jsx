@@ -130,6 +130,7 @@ import {
   MOTIVOS_NO_DISPONIBLE,
   obtenerEtiquetaTurnoDestino,
   obtenerNoDisponiblesDelDia,
+  obtenerNoDisponiblesOperativosPorTurnoEfectivo,
   reemplazarRegistroNoDisponible
 } from "../../utils/noDisponiblesMotivos.js";
 import {
@@ -199,6 +200,7 @@ function CalendarioDiario({
   personal = [],
   estadoMensual,
   padronVigencias = null,
+  estadosPorTurnoLectura = null,
   planilla = {},
   tipo,
   mesActivo = "",
@@ -212,6 +214,8 @@ function CalendarioDiario({
   obtenerCertificacionesActuales,
   calendario,
   obtenerCalendarioActual,
+  puedeMutarNoDisponibleOrigen = () => false,
+  actualizarCalendarioNoDisponibleOrigen = () => false,
   cargarPersonalOtrosTurnos,
   setCalendario,
   esDiaParo,
@@ -238,7 +242,6 @@ const {
   procedenciaCambiosDia = {},
   procedenciaCoberturaAutomaticaDia = {},
   cambiosParoDia = {},
-  noDisponibles = {},
   extras = {},
   asistenciaDia = {},
   cierresDia = {}
@@ -339,6 +342,20 @@ const bloqueadoPorCierre = estaFechaCategoriaCerrada(cierresDia, keyDia);
 const soloLecturaEfectiva = soloLectura || bloqueadoPorCierre;
 const versionCierre = obtenerUltimaVersionCierre(cierresDia, keyDia);
 const snapshotCierre = versionCierre?.snapshot || null;
+const noDisponiblesDia = useMemo(() => {
+  const fechaDia = keyDiaFromDate(fecha);
+  const registrosActuales = calendario?.noDisponibles?.[fechaDia] || [];
+  return estaFechaCategoriaCerrada(calendario?.cierresDia, fechaDia)
+    ? registrosActuales
+    : obtenerNoDisponiblesOperativosPorTurnoEfectivo({
+        estadosPorTurno: estadosPorTurnoLectura,
+        categoria: tipo,
+        fecha: fechaDia,
+        turno: turnoActivo,
+        padronVigencias,
+        registrosActuales
+      });
+}, [calendario, estadosPorTurnoLectura, fecha, padronVigencias, tipo, turnoActivo]);
 const contextoResponsable = `${turnoActivo}|${keyDia}|${tipo}`;
 const responsableSeleccionadoId = seleccionResponsable.contexto === contextoResponsable
   ? seleccionResponsable.personaId
@@ -435,7 +452,7 @@ const certificados = useMemo(
 );
 
   const estaNoDisponibleManual = (e) =>
-    e && (noDisponibles[keyDia] || []).some(
+    e && noDisponiblesDia.some(
       (referencia) => referenciaCorrespondeAPersona(
         referencia,
         e,
@@ -484,7 +501,7 @@ const puedeAplicarseCoberturaDirecta = (persona) => {
   if (!estaAusente(persona)) return true;
   const cambioVinculado = esCambioOtroTurnoVinculado({
     persona,
-    registros: noDisponibles[keyDia],
+    registros: noDisponiblesDia,
     extras: extrasDia,
     personal: personalFiltrado
   });
@@ -739,7 +756,7 @@ asignacionCompleta = excluirCertificadosDeAsignaciones({
 });
 asignacionCompleta = excluirAusenciasOperativasNoDisponiblesDeAsignaciones({
   asignaciones: asignacionCompleta,
-  registros: noDisponibles[keyDia],
+  registros: noDisponiblesDia,
   personal: personalFiltrado
 });
 asignacionCompleta = excluirNoDisponiblesPorNovedadesDeAsignaciones({
@@ -1263,7 +1280,7 @@ const obtenerSectorOrigenPersona = (persona) => {
 };
 
 const noDisponiblesPresentacion = obtenerNoDisponiblesDelDia({
-  registros: noDisponibles[keyDia],
+  registros: noDisponiblesDia,
   certificaciones: certificacionesLectura,
   novedades,
   personal,
@@ -1308,8 +1325,32 @@ const personasCubriblesExtra = [
   })
 ];
 
+const obtenerTurnoOrigenNoDisponible = (registro) =>
+  registro?.turnoOrigenEstado || turnoActivo;
+const puedeEditarNoDisponible = (registro) => {
+  const turnoOrigenEstado = obtenerTurnoOrigenNoDisponible(registro);
+  return !soloLecturaEfectiva && (
+    turnoOrigenEstado === turnoActivo || puedeMutarNoDisponibleOrigen(turnoOrigenEstado)
+  );
+};
+const actualizarNoDisponibleEnOrigen = (registro, actualizar, calendarioEsperado = null) => {
+  const turnoOrigenEstado = obtenerTurnoOrigenNoDisponible(registro);
+  if (turnoOrigenEstado !== turnoActivo) {
+    return actualizarCalendarioNoDisponibleOrigen({
+      turnoOrigenEstado,
+      categoria: tipo,
+      actualizar
+    });
+  }
+  setCalendario((prev) => {
+    if (calendarioEsperado && prev !== calendarioEsperado) return prev;
+    return actualizar(prev);
+  });
+  return true;
+};
+
 const abrirFormularioNoDisponible = async (persona, registro = null) => {
-  if (soloLecturaEfectiva || estaCertificadoHoy(persona)) return;
+  if (!puedeEditarNoDisponible(registro) || estaCertificadoHoy(persona)) return;
   const cargaId = cargaExtrasRef.current + 1;
   cargaExtrasRef.current = cargaId;
   const coberturaRegistrada = extrasDia.find(
@@ -1403,6 +1444,19 @@ const confirmarNoDisponible = () => {
     setFormularioNoDisponible((actual) => ({
       ...actual,
       error: "El calendario cambió mientras confirmabas. Revisá nuevamente."
+    }));
+    return;
+  }
+  const turnoOrigenEstado = obtenerTurnoOrigenNoDisponible(formularioNoDisponible.registro);
+  if (
+    formularioNoDisponible.registro &&
+    turnoOrigenEstado !== turnoActivo &&
+    [MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO, MOTIVOS_NO_DISPONIBLE.CERTIFICACION_DIA]
+      .includes(formularioNoDisponible.motivo)
+  ) {
+    setFormularioNoDisponible((actual) => ({
+      ...actual,
+      error: "Este vínculo operativo debe gestionarse desde el turno donde fue creado."
     }));
     return;
   }
@@ -1515,8 +1569,7 @@ const confirmarNoDisponible = () => {
     return;
   }
 
-  setCalendario((prev) => {
-    if (prev !== formularioNoDisponible.contexto.calendario) return prev;
+  actualizarNoDisponibleEnOrigen(formularioNoDisponible.registro, (prev) => {
     const lista = prev.noDisponibles?.[keyDia] || [];
     return {
       ...prev,
@@ -1530,13 +1583,12 @@ const confirmarNoDisponible = () => {
         })
       }
     };
-  });
+  }, formularioNoDisponible.contexto.calendario);
   setFormularioNoDisponible(null);
 };
 
 const aplicarQuitarNoDisponible = ({ persona, registro, accionExtra = "", calendarioEsperado }) => {
-  setCalendario((prev) => {
-    if (prev !== calendarioEsperado) return prev;
+  actualizarNoDisponibleEnOrigen(registro, (prev) => {
     const tieneExtraVinculado = Boolean(registro?.personaCoberturaId);
     if (tieneExtraVinculado) {
       return eliminarNoDisponibleVinculado({
@@ -1559,7 +1611,7 @@ const aplicarQuitarNoDisponible = ({ persona, registro, accionExtra = "", calend
         )
       }
     };
-  });
+  }, calendarioEsperado);
 };
 
 const quitarNoDisponible = (accionExtra = "") => {
@@ -1663,7 +1715,7 @@ useEffect(() => {
       }).filter(
         (persona) =>
           !estaDeLicenciaHoy(persona) &&
-          !(noDisponibles[keyDia] || []).some((referencia) =>
+          !noDisponiblesDia.some((referencia) =>
             referenciaCorrespondeAPersona(
               referencia,
               persona,
@@ -1724,7 +1776,7 @@ useEffect(() => {
   keyDia,
   libresMostrados,
   licenciasMostradas,
-  noDisponibles,
+  noDisponiblesDia,
   noDisponiblesMostrados,
   noDisponiblesPresentacion,
   onDataReady,
@@ -1849,7 +1901,7 @@ useEffect(() => {
       personasCompartenIdentidad(extra, item.enfermero)
     );
     const registroNoDisponible = personaPersonal
-      ? (noDisponibles[keyDia] || []).find((referencia) =>
+      ? noDisponiblesDia.find((referencia) =>
           referenciaCorrespondeAPersona(referencia, personaPersonal, personalFiltrado)
         ) || null
       : null;
@@ -2328,7 +2380,7 @@ useEffect(() => {
         : registro.turnoDestino
           ? `Turno destino: ${obtenerEtiquetaTurnoDestino(registro.turnoDestino)}`
           : registro.detalle || "",
-      accion: registro.tipo === "manual" && registro.persona
+      accion: registro.tipo === "manual" && registro.persona && puedeEditarNoDisponible(registro.registro)
         ? "editar"
         : registro.tipo === "certificacion_rapida"
           ? "quitar_certificacion"
@@ -2685,7 +2737,7 @@ useEffect(() => {
           <p>
             Categoría: {registro.categoria === "licenciado" ? "Licenciados" : "Enfermeros"}
           </p>
-          {registro.tipo === "manual" && registro.persona && !soloLecturaEfectiva && (
+          {registro.tipo === "manual" && registro.persona && puedeEditarNoDisponible(registro.registro) && (
             <button
               type="button"
               onClick={() => abrirFormularioNoDisponible(registro.persona, registro.registro)}
@@ -2871,7 +2923,7 @@ useEffect(() => {
 
 <div className="flex flex-wrap gap-2">
   {personalFiltrado.map((e, indice) => {
-    const activo = (noDisponibles[keyDia] || []).some(
+    const activo = noDisponiblesDia.some(
       (referencia) => referenciaCorrespondeAPersona(
         referencia,
         e,
@@ -2880,7 +2932,7 @@ useEffect(() => {
     );
     const certificado = estaCertificadoHoy(e);
     const registroActivo = activo
-      ? (noDisponibles[keyDia] || []).find((referencia) =>
+      ? noDisponiblesDia.find((referencia) =>
           referenciaCorrespondeAPersona(referencia, e, personalFiltrado)
         )
       : null;
@@ -2888,7 +2940,7 @@ useEffect(() => {
     return (
       <button
         type="button"
-        disabled={soloLecturaEfectiva || certificado}
+        disabled={soloLecturaEfectiva || certificado || (activo && !puedeEditarNoDisponible(registroActivo))}
         key={obtenerClaveRenderPersona(e, indice, idsPersonalDuplicados)}
         className={`px-3 py-1.5 rounded-lg text-sm transition
           ${activo

@@ -620,6 +620,32 @@ const puedeMutarMesActivo = useCallback(() => Boolean(
   })
 ), [claveActiva, mesActivo, puedeMutarClaveMensual, turnoActivo]);
 
+const actualizarCalendarioNoDisponibleEnOrigen = useCallback(({
+  turnoOrigenEstado,
+  categoria,
+  actualizar
+}) => {
+  const claveOrigen = crearClaveTurnoMes(turnoOrigenEstado, mesActivo);
+  if (!puedeMutarClaveMensual({ clave: claveOrigen, turnoId: turnoOrigenEstado, mes: mesActivo })) return false;
+  let actualizado = false;
+  setEstadoPorTurnoMes((prev) => {
+    const estadoOrigen = prev[claveOrigen];
+    const calendarioOrigen = estadoOrigen?.calendario?.[categoria];
+    if (!estadoOrigen || !calendarioOrigen) return prev;
+    const siguiente = actualizar(calendarioOrigen);
+    if (!siguiente || siguiente === calendarioOrigen) return prev;
+    actualizado = true;
+    return {
+      ...prev,
+      [claveOrigen]: {
+        ...estadoOrigen,
+        calendario: { ...estadoOrigen.calendario, [categoria]: siguiente }
+      }
+    };
+  });
+  return actualizado;
+}, [mesActivo, puedeMutarClaveMensual]);
+
 const actualizarMetadatosClave = useCallback((clave, actualizador) => {
   const anteriores = metadatosPorClaveRef.current.get(clave) || null;
   const siguientes =
@@ -3111,6 +3137,7 @@ return (
     personal={personalCalendario}
     estadoMensual={mesData}
     padronVigencias={vigenciasPersonal.padron}
+    estadosPorTurnoLectura={estadosVigenciasCalendario}
     planilla={planillaEnfermeros}
     tipo="enfermero"
     mesActivo={mesActivo}
@@ -3129,6 +3156,11 @@ return (
     obtenerCalendarioActual={() =>
       estadoPorTurnoMesRef.current[claveActiva]?.calendario?.enfermeros
     }
+    puedeMutarNoDisponibleOrigen={(turnoOrigenEstado) => {
+      const claveOrigen = crearClaveTurnoMes(turnoOrigenEstado, mesActivo);
+      return puedeMutarClaveMensual({ clave: claveOrigen, turnoId: turnoOrigenEstado, mes: mesActivo });
+    }}
+    actualizarCalendarioNoDisponibleOrigen={actualizarCalendarioNoDisponibleEnOrigen}
     cargarPersonalOtrosTurnos={cargarPersonalDeOtrosTurnos}
     esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
      onDataReady={setDataPDFEnf}
@@ -3174,6 +3206,7 @@ return (
     personal={personalCalendario}
     estadoMensual={mesData}
     padronVigencias={vigenciasPersonal.padron}
+    estadosPorTurnoLectura={estadosVigenciasCalendario}
     planilla={planillaLicenciados}
     tipo="licenciado"
     mesActivo={mesActivo}
@@ -3192,6 +3225,11 @@ return (
     obtenerCalendarioActual={() =>
       estadoPorTurnoMesRef.current[claveActiva]?.calendario?.licenciados
     }
+    puedeMutarNoDisponibleOrigen={(turnoOrigenEstado) => {
+      const claveOrigen = crearClaveTurnoMes(turnoOrigenEstado, mesActivo);
+      return puedeMutarClaveMensual({ clave: claveOrigen, turnoId: turnoOrigenEstado, mes: mesActivo });
+    }}
+    actualizarCalendarioNoDisponibleOrigen={actualizarCalendarioNoDisponibleEnOrigen}
     cargarPersonalOtrosTurnos={cargarPersonalDeOtrosTurnos}
     esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
     onDataReady={setDataPDFLic}

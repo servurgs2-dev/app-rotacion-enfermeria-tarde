@@ -9,6 +9,7 @@ import {
   resolverPersonaDesdeReferencia
 } from "./referenciasPersonas.js";
 import {
+  novedadCorrespondeTurnoEfectivo,
   novedadAfectaDisponibilidadEnFecha,
   obtenerEtiquetaTipoNovedad
 } from "./novedadesPersonal.js";
@@ -161,6 +162,62 @@ const MOTIVOS_AUSENCIA_OPERATIVA_SIMPLE = new Set([
   MOTIVOS_NO_DISPONIBLE.ADHESION_PARO,
   MOTIVOS_NO_DISPONIBLE.OTRO
 ]);
+
+export const obtenerNoDisponiblesOperativosPorTurnoEfectivo = ({
+  estadosPorTurno,
+  categoria,
+  fecha,
+  turno,
+  padronVigencias,
+  registrosActuales = []
+} = {}) => {
+  const estados = estadosPorTurno && typeof estadosPorTurno === "object"
+    ? Object.entries(estadosPorTurno)
+    : [];
+  const fuentes = [
+    [turno, Array.isArray(registrosActuales) ? registrosActuales : []],
+    ...estados
+      .filter(([turnoOrigenEstado]) => turnoOrigenEstado !== turno)
+      .map(([turnoOrigenEstado, estado]) => [
+        turnoOrigenEstado,
+        estado?.calendario?.[categoria]?.noDisponibles?.[fecha]
+      ])
+  ];
+  const porIdentidad = new Map();
+
+  fuentes.forEach(([turnoOrigenEstado, registros]) => {
+    (Array.isArray(registros) ? registros : []).forEach((registro) => {
+      if (registro?.motivo === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO) {
+        if (turnoOrigenEstado !== turno) return;
+      } else if (!MOTIVOS_AUSENCIA_OPERATIVA_SIMPLE.has(registro?.motivo)) {
+        return;
+      }
+
+      if (registro?.motivo !== MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO) {
+        const corresponde = novedadCorrespondeTurnoEfectivo({
+          novedad: {
+            personaId: registro?.personaId,
+            personaNombre: registro?.nombre,
+            fechaDesde: fecha,
+            fechaHasta: fecha,
+            turno: turnoOrigenEstado
+          },
+          turno,
+          padronVigencias
+        });
+        if (!corresponde) return;
+      }
+
+      const clave = registro?.personaId
+        ? `persona:${registro.personaId}`
+        : registro?.id
+          ? `registro:${registro.id}`
+          : `legacy:${registro?.creadoEn || ""}:${registro?.motivo || ""}:${registro?.nombre || ""}:${registro?.personaCoberturaId || ""}`;
+      if (!porIdentidad.has(clave)) porIdentidad.set(clave, { ...registro, turnoOrigenEstado });
+    });
+  });
+  return [...porIdentidad.values()];
+};
 
 export const excluirAusenciasOperativasNoDisponiblesDeAsignaciones = ({
   asignaciones = [],

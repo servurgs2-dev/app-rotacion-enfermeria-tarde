@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TURNOS } from "../../config/turnos.js";
 import { obtenerMensajeMovimientoPadronBase } from "../../services/servicioMovimientoPadronBase.js";
+import { presentarBloqueosMovimientoPadronBase } from "../../utils/presentacionDependenciasMovimientoPadronBase.js";
 
 const nombreMes = (mes) => {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes || "")) return mes || "";
@@ -71,6 +72,7 @@ function MoverTurnoBaseSupervision({
   }, [mes, personaId, turnoDestino, turnoOrigen]);
 
   const bloqueos = analisis?.bloqueos || [];
+  const bloqueosPresentados = presentarBloqueosMovimientoPadronBase(bloqueos);
   const informativas = resumirInformativas(analisis?.informativas);
   const bloqueado = historico || cargandoAnalisis ||
     analisis?.ok !== true || bloqueos.length > 0;
@@ -126,11 +128,14 @@ function MoverTurnoBaseSupervision({
         </select>
 
         {cargandoAnalisis && <p className="mt-3 text-sm text-slate-500" role="status">Revisando dependencias…</p>}
-        {!cargandoAnalisis && bloqueos.map((bloqueo) => (
-          <p key={`${bloqueo.codigo}-${bloqueo.ambito}`} className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">
-            {obtenerMensajeMovimientoPadronBase(bloqueo.codigo)}
-          </p>
-        ))}
+        {!cargandoAnalisis && bloqueosPresentados.length > 0 && (
+          <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900" role="alert">
+            <p className="font-medium">La persona tiene registros que deben resolverse antes de cambiar su turno base:</p>
+            <ul className="mt-2 max-h-48 list-disc space-y-1 overflow-y-auto pl-5">
+              {bloqueosPresentados.map((bloqueo) => <li key={bloqueo}>{bloqueo}</li>)}
+            </ul>
+          </div>
+        )}
         {!cargandoAnalisis && informativas.length > 0 && (
           <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             Se conservarán sin mover: {informativas.join(", ")}.

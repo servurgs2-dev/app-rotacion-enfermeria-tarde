@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { analizarDependenciasMovimientoPadronBase } from "../src/utils/dependenciasMovimientoPadronBase.js";
 import { asegurarIdPersona } from "../src/utils/identidadPersonas.js";
+import { MOTIVOS_NO_DISPONIBLE } from "../src/utils/noDisponiblesMotivos.js";
 
 const persona = (id, nombre, categoria = "enfermero") => ({ id, nombre, categoria });
 const ref = (personaId, nombre = "") => ({ personaId, nombre });
@@ -82,6 +83,60 @@ test("calendario operativo bloquea cambios, no disponibles y asistencia", () => 
   const resultado = analizar(estado);
   assert.deepEqual(codigos(resultado), ["REFERENCIAS_CALENDARIO_LOCAL_PENDIENTES"]);
   assert.equal(resultado.bloqueos[0].rutas.length, 5);
+});
+
+for (const motivo of [
+  MOTIVOS_NO_DISPONIBLE.FALTA_CON_AVISO,
+  MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO,
+  MOTIVOS_NO_DISPONIBLE.ADHESION_PARO,
+  MOTIVOS_NO_DISPONIBLE.OTRO
+]) {
+  test(`${motivo} moderno es informativo y no bloquea el cambio de padrón`, () => {
+    const estado = estadoBase([persona("p-1", "Cintia del Río")]);
+    estado.calendario.enfermeros.noDisponibles = {
+      "2026-09-18": [{ personaId: "p-1", nombre: "Cintia del Río", motivo, detalle: "conservado" }]
+    };
+    const resultado = analizar(estado, { turnoOrigen: "vespertino", turnoDestino: "noche" });
+    assert.equal(resultado.tieneBloqueos, false);
+    assert.equal(resultado.informativas[0].codigo, "NO_DISPONIBLE_PROYECTABLE_POR_VIGENCIA");
+  });
+}
+
+test("Cambio con otro turno y Extra vinculado conservan el bloqueo", () => {
+  const estado = estadoBase();
+  estado.calendario.enfermeros.noDisponibles = {
+    "2026-09-18": [{
+      personaId: "p-1",
+      nombre: "Ana",
+      motivo: MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO,
+      personaCoberturaId: "extra-1"
+    }]
+  };
+  estado.calendario.enfermeros.extras = {
+    "2026-09-18": [{
+      id: "extra-1",
+      personaCubiertaId: "p-1",
+      vinculacionCambioOtroTurno: true
+    }]
+  };
+  const resultado = analizar(estado);
+  assert.equal(resultado.tieneBloqueos, true);
+  assert.ok(resultado.bloqueos.some(({ ambito }) => ambito === "calendario"));
+  assert.ok(resultado.bloqueos.some(({ ambito }) => ambito === "extras"));
+});
+
+test("motivo simple con personaCoberturaId conserva el bloqueo operativo", () => {
+  const estado = estadoBase();
+  estado.calendario.enfermeros.noDisponibles = {
+    "2026-09-18": [{
+      personaId: "p-1",
+      motivo: MOTIVOS_NO_DISPONIBLE.FALTA_CON_AVISO,
+      personaCoberturaId: "extra-1"
+    }]
+  };
+  const resultado = analizar(estado);
+  assert.equal(resultado.tieneBloqueos, true);
+  assert.equal(resultado.bloqueos[0].codigo, "REFERENCIAS_CALENDARIO_LOCAL_PENDIENTES");
 });
 
 test("licencias y certificaciones son informativas por lectura transversal", () => {

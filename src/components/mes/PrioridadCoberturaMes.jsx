@@ -19,7 +19,8 @@ function PrioridadCoberturaMes({
   filas = [],
   prioridadCoberturaSectorIds = [],
   versionEstructura,
-  onCambiarPrioridad
+  onCambiarPrioridad,
+  soloLectura = false
 }) {
   const prioridadFallback = configuracionSectores[categoria]?.prioridadSectoresIds || [];
   const usaLicenciadosV2 = categoria === "licenciado" &&
@@ -77,13 +78,13 @@ function PrioridadCoberturaMes({
               <span className="min-w-0 flex-1 text-sm font-medium text-slate-900">
                 {etiqueta}
               </span>
-              <button type="button" disabled={indice === 0}
+              <button type="button" disabled={soloLectura || indice === 0}
                 onClick={() => mover(sectorId, "arriba")}
                 aria-label={`Subir ${etiqueta} en la prioridad`}
                 className="min-h-11 min-w-11 rounded-lg border border-slate-300 bg-white text-lg disabled:cursor-not-allowed disabled:opacity-40">
                 ↑
               </button>
-              <button type="button" disabled={indice === prioridadSectorIds.length - 1}
+              <button type="button" disabled={soloLectura || indice === prioridadSectorIds.length - 1}
                 onClick={() => mover(sectorId, "abajo")}
                 aria-label={`Bajar ${etiqueta} en la prioridad`}
                 className="min-h-11 min-w-11 rounded-lg border border-slate-300 bg-white text-lg disabled:cursor-not-allowed disabled:opacity-40">
@@ -93,10 +94,12 @@ function PrioridadCoberturaMes({
           );
         })}
       </ol>
-      <button type="button" onClick={restaurar}
-        className="mt-3 min-h-11 w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 sm:w-auto">
-        Restaurar orden predeterminado
-      </button>
+      {!soloLectura && (
+        <button type="button" onClick={restaurar}
+          className="mt-3 min-h-11 w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 sm:w-auto">
+          Restaurar orden predeterminado
+        </button>
+      )}
     </section>
   );
 }

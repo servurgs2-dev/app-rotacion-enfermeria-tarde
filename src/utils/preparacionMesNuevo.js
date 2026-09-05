@@ -974,5 +974,6 @@ export const validarContextoPreparacion = (esperado, actual) =>
     esperado.turnoId === actual.turnoId &&
     esperado.mesOrigen === actual.mesOrigen &&
     esperado.mesDestino === actual.mesDestino &&
+    esperado.modo === actual.modo &&
     String(esperado.revisionDestino) === String(actual.revisionDestino)
   );

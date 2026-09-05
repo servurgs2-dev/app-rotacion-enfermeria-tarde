@@ -47,7 +47,7 @@ probar("Calendario, Planilla y Novedades tienen vistas exclusivas", () => {
   assert.match(app, /vistaActiva === "planilla" && !mesActivoSinInformacion \? "" : "hidden"/);
   assert.match(app, /vistaActiva === "novedades" && !mesActivoSinInformacion \? "" : "hidden"/);
   assert.equal((app.match(/<CalendarioDiario/g) || []).length, 2, "conserva ambas categorías del Calendario");
-  assert.equal((app.match(/<PlanillaMensual/g) || []).length, 2, "conserva ambas categorías de Planilla");
+  assert.equal((app.match(/<PlanillaMensual/g) || []).length, 6, "conserva ambas categorías en sus ramas legacy y versionadas");
   assert.equal((app.match(/<Novedades/g) || []).length, 1);
 });
 

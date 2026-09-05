@@ -8,6 +8,7 @@ import {
   moverFilaBorradorAIndice,
   obtenerBorradorConfiguracionPlanilla
 } from "../../utils/plantillasConfiguracionPlanilla.js";
+import { obtenerPosicionTurnanteMensual } from "../../utils/turnanteMensual.js";
 
 const ETIQUETAS_CATEGORIA = Object.freeze({
   enfermero: "Enfermeros",
@@ -22,7 +23,8 @@ export function FilaConfiguracionPlanilla({
   onCambiarActivo,
   filaRef,
   handleRef,
-  arrastrando = false
+  arrastrando = false,
+  soloLectura = false
 }) {
   return (
     <tr ref={filaRef} className={`${fila.activo ? "" : "bg-slate-50 opacity-70"} ${
@@ -30,16 +32,16 @@ export function FilaConfiguracionPlanilla({
     }`}>
       <td className="px-3 py-3 font-medium text-slate-700">{fila.orden + 1}</td>
       <td className="px-3 py-3"><div className="flex items-center gap-1">
-        <button ref={handleRef} type="button" aria-label={`Arrastrar ${fila.etiqueta}`}
+        <button ref={handleRef} type="button" disabled={soloLectura} aria-label={`Arrastrar ${fila.etiqueta}`}
           title="Arrastrar para reordenar" style={{ touchAction: "none" }}
           className="cursor-grab rounded border border-slate-300 bg-slate-50 px-2 py-1 text-slate-600 active:cursor-grabbing">
           ☰
         </button>
-        <button type="button" aria-label={`Subir ${fila.etiqueta}`} disabled={indice === 0}
+        <button type="button" aria-label={`Subir ${fila.etiqueta}`} disabled={soloLectura || indice === 0}
           onClick={() => onMover(fila.filaId, "arriba")}
           className="rounded border px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40">↑</button>
         <button type="button" aria-label={`Bajar ${fila.etiqueta}`}
-          disabled={indice === cantidadFilas - 1}
+          disabled={soloLectura || indice === cantidadFilas - 1}
           onClick={() => onMover(fila.filaId, "abajo")}
           className="rounded border px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40">↓</button>
       </div></td>
@@ -48,7 +50,7 @@ export function FilaConfiguracionPlanilla({
         {fila.tipo === "turnante" ? "Turnante" : "Sector"}
       </td>
       <td className="px-3 py-3">
-        <button type="button" onClick={() => onCambiarActivo(fila.filaId)}
+        <button type="button" disabled={soloLectura} onClick={() => onCambiarActivo(fila.filaId)}
           className={`rounded-full px-2 py-1 text-xs font-medium ${
             fila.activo ? "bg-emerald-50 text-emerald-700" : "bg-slate-200 text-slate-700"
           }`}>{fila.activo ? "Activo" : "Inactivo"}</button>
@@ -75,16 +77,26 @@ function FilaOrdenableConfiguracionPlanilla(props) {
     arrastrando={isDragging} />;
 }
 
-function ConfiguracionPlanilla({ borradores = {}, onActualizarBorrador }) {
+function ConfiguracionPlanilla({
+  borradores = {},
+  onActualizarBorrador,
+  modoPreparacionVersionada = false,
+  ocultarTurnanteMensual = false,
+  soloLectura = false
+}) {
   const [categoria, setCategoria] = useState("enfermero");
   const borrador = obtenerBorradorConfiguracionPlanilla(borradores, categoria);
-  const filas = useMemo(
-    () => [...(borrador?.filas ?? [])].sort((a, b) => a.orden - b.orden),
-    [borrador]
-  );
+  const filas = useMemo(() => {
+    const posicionMensual = ocultarTurnanteMensual
+      ? obtenerPosicionTurnanteMensual(categoria, borrador)
+      : null;
+    return [...(borrador?.filas ?? [])]
+      .filter((fila) => !posicionMensual || fila.etiqueta !== posicionMensual)
+      .sort((a, b) => a.orden - b.orden);
+  }, [borrador, categoria, ocultarTurnanteMensual]);
   const actualizar = (actualizador) => onActualizarBorrador?.(categoria, actualizador);
   const finalizarArrastre = (evento) => {
-    if (evento.canceled || !isSortable(evento.operation.source)) return;
+    if (soloLectura || evento.canceled || !isSortable(evento.operation.source)) return;
     const origen = evento.operation.source;
     if (origen.group !== categoria || origen.initialGroup !== categoria) return;
     actualizar((actual) => moverFilaBorradorAIndice(actual, origen.id, origen.index));
@@ -93,12 +105,18 @@ function ConfiguracionPlanilla({ borradores = {}, onActualizarBorrador }) {
   return (
     <div>
       <p className="mb-4 text-sm text-slate-600">
-        Estructura heredada del mes anterior. Los cambios permanecen sólo en esta preparación.
+        {modoPreparacionVersionada
+          ? soloLectura
+            ? "Estructura confirmada de esta organización."
+            : "Los cambios de estructura se aplican únicamente a la nueva organización antes de confirmarla."
+          : "Estructura heredada del mes anterior. Los cambios permanecen sólo en esta preparación."}
       </p>
-      <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-        Los cambios de estructura se aplicarán al confirmar el mes cuando finalice la configuración.
-        La validación definitiva se incorporará antes de conectarlos con la confirmación.
-      </p>
+      {!modoPreparacionVersionada && (
+        <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          Los cambios de estructura se aplicarán al confirmar el mes cuando finalice la configuración.
+          La validación definitiva se incorporará antes de conectarlos con la confirmación.
+        </p>
+      )}
       <div className="mb-5 max-w-sm">
         <label className="text-sm font-medium text-slate-700">
           Categoría
@@ -127,6 +145,7 @@ function ConfiguracionPlanilla({ borradores = {}, onActualizarBorrador }) {
             {filas.map((fila, indice) => (
               <FilaOrdenableConfiguracionPlanilla key={fila.filaId} fila={fila} indice={indice}
                 categoria={categoria}
+                soloLectura={soloLectura}
                 cantidadFilas={filas.length}
                 onMover={(filaId, direccion) => actualizar(
                   (actual) => moverFilaBorrador(actual, filaId, direccion)

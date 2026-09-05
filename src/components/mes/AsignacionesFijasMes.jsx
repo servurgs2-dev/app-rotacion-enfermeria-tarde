@@ -21,7 +21,7 @@ const MENSAJES_ERROR = Object.freeze({
 const mensajeError = (errores) =>
   MENSAJES_ERROR[errores?.[0]?.codigo] || "No se pudo guardar la asignación fija.";
 
-function AsignacionesFijasMes({ borradores = {}, personal = [], onActualizarBorrador }) {
+function AsignacionesFijasMes({ borradores = {}, personal = [], onActualizarBorrador, soloLectura = false }) {
   const [categoriaFormulario, setCategoriaFormulario] = useState(null);
   const [sectorId, setSectorId] = useState("");
   const [personaId, setPersonaId] = useState("");
@@ -103,9 +103,9 @@ function AsignacionesFijasMes({ borradores = {}, personal = [], onActualizarBorr
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-slate-600">
+      {!soloLectura && <p className="text-sm text-slate-600">
         Esta propuesta corresponde al mes destino. Podés revisarla antes de confirmar.
-      </p>
+      </p>}
       {CATEGORIAS.map(({ id, etiqueta }) => {
         const borrador = borradores?.[id];
         const filasPorId = new Map((borrador?.filas || []).map((fila) => [fila.sectorId, fila]));
@@ -134,14 +134,14 @@ function AsignacionesFijasMes({ borradores = {}, personal = [], onActualizarBorr
                       {personasPorId.get(asignacion.personaId)?.nombre || "Funcionario no disponible"}
                     </p>
                   </div>
-                  <button type="button" onClick={() => quitar(id, asignacion.sectorId)}
+                  {!soloLectura && <button type="button" onClick={() => quitar(id, asignacion.sectorId)}
                     className="min-h-11 rounded-lg border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700">
                     Quitar
-                  </button>
+                  </button>}
                 </div>
               ))}
             </div>
-            {categoriaFormulario === id ? (
+            {!soloLectura && (categoriaFormulario === id ? (
               <div className="mt-3 space-y-3 rounded-xl border border-blue-200 bg-blue-50/40 p-3">
                 <label className="block text-sm font-medium text-slate-700">
                   Sector
@@ -176,7 +176,7 @@ function AsignacionesFijasMes({ borradores = {}, personal = [], onActualizarBorr
                 className="mt-3 min-h-11 w-full rounded-lg border border-blue-300 px-4 py-2 font-medium text-blue-700 sm:w-auto">
                 + Agregar asignación
               </button>
-            )}
+            ))}
           </section>
         );
       })}

@@ -16,6 +16,7 @@ import ModalMobileShell from "../ui/ModalMobileShell.jsx";
 const CATEGORIAS_PRIORIDAD = Object.freeze(["enfermero", "licenciado"]);
 
 function PanelPrepararMes({
+  modo = "siguiente",
   analisis,
   borradoresConfiguracionPlanilla,
   onActualizarBorradorConfiguracionPlanilla,
@@ -23,6 +24,7 @@ function PanelPrepararMes({
   onCancelar,
   onConfirmar
 }) {
+  const esRecuperacionActual = modo === "recuperacion_actual";
   const enfermeros = analisis.enfermeros;
   const flex = enfermeros.analisis;
   const origenLicenciadosV2 = resolverVersionEstructuraLicenciados(
@@ -132,7 +134,7 @@ function PanelPrepararMes({
       panelClassName="px-5 pt-5 sm:px-5 sm:pt-5 sm:pb-5"
     >
         <h3 id="titulo-preparar-mes" className="text-xl font-bold text-slate-900">
-          Preparar mes siguiente
+          {esRecuperacionActual ? "Preparar mes actual" : "Preparar mes siguiente"}
         </h3>
         <p className="mt-3 rounded-xl border border-purple-200 bg-purple-50 p-3 text-sm text-purple-950">
           Se copiará la base del mes anterior como referencia. Las semanas o

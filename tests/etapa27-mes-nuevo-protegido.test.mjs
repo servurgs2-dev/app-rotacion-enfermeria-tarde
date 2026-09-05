@@ -606,7 +606,7 @@ await probar("97 preparación no está dentro de Planilla mensual", () => {
 await probar("98 condiciones de visibilidad permanecen agrupadas", () => {
   const inicioGestion = app.indexOf("Gestión del mes");
   const inicioTarjeta = app.indexOf(
-    "{(mesActivo === mesSiguiente || !destinoActivoPreparacion.permitido)",
+    "{(mesActivo === mesSiguiente || mesActivo === mesActual || !destinoActivoPreparacion.permitido)",
     inicioGestion
   );
   const finGestion = app.indexOf('subvistaMas === "estadisticas"', inicioGestion);
@@ -630,12 +630,13 @@ await probar("99 sigue existiendo una sola acción visible de preparación", () 
 await probar("100 preparación depende del mes siguiente y la gestión admite reinicio", () => {
   assert.match(
     app,
-    /\{\(mesActivo === mesSiguiente \|\| !destinoActivoPreparacion\.permitido\) && \(/
+    /\{\(mesActivo === mesSiguiente \|\| mesActivo === mesActual \|\| !destinoActivoPreparacion\.permitido\) && \(/
   );
   assert.match(
     app,
     /\{mesActivo === mesSiguiente &&\s*destinoActivoPreparacion\.permitido/
   );
+  assert.match(app, /MODO_PREPARACION_MES\.RECUPERACION_ACTUAL/);
 });
 await probar("101 destino con contenido muestra explicación", () => {
   assert.match(app, /Este mes ya fue iniciado y no puede prepararse nuevamente\./);
@@ -647,7 +648,9 @@ await probar("103 destino no permitido no renderiza el botón activo", () => {
   const inicioGestion = app.indexOf("Gestión del mes");
   const finGestion = app.indexOf('subvistaMas === "estadisticas"', inicioGestion);
   const bloqueGestion = app.slice(inicioGestion, finGestion);
-  const indiceBoton = bloqueGestion.indexOf("onClick={iniciarPreparacionMes}");
+  const indiceBoton = bloqueGestion.indexOf(
+    "onClick={() => iniciarPreparacionMes(MODO_PREPARACION_MES.SIGUIENTE)}"
+  );
   const condicionPermitida = bloqueGestion.lastIndexOf(
     "destinoActivoPreparacion.permitido",
     indiceBoton

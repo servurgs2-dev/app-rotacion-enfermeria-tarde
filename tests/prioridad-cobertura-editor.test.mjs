@@ -82,13 +82,13 @@ probar("primer sector no puede subir", () => {
   assert.deepEqual(moverSectorEnPrioridadCobertura({
     prioridad: ["a", "b"], sectorId: "a", direccion: "arriba"
   }), ["a", "b"]);
-  assert.match(ui, /disabled=\{indice === 0\}/);
+  assert.match(ui, /disabled=\{soloLectura \|\| indice === 0\}/);
 });
 probar("último sector no puede bajar", () => {
   assert.deepEqual(moverSectorEnPrioridadCobertura({
     prioridad: ["a", "b"], sectorId: "b", direccion: "abajo"
   }), ["a", "b"]);
-  assert.match(ui, /disabled=\{indice === prioridadSectorIds\.length - 1\}/);
+  assert.match(ui, /disabled=\{soloLectura \|\| indice === prioridadSectorIds\.length - 1\}/);
 });
 probar("la numeración deriva del orden actualizado", () => {
   assert.match(ui, /\{indice \+ 1\}/);

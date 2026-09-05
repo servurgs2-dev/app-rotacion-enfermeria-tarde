@@ -19,6 +19,8 @@ import {
   obtenerAliasesSector,
   obtenerSectorIdPorNombreHistorico
 } from "./configuracionPlanilla.js";
+import { resolverTramosPlanillaMes } from "./preparacionesMes.js";
+import { resolverClaveDistribucionParaFila } from "./resolucionIdentidadesPlanilla.js";
 
 
 // 🔹 PLANILLA
@@ -500,11 +502,73 @@ export const crearPlanillaSemanalPDF = ({
   return pdf;
 };
 
+export const crearPlanillaVersionadaPDF = ({
+  estadoMensual,
+  turnoId,
+  mesActivo,
+  personal = []
+} = {}) => {
+  const resultados = ["enfermero", "licenciado"].map((categoria) => ({
+    categoria,
+    resultado: resolverTramosPlanillaMes({
+      estado: estadoMensual,
+      mes: mesActivo,
+      turno: turnoId,
+      categoria,
+      permitirPeriodosNoPreparados: true
+    })
+  }));
+  const invalido = resultados.find(({ resultado }) => !resultado.ok);
+  if (invalido) {
+    const error = new Error(
+      `No se pudo resolver la Planilla versionada (${invalido.resultado.codigo}).`
+    );
+    error.codigo = invalido.resultado.codigo;
+    throw error;
+  }
+
+  const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a3" });
+  let primeraPagina = true;
+  resultados.forEach(({ categoria, resultado }) => {
+    const grupos = dividirPeriodosPlanillaPDF(resultado.tramos, 6);
+    grupos.forEach((tramos, indiceGrupo) => {
+      if (!primeraPagina) pdf.addPage("a3", "landscape");
+      primeraPagina = false;
+      const tabla = prepararTablaPlanillaTramosPDF({ tramos, personal, categoria });
+      const etiquetaCategoria = categoria === "enfermero" ? "Enfermeros" : "Licenciados";
+      const parte = grupos.length > 1
+        ? ` - Parte ${indiceGrupo + 1} de ${grupos.length}`
+        : "";
+      pdf.setFontSize(14);
+      pdf.text(`Planilla por vigencias - ${etiquetaCategoria}`, 14, 15);
+      pdf.setFontSize(10);
+      pdf.text(`${obtenerConfiguracionTurno(turnoId).nombre} - ${obtenerNombreMes(mesActivo)}${parte}`, 14, 21);
+      autoTable(pdf, {
+        startY: 27,
+        head: [tabla.encabezados],
+        body: tabla.cuerpo,
+        margin: { left: 10, right: 10 },
+        styles: { halign: "center", valign: "middle", fontSize: 8 },
+        columnStyles: { 0: { cellWidth: 45, halign: "left" } },
+        headStyles: {
+          fillColor: categoria === "enfermero" ? [41, 128, 185] : [22, 160, 133]
+        },
+        showHead: "everyPage"
+      });
+    });
+  });
+  renderizarGruposLibresPDF({ pdf, personal, turnoId, mesActivo });
+  return pdf;
+};
+
 // Conserva la firma posicional para cualquier consumidor histórico.
 const normalizarOpcionesPlanillaPDF = (argumentos) => {
   const usaOpciones = argumentos[0] &&
     typeof argumentos[0] === "object" &&
-    Object.hasOwn(argumentos[0], "planillaEnfermeros");
+    (
+      Object.hasOwn(argumentos[0], "planillaEnfermeros") ||
+      Object.hasOwn(argumentos[0], "estadoMensual")
+    );
   return usaOpciones
     ? argumentos[0]
     : {
@@ -525,6 +589,18 @@ export const obtenerDocumentoPlanillaPDF = (...argumentos) => {
     personal = [],
     estadoMensual
   } = opciones;
+  if (Object.hasOwn(estadoMensual || {}, "preparaciones")) {
+    return {
+      pdf: crearPlanillaVersionadaPDF({
+        estadoMensual,
+        turnoId,
+        mesActivo,
+        personal
+      }),
+      nombreArchivo: "planilla_mensual.pdf",
+      tipoDocumento: "planilla_mensual_versionada"
+    };
+  }
   const estrategiaEnfermeros = obtenerEstrategiaRotacionPlanilla({
     turnoId,
     tipo: "enfermero",
@@ -575,6 +651,21 @@ export const obtenerAdjuntoPlanillaPDF = (...argumentos) => {
 export const exportarPlanillaPDF = (...argumentos) => {
   const documento = obtenerDocumentoPlanillaPDF(...argumentos);
   documento.pdf.save(documento.nombreArchivo);
+};
+
+export const ejecutarExportacionPlanillaPDF = ({
+  opciones,
+  exportar = exportarPlanillaPDF,
+  onError
+} = {}) => {
+  try {
+    exportar(opciones);
+    return { ok: true, codigo: "PDF_PLANILLA_EXPORTADO" };
+  } catch (error) {
+    const mensaje = "No se pudo generar el PDF de la Planilla. Revisá que la información del mes esté disponible e intentá nuevamente.";
+    onError?.(mensaje);
+    return { ok: false, codigo: error?.codigo || "ERROR_EXPORTACION_PDF_PLANILLA", mensaje };
+  }
 };
 
 
@@ -628,6 +719,42 @@ export const prepararCertificacionesDiaPDF = ({
       }];
     }
   );
+};
+
+export const prepararTablaPlanillaTramosPDF = ({
+  tramos,
+  personal = [],
+  categoria
+} = {}) => {
+  const tramosValidos = Array.isArray(tramos) ? tramos : [];
+  const filasPorIdentidad = new Map();
+  tramosValidos.forEach((tramo) => {
+    obtenerFilasActivas(tramo.configuracionPlanilla?.filas || [])
+      .sort((a, b) => a.orden - b.orden)
+      .forEach((fila) => {
+        const identidad = fila.filaId || fila.sectorId || fila.etiqueta;
+        if (!filasPorIdentidad.has(identidad)) filasPorIdentidad.set(identidad, fila);
+      });
+  });
+  const nombreParaPDF = crearNombreParaPDF(personal);
+  const encabezados = ["Sector", ...tramosValidos.map((tramo) => tramo.etiqueta)];
+  const cuerpo = [...filasPorIdentidad.values()].map((fila) => [
+    fila.etiqueta,
+    ...tramosValidos.map((tramo) => {
+      const clave = resolverClaveDistribucionParaFila({
+        distribucion: tramo.distribucion,
+        fila
+      }) || fila.etiqueta;
+      return nombreParaPDF(tramo.distribucion?.[clave]) || "-";
+    })
+  ]);
+  cuerpo.push([
+    categoria === "enfermero" ? "Cubre libre de SM" : "Cubre libre de Salud Mental",
+    ...tramosValidos.map((tramo) =>
+      nombreParaPDF(tramo.coberturasSaludMental?.[tramo.clavePeriodo]) || "-"
+    )
+  ]);
+  return { encabezados, cuerpo };
 };
 
 export const resolverCertificacionesCalendarioPDF = ({

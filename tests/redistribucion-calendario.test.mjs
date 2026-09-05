@@ -48,7 +48,7 @@ probar("1 no existe una navegación principal agregada", () => {
   assert.doesNotMatch(app, /href="#seccion-(?:planilla|personal|licencias|certificaciones|estadisticas|historial)"/);
 });
 probar("2 Gestión del mes conserva una única subvista dentro de Más", () => {
-  assert.equal((app.match(/subvistaMas === "gestionMes"/g) || []).length, 1);
+  assert.equal((app.match(/subvistaMas === "gestionMes"/g) || []).length, 2);
   assert.match(app, /subvistaMas === "gestionMes"[\s\S]*<h2[^>]*>[^<]*Gestión del mes<\/h2>/);
   assert.match(app, /subvistaMas === "estadisticas"/);
 });

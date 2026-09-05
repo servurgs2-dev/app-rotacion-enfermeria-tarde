@@ -274,17 +274,19 @@ probar("existe acción global Reiniciar mes completo", () => {
 probar("reinicio exige escribir REINICIAR", () => {
   const panel = leer("src/components/mes/PanelReiniciarMes.jsx");
   assert.match(panel, /textoConfirmacion\.trim\(\) === "REINICIAR"/);
-  assert.match(panel, /disabled=\{!confirmacionValida\}/);
+  assert.match(panel, /disabled=\{!confirmacionValida \|\| guardando\}/);
 });
 probar("cancelar reinicio no modifica estado", () => {
   assert.match(appFuente, /onCancelar=\{\(\) => setReinicioMes\(null\)\}/);
 });
-probar("confirmar reinicio usa una única actualización funcional", () => {
+probar("confirmar reinicio actualiza local una sola vez después del guardado CAS", () => {
   const inicio = appFuente.indexOf("const confirmarReinicioMes");
   const fin = appFuente.indexOf("const iniciarPreparacionMes", inicio);
   const bloque = appFuente.slice(inicio, fin);
   assert.equal((bloque.match(/setEstadoPorTurnoMes\(/g) || []).length, 1);
   assert.match(bloque, /setEstadoPorTurnoMes\(\(prev\) =>/);
+  assert.match(bloque, /await ejecutarReinicioMesCompleto/);
+  assert.match(bloque, /if \(!resultado\.aplicado\)/);
 });
 probar("reinicio revalida turno, mes, permiso, conflicto y revisión", () => {
   const inicio = appFuente.indexOf("const confirmarReinicioMes");

@@ -5,6 +5,7 @@ function PanelReiniciarMes({
   periodoVisible,
   textoConfirmacion,
   error,
+  guardando = false,
   onCambiarTexto,
   onCancelar,
   onConfirmar
@@ -62,6 +63,7 @@ function PanelReiniciarMes({
           <button
             type="button"
             onClick={onCancelar}
+            disabled={guardando}
             className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancelar
@@ -69,10 +71,10 @@ function PanelReiniciarMes({
           <button
             type="button"
             onClick={onConfirmar}
-            disabled={!confirmacionValida}
+            disabled={!confirmacionValida || guardando}
             className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            Sí, reiniciar mes completo
+            {guardando ? "Reiniciando…" : "Sí, reiniciar mes completo"}
           </button>
         </div>
     </ModalMobileShell>

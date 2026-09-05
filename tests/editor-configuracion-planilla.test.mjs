@@ -435,7 +435,7 @@ await probar("26 editor de fijas usa siempre el borrador local v2 para Licenciad
   const editorFijas = await readFile(new URL(
     "../src/components/mes/AsignacionesFijasMes.jsx", import.meta.url
   ), "utf8");
-  assert.match(editorFijas, /function AsignacionesFijasMes\(\{ borradores = \{\}, personal = \[\], onActualizarBorrador \}\)/);
+  assert.match(editorFijas, /function AsignacionesFijasMes\(\{ borradores = \{\}, personal = \[\], onActualizarBorrador, soloLectura = false \}\)/);
   assert.match(editorFijas, /borradores\?\.\[categoriaFormulario\]/);
   assert.match(panel, /const borradoresVisibles = \{[\s\S]*?licenciado: borradorLicenciadosV2/);
   assert.match(panel, /<AsignacionesFijasMes[\s\S]*?borradores=\{borradoresVisibles\}[\s\S]*?onActualizarBorrador=\{actualizarBorradorVisible\}/);

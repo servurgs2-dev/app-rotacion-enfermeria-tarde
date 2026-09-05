@@ -49,16 +49,17 @@ probar("el selector mobile controla la categoría de Planilla", () => {
   assert.doesNotMatch(vistaPlanilla, /setTabCalendario|tabCalendario/);
 });
 
-probar("cada categoría conserva una única instancia productiva", () => {
-  assert.equal((vistaPlanilla.match(/<PlanillaMensual/g) || []).length, 2);
+probar("cada categoría conserva editor legacy y editor versionado sin duplicar el render activo", () => {
+  assert.equal((vistaPlanilla.match(/<PlanillaMensual\s/g) || []).length, 4);
+  assert.equal((vistaPlanilla.match(/<PlanillaMensualPorTramos\s/g) || []).length, 2);
   assert.match(vistaPlanilla, /tabPlanilla === "enfermeros" && \(/);
   assert.match(vistaPlanilla, /tabPlanilla === "licenciados" && \(/);
 });
 
 probar("mes, turno, licencias e histórico siguen conectados", () => {
-  assert.equal((vistaPlanilla.match(/mesActivo=\{mesActivo\}/g) || []).length, 2);
-  assert.equal((vistaPlanilla.match(/turnoId=\{turnoActivo\}/g) || []).length, 2);
-  assert.equal((vistaPlanilla.match(/licencias=\{licenciasMes\}/g) || []).length, 2);
+  assert.equal((vistaPlanilla.match(/mesActivo=\{mesActivo\}/g) || []).length, 6);
+  assert.equal((vistaPlanilla.match(/turnoId=\{turnoActivo\}/g) || []).length, 6);
+  assert.equal((vistaPlanilla.match(/licencias=\{licenciasMes\}/g) || []).length, 4);
   assert.equal((vistaPlanilla.match(/soloLectura=\{modoSoloLecturaEfectiva\}/g) || []).length, 2);
 });
 

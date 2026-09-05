@@ -91,7 +91,8 @@ test("Reiniciar mes conserva confirmación destructiva", () => {
   const fuente = leer("src/components/mes/PanelReiniciarMes.jsx");
   assert.match(fuente, /textoConfirmacion\.trim\(\) === "REINICIAR"/);
   assert.match(fuente, /Sí, reiniciar mes completo/);
-  assert.match(fuente, /disabled=\{!confirmacionValida\}/);
+  assert.match(fuente, /disabled=\{!confirmacionValida \|\| guardando\}/);
+  assert.match(fuente, /disabled=\{guardando\}/);
 });
 
 test("M1 continúa usando el shell común", () => {

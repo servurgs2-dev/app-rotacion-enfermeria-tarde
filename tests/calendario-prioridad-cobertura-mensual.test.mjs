@@ -198,7 +198,7 @@ probar("renombrar etiquetas no cambia la decisión por sectorId", () => {
 
 probar("Enfermeros conserva parejas y no configura donantes generales", () => {
   const fuente = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
-  assert.match(fuente, /sectorIdsDonantes: tipo === "enfermero" && !esDiaParo\s*\? sectoresDonantesIds/);
+  assert.match(fuente, /sectoresDonantesIds\.length > 0 \? sectoresDonantesIds : undefined/);
   assert.match(fuente, /aplicarPrioridadCoberturaParejas\(\{/);
   assert.doesNotMatch(fuente, /prioridadCoberturaSectorIds.*sectoresDonantesIds/);
   assert.deepEqual(configuracionSectores.enfermero.sectoresDonantesIds, []);

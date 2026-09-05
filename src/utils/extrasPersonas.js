@@ -298,6 +298,24 @@ export const obtenerCoberturasExtrasPresentacion = (
   });
 };
 
+export const excluirCoberturasExtrasYaRepresentadas = (
+  coberturas = [],
+  noDisponibles = []
+) => {
+  const relacionesRepresentadas = new Set(
+    (Array.isArray(noDisponibles) ? noDisponibles : []).flatMap((item) => {
+      const extraId = String(item?.registro?.personaCoberturaId || "").trim();
+      const personaId = String(item?.persona?.id || item?.registro?.personaId || "").trim();
+      return extraId && personaId ? [`${extraId}:${personaId}`] : [];
+    })
+  );
+  return (Array.isArray(coberturas) ? coberturas : []).filter((cobertura) =>
+    !relacionesRepresentadas.has(
+      `${String(cobertura?.extraId || "").trim()}:${String(cobertura?.personaCubiertaId || "").trim()}`
+    )
+  );
+};
+
 export const obtenerIdentidadesPersonasCubiertas = (extras, personal = []) =>
   new Set(
     (Array.isArray(extras) ? extras : [])

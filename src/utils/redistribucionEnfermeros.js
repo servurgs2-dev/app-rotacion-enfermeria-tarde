@@ -112,6 +112,29 @@ const crearRedistribucionPorIdentidades = ({ asignaciones, destinos, prioridad }
   return { ok: true, asignaciones: resultado, cambios, personasConsideradas: personas.length };
 };
 
+const resolverPrioridadRedistribucion = ({ prioridadSectorIds, destinos, modo, fallback }) => {
+  if (!Array.isArray(prioridadSectorIds) || prioridadSectorIds.length === 0) return fallback;
+  const sectoresPorId = new Map(destinos.flatMap((destino) =>
+    destino?.tipo === "sector" && destino.sectorId ? [[destino.sectorId, destino]] : []
+  ));
+  const grupos = destinos.filter((destino) => destino?.tipo === "grupo");
+  const reemplazados = new Set(modo.replacedSectorIds);
+  const prioridad = [];
+  let gruposAgregados = false;
+  prioridadSectorIds.forEach((sectorId) => {
+    if (reemplazados.has(sectorId)) {
+      if (!gruposAgregados) {
+        prioridad.push(...grupos);
+        gruposAgregados = true;
+      }
+      return;
+    }
+    const destino = sectoresPorId.get(sectorId);
+    if (destino) prioridad.push(destino);
+  });
+  return [...prioridad, ...destinos];
+};
+
 export const obtenerDestinosVisiblesOpcion1 = ({
   ordenVisual = [],
   filasConfiguracion = []
@@ -220,12 +243,19 @@ export const quitarRedistribucionFecha = (calendario = {}, fecha) => {
 export const redistribuirCritica = ({
   asignaciones,
   ordenVisual,
-  filasConfiguracion = []
-}) => crearRedistribucionPorIdentidades({
-  asignaciones,
-  destinos: obtenerDestinosVisiblesOpcion1({ ordenVisual, filasConfiguracion }),
-  prioridad: PRIORIDAD_REDISTRIBUCION_OPCION_1
-});
+  filasConfiguracion = [],
+  prioridadSectorIds = []
+}) => {
+  const destinos = obtenerDestinosVisiblesOpcion1({ ordenVisual, filasConfiguracion });
+  return crearRedistribucionPorIdentidades({
+    asignaciones,
+    destinos,
+    prioridad: resolverPrioridadRedistribucion({
+      prioridadSectorIds, destinos, modo: MODO_OPCION_1,
+      fallback: PRIORIDAD_REDISTRIBUCION_OPCION_1
+    })
+  });
+};
 
 export const recalcularRedistribucionOpcion1Automatica = ({
   asignaciones,
@@ -233,6 +263,7 @@ export const recalcularRedistribucionOpcion1Automatica = ({
   procedenciaCambiosDia = {},
   ordenVisual,
   filasConfiguracion = [],
+  prioridadSectorIds = [],
   procedenciaAutomatica = "redistribucion_automatica"
 } = {}) => {
   if (!esDistribucionOpcion1(cambiosDia) || !Array.isArray(asignaciones)) {
@@ -249,7 +280,10 @@ export const recalcularRedistribucionOpcion1Automatica = ({
   const ordenAutomatico = crearRedistribucionPorIdentidades({
     asignaciones: [],
     destinos: destinosAutomaticos,
-    prioridad: PRIORIDAD_REDISTRIBUCION_OPCION_1
+    prioridad: resolverPrioridadRedistribucion({
+      prioridadSectorIds, destinos: destinosAutomaticos, modo: MODO_OPCION_1,
+      fallback: PRIORIDAD_REDISTRIBUCION_OPCION_1
+    })
   }).asignaciones;
   const candidatos = obtenerPersonasUnicas(ordenAutomatico.map((destino) =>
     asignacionesPorClave.get(normalizar(destino.nombre))
@@ -277,12 +311,19 @@ export const recalcularRedistribucionOpcion1Automatica = ({
 export const redistribuirPorBoxes = ({
   asignaciones,
   ordenVisual,
-  filasConfiguracion = []
-}) => crearRedistribucionPorIdentidades({
-  asignaciones,
-  destinos: obtenerDestinosVisiblesOpcion2({ ordenVisual, filasConfiguracion }),
-  prioridad: PRIORIDAD_REDISTRIBUCION_OPCION_2
-});
+  filasConfiguracion = [],
+  prioridadSectorIds = []
+}) => {
+  const destinos = obtenerDestinosVisiblesOpcion2({ ordenVisual, filasConfiguracion });
+  return crearRedistribucionPorIdentidades({
+    asignaciones,
+    destinos,
+    prioridad: resolverPrioridadRedistribucion({
+      prioridadSectorIds, destinos, modo: MODO_OPCION_2,
+      fallback: PRIORIDAD_REDISTRIBUCION_OPCION_2
+    })
+  });
+};
 
 export const recalcularRedistribucionOpcion2Automatica = ({
   asignaciones,
@@ -290,6 +331,7 @@ export const recalcularRedistribucionOpcion2Automatica = ({
   procedenciaCambiosDia = {},
   ordenVisual,
   filasConfiguracion = [],
+  prioridadSectorIds = [],
   procedenciaAutomatica = "redistribucion_automatica"
 } = {}) => {
   if (!esDistribucionPorBoxes(cambiosDia) || !Array.isArray(asignaciones)) {
@@ -306,7 +348,10 @@ export const recalcularRedistribucionOpcion2Automatica = ({
   const ordenAutomatico = crearRedistribucionPorIdentidades({
     asignaciones: [],
     destinos: destinosAutomaticos,
-    prioridad: PRIORIDAD_REDISTRIBUCION_OPCION_2
+    prioridad: resolverPrioridadRedistribucion({
+      prioridadSectorIds, destinos: destinosAutomaticos, modo: MODO_OPCION_2,
+      fallback: PRIORIDAD_REDISTRIBUCION_OPCION_2
+    })
   }).asignaciones;
   const candidatos = obtenerPersonasUnicas(ordenAutomatico.map((destino) =>
     asignacionesPorClave.get(normalizar(destino.nombre))

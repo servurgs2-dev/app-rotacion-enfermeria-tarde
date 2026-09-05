@@ -46,6 +46,7 @@ import {
   crearExtraDesdePersonal,
   crearExtraTemporal,
   esExtraCobertura,
+  excluirCoberturasExtrasYaRepresentadas,
   obtenerDescripcionExtra,
   obtenerCoberturasExtrasPresentacion,
   obtenerIdentidadesPersonasCubiertas,
@@ -266,7 +267,6 @@ const {
   const {
     sectoresCriticos = [],
     sectoresBajaPrioridad = [],
-    prioridadSectores = [],
     sectoresCriticosIds = [],
     prioridadSectoresIds: prioridadSectoresIdsFallback = [],
     sectoresDonantesIds = [],
@@ -772,6 +772,7 @@ if (distribucionOpcion1Activa) {
     procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
     ordenVisual: ordenVisualEfectivo,
     filasConfiguracion,
+    prioridadSectorIds: prioridadCoberturaEfectivaIds,
     procedenciaAutomatica: PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
   });
 } else if (distribucionPorBoxesActiva) {
@@ -781,6 +782,7 @@ if (distribucionOpcion1Activa) {
     procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
     ordenVisual: ordenVisualEfectivo,
     filasConfiguracion,
+    prioridadSectorIds: prioridadCoberturaEfectivaIds,
     procedenciaAutomatica: PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
   });
 }
@@ -863,7 +865,7 @@ if (usarCalendarioLicenciadosDinamico) {
       ? prioridadCoberturaEfectivaIds
       : [],
     sectorIdsDonantes: tipo === "enfermero" && !esDiaParo
-      ? sectoresDonantesIds
+      ? (sectoresDonantesIds.length > 0 ? sectoresDonantesIds : undefined)
       : [],
     ajustarSectores: (sectores) =>
       tipo === "enfermero" && !esDiaParo
@@ -1298,9 +1300,9 @@ const noDisponiblesPresentacion = obtenerNoDisponiblesDelDia({
   return (ordenA < 0 ? Number.MAX_SAFE_INTEGER : ordenA) -
     (ordenB < 0 ? Number.MAX_SAFE_INTEGER : ordenB);
 });
-const coberturasExtrasPresentacion = obtenerCoberturasExtrasPresentacion(
-  extrasDia,
-  personal
+const coberturasExtrasPresentacion = excluirCoberturasExtrasYaRepresentadas(
+  obtenerCoberturasExtrasPresentacion(extrasDia, personal),
+  noDisponiblesPresentacion
 );
 const opcionesCambioPendiente = noDisponiblesPresentacion.flatMap((item) =>
   item.tipo === "manual" &&
@@ -2315,13 +2317,13 @@ useEffect(() => {
             asignaciones: asignacionesSinAusentes,
             ordenVisual: ordenVisualEfectivo,
             filasConfiguracion,
-            prioridadSectores
+            prioridadSectorIds: prioridadCoberturaEfectivaIds
           })
         : redistribuirCritica({
             asignaciones: asignacionesSinAusentes,
             ordenVisual: ordenVisualEfectivo,
             filasConfiguracion,
-            prioridadSectores
+            prioridadSectorIds: prioridadCoberturaEfectivaIds
           });
 
     setCalendario((prev) => {

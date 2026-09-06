@@ -125,7 +125,7 @@ probar("25 parciales reciben filas efectivas", () =>
 probar("26 funciona en semanas normales", () =>
   assert.ok(obtenerFilasEfectivasPlanilla(filasEnfBase, enfHabilitada, "enfermero").includes("T6")));
 probar("27 funciona en bloques nocturnos", () =>
-  assert.match(fs.readFileSync("src/components/planilla/PlanillaMensual.jsx", "utf8"), /rotacion3Dias[\s\S]*filas\.map/));
+  assert.match(fs.readFileSync("src/components/planilla/PlanillaMensual.jsx", "utf8"), /bloques\?\.\[periodoReferencia\.clave\][\s\S]*filasActivas\.map/));
 probar("28 Noche histórica usa las filas semanales efectivas", () =>
   assert.match(fs.readFileSync("src/components/planilla/PlanillaMensual.jsx", "utf8"), /obtenerEstrategiaRotacionPlanilla/));
 probar("29 no elimina con asignación semanal", () => {

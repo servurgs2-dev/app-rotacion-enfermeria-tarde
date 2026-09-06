@@ -10,17 +10,14 @@ import {
 } from "../../utils/periodosRotacionPlanilla.js";
 import {
   crearReferenciaPersona,
-  obtenerNombreDesdeReferencia,
-  referenciaCorrespondeAPersona,
   resolverPersonaDesdeReferencia
 } from "../../utils/referenciasPersonas.js";
 import {
   existenBloquesPosterioresUtiles,
   generarRotacionMensual,
   generarRotacionMensualDesdeConfiguracion,
-  obtenerPrimerBloqueReferencia,
-  prepararRotacion3DiasParaGenerar,
-  regenerarRotacion3DiasDesdePrimerBloque
+  regenerarRotacion3DiasDesdePrimerBloque,
+  sincronizarAsignacionBaseDesdeBloqueReferencia
 } from "../../utils/rotacionPlanilla.js";
 import {
   resolverVersionEstructuraLicenciados,
@@ -46,7 +43,6 @@ import PanelConfirmacionLimpieza from "../ui/PanelConfirmacionLimpieza.jsx";
 import PanelReintegrosPlanilla from "./PanelReintegrosPlanilla.jsx";
 import {
   aplicarIntercambioPlanilla,
-  debeSincronizarAsignacionBase,
   obtenerDistribucionPeriodo,
   obtenerOpcionesOcupadas,
   validarIntercambioPlanilla
@@ -54,6 +50,7 @@ import {
 import {
   describirContenidoAEliminar,
   estaPlanillaVacia,
+  vaciarPlanillaDesdeBloque2,
   vaciarPlanillaDesdeSemana2,
   vaciarPlanillaMensual,
   validarContextoLimpieza
@@ -102,6 +99,7 @@ function PlanillaMensual({
   turnoId,
   padronVigencias,
   estadoCargaVigencias,
+  rangoEfectivo = null,
   soloLectura = false,
   versionHistoricaActiva = false
 }) {
@@ -142,13 +140,19 @@ function PlanillaMensual({
     mesActivo
   });
   const usaRotacionTresDias = estrategia.tipo === "cada_3_dias";
-  const periodos = usaRotacionTresDias
+  const periodosMes = usaRotacionTresDias
     ? obtenerBloquesQueIntersectanMes({
         mesActivo,
         fechaBase: estrategia.fechaBase,
         duracionDias: estrategia.duracionDias
       })
     : obtenerSemanasDelMes(mesActivo);
+  const periodos = usaRotacionTresDias && rangoEfectivo?.desde && rangoEfectivo?.hasta
+    ? periodosMes.filter((periodo) =>
+        periodo.fechaInicio <= rangoEfectivo.hasta &&
+        periodo.fechaFin >= rangoEfectivo.desde
+      )
+    : periodosMes;
   const obtenerCohortePeriodo = (periodo) => resolverPersonalPlanificablePeriodo({
     padron: padronVigencias,
     estadoCargaVigencias,
@@ -162,7 +166,8 @@ function PlanillaMensual({
   const evaluacionGeneracion = evaluarPreparacionRotacion3Dias({
     estrategia,
     mesActivo,
-    rotacion3Dias: planilla?.rotacion3Dias
+    rotacion3Dias: planilla?.rotacion3Dias,
+    periodos
   });
   const [preparacionFlexible, setPreparacionFlexible] = useState(null);
   const [posicionesSeleccionadas, setPosicionesSeleccionadas] = useState([]);
@@ -265,19 +270,16 @@ function PlanillaMensual({
         bloqueReferencia: null
       };
     }
-    if (evaluacionGeneracion.esMesInicial) {
-      const bloqueReferencia = obtenerPrimerBloqueReferencia({
-        rotacion3Dias: planilla?.rotacion3Dias,
-        periodos
-      });
-      return {
-        distribucionBase: bloqueReferencia?.bloque,
-        bloqueReferencia
-      };
-    }
+    const periodoReferencia = periodos[0];
+    const bloqueReferencia = periodoReferencia
+      ? {
+          periodo: periodoReferencia,
+          bloque: planilla?.rotacion3Dias?.bloques?.[periodoReferencia.clave] || {}
+        }
+      : null;
     return {
-      distribucionBase: planilla?.rotacion3Dias?.asignacionBase,
-      bloqueReferencia: null
+      distribucionBase: bloqueReferencia?.bloque,
+      bloqueReferencia
     };
   };
 
@@ -291,7 +293,6 @@ function PlanillaMensual({
         : "";
     }
     if (
-      evaluacionGeneracion.esMesInicial &&
       bloqueReferencia &&
       existenBloquesPosterioresUtiles({
         rotacion3Dias: planilla?.rotacion3Dias,
@@ -316,30 +317,12 @@ function PlanillaMensual({
     });
 
     if (usaRotacionTresDias) {
-      const esMesInicial = evaluacionGeneracion.esMesInicial;
       const preparar = (planillaActual) => {
         const planillaAdaptada = adaptarPlanillaSaludMental({
           planilla: planillaActual,
           filasConfiguracion
         });
-        return esMesInicial
-          ? regenerarRotacion3DiasDesdePrimerBloque({
-            rotacion3Dias: planillaAdaptada.rotacion3Dias,
-            periodos,
-            filas,
-            filasFijas: filasFijasGeneracion,
-            asignacionesFijas,
-            filasConfiguracion,
-            personal: personalCanonicoFiltrado,
-            personalCanonico: personalCanonicoFiltrado,
-            personalPorPeriodo: Object.fromEntries(
-              periodos.map((periodo) => [periodo.clave, obtenerCohortePeriodo(periodo)])
-            ),
-            categoria: tipo,
-            posicionesNoAplicables,
-            estrategia
-          })
-          : prepararRotacion3DiasParaGenerar({
+        return regenerarRotacion3DiasDesdePrimerBloque({
             rotacion3Dias: planillaAdaptada.rotacion3Dias,
             periodos,
             filas,
@@ -440,7 +423,10 @@ function PlanillaMensual({
     }
 
     setPreparacionFlexible(preparacion);
-    setPosicionesSeleccionadas([...analisis.filasVacias]);
+    setPosicionesSeleccionadas(
+      (planilla?.generacionFlexible?.posicionesNoAplicables || [])
+        .filter((fila) => analisis.filasVacias.includes(fila))
+    );
     setErrorSeleccion("");
   };
 
@@ -449,8 +435,7 @@ function PlanillaMensual({
     const validacion = validarPosicionesNoAplicables({
       seleccionadas: posicionesSeleccionadas,
       filas,
-      filasVacias: preparacionFlexible.filasVacias,
-      cantidadRequerida: preparacionFlexible.cantidadPosicionesNoAplicables
+      filasVacias: preparacionFlexible.filasVacias
     });
     if (!validacion.ok) {
       setErrorSeleccion(validacion.mensaje);
@@ -464,109 +449,7 @@ function PlanillaMensual({
 
   function generarMes() {
     if (soloLectura) return;
-
-    if (tipo === "enfermero") {
-      iniciarGeneracionFlexible();
-      return;
-    }
-
-    if (usaRotacionTresDias) {
-      if (evaluacionGeneracion.debeBloquearGeneracion) {
-        alert(evaluacionGeneracion.mensaje);
-        return;
-      }
-
-      const esMesInicial = evaluacionGeneracion.esMesInicial;
-      const prepararGeneracion = (planillaActual) => {
-        const planillaAdaptada = adaptarPlanillaSaludMental({
-          planilla: planillaActual,
-          filasConfiguracion
-        });
-        return esMesInicial
-          ? regenerarRotacion3DiasDesdePrimerBloque({
-            rotacion3Dias: planillaAdaptada.rotacion3Dias,
-            periodos,
-            filas,
-            filasFijas: filasFijasGeneracion,
-            asignacionesFijas,
-            filasConfiguracion,
-            personal: personalCanonicoFiltrado,
-            personalCanonico: personalCanonicoFiltrado,
-            personalPorPeriodo: Object.fromEntries(
-              periodos.map((periodo) => [periodo.clave, obtenerCohortePeriodo(periodo)])
-            ),
-            categoria: tipo,
-            estrategia
-          })
-          : prepararRotacion3DiasParaGenerar({
-            rotacion3Dias: planillaAdaptada.rotacion3Dias,
-            periodos,
-            filas,
-            filasFijas: filasFijasGeneracion,
-            asignacionesFijas,
-            filasConfiguracion,
-            personal: personalCanonicoFiltrado,
-            personalCanonico: personalCanonicoFiltrado,
-            personalPorPeriodo: Object.fromEntries(
-              periodos.map((periodo) => [periodo.clave, obtenerCohortePeriodo(periodo)])
-            ),
-            categoria: tipo,
-            estrategia
-          });
-      };
-      const preparacionActual = prepararGeneracion(planilla);
-      if (!preparacionActual.ok) {
-        alert("Completá el primer bloque de la rotación antes de generar los siguientes.");
-        return;
-      }
-
-      if (
-        esMesInicial &&
-        existenBloquesPosterioresUtiles({
-          rotacion3Dias: planilla?.rotacion3Dias,
-          periodos,
-          claveReferencia: preparacionActual.bloqueReferencia.periodo.clave
-        }) &&
-        !window.confirm(
-          `Se volverán a generar todos los bloques posteriores usando ${preparacionActual.bloqueReferencia.periodo.etiqueta} como referencia. Las asignaciones manuales posteriores serán reemplazadas. ¿Deseás continuar?`
-        )
-      ) return;
-
-      setPlanilla((prev) => {
-        const preparacion = prepararGeneracion(prev);
-        if (!preparacion.ok) return prev;
-
-        return {
-          ...prev,
-          rotacion3Dias: preparacion.rotacion3Dias
-        };
-      });
-      return;
-    }
-
-    const generada = generarRotacionSemanalSegura({
-      planilla: adaptarPlanillaSaludMental({
-        planilla,
-        filasConfiguracion
-      }),
-      filas,
-      semanas: periodos,
-      filaFija: sectoresFijosConfigurados.has("salud_mental")
-        ? null
-        : etiquetaSaludMental,
-      filasFijas: filasFijasGeneracion,
-      asignacionesFijas,
-      filasConfiguracion,
-      categoria: tipo,
-      personal: usaRotacionTresDias
-        ? personalCanonicoFiltrado
-        : obtenerCohortePeriodo(periodos[0]),
-      personalCanonico,
-      personalPorPeriodo: Object.fromEntries(
-        periodos.map((periodo) => [periodo.clave, obtenerCohortePeriodo(periodo)])
-      )
-    });
-    if (generada) setPlanilla(generada);
+    iniciarGeneracionFlexible();
   }
 
   function actualizarCelda(periodo, fila, personaId) {
@@ -586,10 +469,21 @@ function PlanillaMensual({
           distribucion: bloqueActual,
           fila
         }) || fila.etiqueta;
-        const sincronizaAsignacionBase = debeSincronizarAsignacionBase({
-          rotacion3Dias: rotacionActual,
-          periodoClave: periodo
-        });
+        const bloqueSiguiente = {
+          ...bloqueActual,
+          [sector]: valor
+        };
+        const sincronizacion = periodo === periodos[0]?.clave
+          ? sincronizarAsignacionBaseDesdeBloqueReferencia({
+              rotacion3Dias: rotacionActual,
+              periodoReferencia: periodos[0],
+              bloqueReferencia: bloqueSiguiente,
+              filas,
+              filasFijas: filasFijasGeneracion,
+              posicionesNoAplicables:
+                prev?.generacionFlexible?.posicionesNoAplicables || []
+            })
+          : null;
 
         return {
           ...prev,
@@ -598,23 +492,14 @@ function PlanillaMensual({
             version: rotacionActual.version ?? 1,
             fechaBase: rotacionActual.fechaBase || estrategia.fechaBase,
             duracionDias: rotacionActual.duracionDias || estrategia.duracionDias,
-            asignacionBase: rotacionActual.asignacionBase || {},
+            asignacionBase: sincronizacion?.ok
+              ? sincronizacion.asignacionBase
+              : rotacionActual.asignacionBase || {},
             coberturaLibreSM: rotacionActual.coberturaLibreSM || {},
             bloques: {
               ...bloquesActuales,
-              [periodo]: {
-                ...bloqueActual,
-                [sector]: valor
-              }
-            },
-            ...(sincronizaAsignacionBase
-              ? {
-                  asignacionBase: {
-                    ...(rotacionActual.asignacionBase || {}),
-                    [sector]: valor
-                  }
-                }
-              : {})
+              [periodo]: bloqueSiguiente
+            }
           }
         };
       });
@@ -701,27 +586,20 @@ function PlanillaMensual({
     setPlanilla((prev) => vaciarPlanillaDesdeSemana2({ planilla: prev }));
   };
 
-  function actualizarAsignacionBaseNocturna(fila, personaId) {
-    if (soloLectura || !usaRotacionTresDias || tipo !== "enfermero") return;
-    const persona = personalCanonicoFiltrado.find((item) => item.id === personaId);
-    const valor = personaId ? crearReferenciaPersona(persona) : "";
-    if (personaId && !valor) return;
-
-    setPlanilla((prev) => {
-      const distribucion = prev?.rotacion3Dias?.asignacionBase || {};
-      const sector = resolverClaveDistribucionParaFila({ distribucion, fila }) || fila.etiqueta;
-      return {
-        ...prev,
-        rotacion3Dias: {
-          ...(prev?.rotacion3Dias || {}),
-          asignacionBase: {
-            ...distribucion,
-            [sector]: valor
-          }
-        }
-      };
-    });
-  }
+  const vaciarDesdeBloque2 = () => {
+    if (soloLectura || versionHistoricaActiva || !usaRotacionTresDias || tipo !== "enfermero") return;
+    const confirmado = window.confirm(
+      "Se vaciarán todas las asignaciones desde el Bloque 2 en adelante. El Bloque 1 quedará sin cambios y podrá usarse como referencia. ¿Continuar?"
+    );
+    if (!confirmado) return;
+    setPlanilla((prev) => vaciarPlanillaDesdeBloque2({
+      planilla: prev,
+      periodos,
+      filas,
+      filasFijas: filasFijasGeneracion,
+      posicionesNoAplicables: prev?.generacionFlexible?.posicionesNoAplicables || []
+    }));
+  };
 
   const obtenerValoresPeriodo = (periodo) => usaRotacionTresDias
     ? planilla?.rotacion3Dias?.bloques?.[periodo.clave] || {}
@@ -871,6 +749,10 @@ function PlanillaMensual({
         ),
         categoria: tipo,
         usaRotacionTresDias,
+        periodoReferencia: periodos[0],
+        filasFijas: filasFijasGeneracion,
+        posicionesNoAplicables:
+          planilla?.generacionFlexible?.posicionesNoAplicables || [],
         personaIdOrigenEsperada: intercambio.personaIdOrigenEsperada,
         personaIdDestinoEsperada: intercambio.personaIdDestinoEsperada
       })
@@ -977,6 +859,10 @@ function PlanillaMensual({
         personal,
         categoria: tipo,
         usaRotacionTresDias,
+        periodoReferencia: periodos[0],
+        filasFijas: filasFijasGeneracion,
+        posicionesNoAplicables:
+          prev?.generacionFlexible?.posicionesNoAplicables || [],
         personaIdOrigenEsperada: intercambio.personaIdOrigenEsperada,
         personaIdDestinoEsperada: intercambio.personaIdDestinoEsperada
       });
@@ -998,6 +884,15 @@ function PlanillaMensual({
                 className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-100"
               >
                 Vaciar desde Semana 2
+              </button>
+            )}
+            {usaRotacionTresDias && tipo === "enfermero" && (
+              <button
+                type="button"
+                onClick={vaciarDesdeBloque2}
+                className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-100"
+              >
+                Vaciar desde Bloque 2
               </button>
             )}
             <button
@@ -1065,75 +960,6 @@ function PlanillaMensual({
         </div>
       </section>
 
-      {usaRotacionTresDias && tipo === "enfermero" && (
-        <section className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
-          <h3 className="font-semibold text-indigo-950">
-            Base editable de la rotación nocturna
-          </h3>
-          <p className="mt-1 text-sm text-indigo-900">
-            Revisá esta distribución antes de generar los bloques faltantes.
-          </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {filas.map((sector) => {
-              const fila = filasActivas.find((actual) => actual.etiqueta === sector);
-              const distribucion = planilla?.rotacion3Dias?.asignacionBase || {};
-              const claveSector = resolverClaveDistribucionParaFila({ distribucion, fila }) || sector;
-              const referenciaActual = distribucion[claveSector] || "";
-              const personaActual = resolverPersonaDesdeReferencia(
-                referenciaActual,
-                personal
-              );
-              const nombreHistorico = obtenerNombreDesdeReferencia(
-                referenciaActual,
-                personalCanonicoFiltrado
-              );
-              const valor = personaActual?.id ||
-                (nombreHistorico ? "__REFERENCIA_NO_RESUELTA__" : "");
-              return (
-                <label key={sector} className="text-sm text-slate-700">
-                  <span className="mb-1 block font-medium">{sector}</span>
-                  <select
-                    disabled={soloLectura}
-                    value={valor}
-                    onChange={(evento) =>
-                      actualizarAsignacionBaseNocturna(fila, evento.target.value)
-                    }
-                    className="w-full rounded-lg border border-indigo-200 bg-white px-2 py-1.5"
-                  >
-                    <option value="">-- elegir --</option>
-                    {!personaActual && nombreHistorico && (
-                      <option value="__REFERENCIA_NO_RESUELTA__" disabled>
-                        {nombreHistorico}
-                      </option>
-                    )}
-                    {personalCanonicoFiltrado
-                      .filter((persona) =>
-                        !Object.entries(distribucion).some(
-                          ([otraFila, referencia]) =>
-                            otraFila !== claveSector &&
-                            referenciaCorrespondeAPersona(
-                              referencia,
-                              persona,
-                              personal
-                            )
-                        )
-                      )
-                      .map((persona, indice) => (
-                        <option
-                          key={obtenerClaveRenderPersona(persona, indice, idsDuplicados)}
-                          value={persona.id}
-                        >
-                          {obtenerEtiquetaPersona(persona, personal)}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
       <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="min-w-[900px] table-auto border-separate border-spacing-0 text-sm">
           <thead className="bg-slate-100 text-slate-700">
@@ -1141,7 +967,7 @@ function PlanillaMensual({
               <th className="sticky left-0 z-20 w-[140px] min-w-[140px] max-w-[140px] border-r border-slate-200 bg-slate-100 px-3 py-3 text-left font-semibold shadow-[2px_0_4px_-3px_rgba(15,23,42,0.35)] md:w-[180px] md:min-w-[180px] md:max-w-[180px] md:px-4">
                 Sector
               </th>
-              {periodos.map((periodo) => (
+              {periodos.map((periodo, indicePeriodo) => (
                 (() => {
                   const personalPeriodo = obtenerCohortePeriodo(periodo);
                   const sinAsignar = obtenerPersonasSinAsignarPlanillaSemanal({
@@ -1153,7 +979,16 @@ function PlanillaMensual({
                       key={periodo.clave}
                       className="px-4 py-3 text-left font-semibold min-w-[140px] whitespace-nowrap"
                     >
-                      <span className="block">{obtenerEtiquetaPeriodo(periodo)}</span>
+                      <span className="block">
+                        {usaRotacionTresDias ? `Bloque ${indicePeriodo + 1} · ` : ""}
+                        {obtenerEtiquetaPeriodo(periodo)}
+                      </span>
+                      {usaRotacionTresDias && indicePeriodo === 0 &&
+                        rangoEfectivo?.desde && periodo.fechaInicio < rangoEfectivo.desde && (
+                          <span className="mt-0.5 block text-xs font-normal text-indigo-600">
+                            Vigente desde {rangoEfectivo.desde.slice(8, 10)}/{rangoEfectivo.desde.slice(5, 7)}
+                          </span>
+                        )}
                       <span className="mt-0.5 block text-xs font-normal text-slate-500">
                         {sinAsignar.length} sin asignar
                       </span>
@@ -1345,9 +1180,9 @@ function PlanillaMensual({
       >
         ⇄ Intercambiar personas
       </button>
-      {evaluacionGeneracion.debeBloquearGeneracion && (
+      {usaRotacionTresDias && evaluacionGeneracion.debeBloquearGeneracion && (
         <p className="text-sm text-amber-700">
-          Para generar este mes primero debés usar ‘Continuar desde mes anterior’.
+          {evaluacionGeneracion.mensaje}
         </p>
       )}
       {preparacionFlexible && (
@@ -1356,7 +1191,6 @@ function PlanillaMensual({
           filasVacias={preparacionFlexible.filasVacias}
           nombresPorFila={preparacionFlexible.nombresPorFila}
           seleccionadas={posicionesSeleccionadas}
-          cantidadRequerida={preparacionFlexible.cantidadPosicionesNoAplicables}
           sectoresCriticos={sectoresCriticos}
           advertenciaSobrescritura={preparacionFlexible.advertenciaSobrescritura}
           error={errorSeleccion}

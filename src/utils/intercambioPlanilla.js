@@ -2,7 +2,10 @@ import {
   crearReferenciaPersona,
   resolverPersonaDesdeReferencia
 } from "./referenciasPersonas.js";
-import { tieneAsignacionesUtiles } from "./rotacionPlanilla.js";
+import {
+  sincronizarAsignacionBaseDesdeBloqueReferencia,
+  tieneAsignacionesUtiles
+} from "./rotacionPlanilla.js";
 
 const esObjeto = (valor) =>
   Boolean(valor) && typeof valor === "object" && !Array.isArray(valor);
@@ -12,12 +15,18 @@ const esVacia = (referencia) =>
 
 export const debeSincronizarAsignacionBase = ({
   rotacion3Dias,
-  periodoClave
+  periodoClave,
+  periodoReferenciaClave
 } = {}) =>
   Boolean(
     periodoClave &&
-    periodoClave === rotacion3Dias?.fechaBase &&
-    tieneAsignacionesUtiles(rotacion3Dias?.asignacionBase)
+    (
+      periodoClave === periodoReferenciaClave ||
+      (
+        periodoClave === rotacion3Dias?.fechaBase &&
+        tieneAsignacionesUtiles(rotacion3Dias?.asignacionBase)
+      )
+    )
   );
 
 export const obtenerDistribucionPeriodo = ({
@@ -194,7 +203,11 @@ export const aplicarIntercambioPlanilla = (argumentos = {}) => {
     periodoClave,
     filaOrigen,
     filaDestino,
-    usaRotacionTresDias = false
+    usaRotacionTresDias = false,
+    periodoReferencia,
+    filas,
+    filasFijas = [],
+    posicionesNoAplicables = []
   } = argumentos;
   const distribucionIntercambiada = {
     ...validacion.distribucion,
@@ -215,8 +228,19 @@ export const aplicarIntercambioPlanilla = (argumentos = {}) => {
   const rotacionActual = planilla.rotacion3Dias;
   const sincronizaBase = debeSincronizarAsignacionBase({
     rotacion3Dias: rotacionActual,
-    periodoClave
+    periodoClave,
+    periodoReferenciaClave: periodoReferencia?.clave
   });
+  const sincronizacion = sincronizaBase && periodoReferencia
+    ? sincronizarAsignacionBaseDesdeBloqueReferencia({
+        rotacion3Dias: rotacionActual,
+        periodoReferencia,
+        bloqueReferencia: distribucionIntercambiada,
+        filas,
+        filasFijas,
+        posicionesNoAplicables
+      })
+    : null;
   return {
     ...validacion,
     planilla: {
@@ -227,14 +251,18 @@ export const aplicarIntercambioPlanilla = (argumentos = {}) => {
           ...rotacionActual.bloques,
           [periodoClave]: distribucionIntercambiada
         },
-        ...(sincronizaBase
+        ...(sincronizacion?.ok
           ? {
-              asignacionBase: {
-                ...rotacionActual.asignacionBase,
-                [filaOrigen]: { ...validacion.referenciaNuevaOrigen },
-                [filaDestino]: { ...validacion.referenciaNuevaDestino }
-              }
+              asignacionBase: sincronizacion.asignacionBase
             }
+          : sincronizaBase
+            ? {
+                asignacionBase: {
+                  ...rotacionActual.asignacionBase,
+                  [filaOrigen]: { ...validacion.referenciaNuevaOrigen },
+                  [filaDestino]: { ...validacion.referenciaNuevaDestino }
+                }
+              }
           : {})
       }
     }

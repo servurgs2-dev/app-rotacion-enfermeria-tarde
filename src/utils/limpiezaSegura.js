@@ -1,3 +1,5 @@
+import { sincronizarAsignacionBaseDesdeBloqueReferencia } from "./rotacionPlanilla.js";
+
 const SEMANAS_PLANILLA = [
   "semana1",
   "semana2",
@@ -45,10 +47,7 @@ export const estaPlanillaVacia = ({
     ) &&
     !tieneContenidoSignificativo(planilla.coberturaLibreSM) &&
     !tieneContenidoSignificativo(planilla.asignacionesParciales) &&
-    (
-      tipo !== "enfermero" ||
-      !tieneContenidoSignificativo(planilla.generacionFlexible)
-    )
+    !tieneContenidoSignificativo(planilla.generacionFlexible)
   );
 };
 
@@ -74,7 +73,7 @@ export const vaciarPlanillaMensual = ({
     Object.entries(actual).filter(
       ([clave]) =>
         clave !== "asignacionesParciales" &&
-        (tipo !== "enfermero" || clave !== "generacionFlexible")
+        clave !== "generacionFlexible"
     )
   );
 
@@ -132,6 +131,63 @@ export const vaciarPlanillaDesdeSemana2 = ({ planilla } = {}) => {
   return resultado;
 };
 
+export const vaciarPlanillaDesdeBloque2 = ({
+  planilla,
+  periodos,
+  filas,
+  filasFijas = [],
+  posicionesNoAplicables = []
+} = {}) => {
+  const actual = esObjeto(planilla) ? planilla : {};
+  const rotacion = esObjeto(actual.rotacion3Dias) ? actual.rotacion3Dias : {};
+  const periodosValidos = (Array.isArray(periodos) ? periodos : [])
+    .filter((periodo) => periodo?.clave && Number.isInteger(periodo.indice));
+  const referencia = periodosValidos[0];
+  if (!referencia) return actual;
+  const clavesPosteriores = new Set(
+    periodosValidos.slice(1).map((periodo) => periodo.clave)
+  );
+  const bloques = esObjeto(rotacion.bloques) ? rotacion.bloques : {};
+  const bloquesLimpios = Object.fromEntries(
+    Object.entries(bloques).map(([clave, distribucion]) => [
+      clave,
+      clavesPosteriores.has(clave)
+        ? vaciarDistribucionExistente(distribucion)
+        : distribucion
+    ])
+  );
+  const sincronizacion = sincronizarAsignacionBaseDesdeBloqueReferencia({
+    rotacion3Dias: rotacion,
+    periodoReferencia: referencia,
+    bloqueReferencia: bloquesLimpios[referencia.clave],
+    filas,
+    filasFijas,
+    posicionesNoAplicables
+  });
+  const coberturaLibreSM = esObjeto(rotacion.coberturaLibreSM)
+    ? Object.fromEntries(
+        Object.entries(rotacion.coberturaLibreSM)
+          .filter(([clave]) => !clavesPosteriores.has(clave))
+      )
+    : {};
+  const asignacionesParciales = esObjeto(actual.asignacionesParciales)
+    ? Object.fromEntries(
+        Object.entries(actual.asignacionesParciales)
+          .filter(([clave]) => !clavesPosteriores.has(clave))
+      )
+    : undefined;
+
+  return {
+    ...actual,
+    ...(asignacionesParciales === undefined ? {} : { asignacionesParciales }),
+    rotacion3Dias: {
+      ...(sincronizacion.ok ? sincronizacion.rotacion3Dias : rotacion),
+      bloques: bloquesLimpios,
+      coberturaLibreSM
+    }
+  };
+};
+
 export const describirContenidoAEliminar = ({
   tipo,
   usaRotacionTresDias = false
@@ -150,9 +206,7 @@ export const describirContenidoAEliminar = ({
     "las asignaciones de las semanas 1 a 6",
     "la cobertura de Salud Mental",
     "las asignaciones parciales por reintegro",
-    ...(tipo === "enfermero"
-      ? ["la configuración flexible de esta generación"]
-      : [])
+    "la configuración flexible de esta generación"
   ];
 };
 

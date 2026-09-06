@@ -249,14 +249,14 @@ test("fija se materializa sólo en bloques efectivos y no se borra de configurac
   assert.deepEqual(fija, [{ sectorId: "a", personaId: "P" }]);
 });
 
-test("regeneración selecciona el primer bloque resoluble y no el primer stale", () => {
+test("regeneración usa exclusivamente el Bloque 1 como referencia", () => {
   const periodos = [bloque("2026-09-01", "2026-09-03", "S", 20), bloque("2026-09-04", "2026-09-06", "V", 21)];
   const resultado = regenerarRotacion3DiasDesdePrimerBloque({
     rotacion3Dias: { asignacionBase: {}, bloques: { S: { A: { personaId: "stale", nombre: "Viejo" } }, V: { A: ref(q) } } },
     periodos, filas: ["A"], personal: [q], personalCanonico: [q], personalPorPeriodo: { S: [q], V: [q] }, categoria: "enfermero"
   });
-  assert.equal(resultado.ok, true);
-  assert.equal(resultado.bloqueReferencia.periodo.clave, "V");
+  assert.equal(resultado.ok, false);
+  assert.equal(resultado.codigo, "REFERENCIAS_BLOQUES_NO_RESOLUBLES");
 });
 
 test("legacy inequívoco resuelve y homónimo ambiguo no se adjudica", () => {

@@ -3296,6 +3296,10 @@ return (
           licencias={licenciasMes}
           mesActivo={mesActivo}
           turnoId={turnoActivo}
+          rangoEfectivo={{
+            desde: preparacionPlanillaSeleccionada.desde,
+            hasta: preparacionPlanillaSeleccionada.hasta
+          }}
           padronVigencias={vigenciasPersonal.padron}
           estadoCargaVigencias={{ cargando: vigenciasPersonal.cargando, error: vigenciasPersonal.error }}
         />
@@ -3335,6 +3339,10 @@ return (
           licencias={licenciasMes}
           mesActivo={mesActivo}
           turnoId={turnoActivo}
+          rangoEfectivo={{
+            desde: preparacionPlanillaSeleccionada.desde,
+            hasta: preparacionPlanillaSeleccionada.hasta
+          }}
           padronVigencias={vigenciasPersonal.padron}
           estadoCargaVigencias={{ cargando: vigenciasPersonal.cargando, error: vigenciasPersonal.error }}
         />

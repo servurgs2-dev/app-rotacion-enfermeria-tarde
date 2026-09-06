@@ -107,8 +107,7 @@ export const analizarDistribucionBaseEnfermeros = ({
 export const validarPosicionesNoAplicables = ({
   seleccionadas,
   filas,
-  filasVacias,
-  cantidadRequerida
+  filasVacias
 } = {}) => {
   const seleccion = Array.isArray(seleccionadas) ? seleccionadas : [];
   const unicas = new Set(seleccion);
@@ -117,14 +116,6 @@ export const validarPosicionesNoAplicables = ({
 
   if (unicas.size !== seleccion.length) {
     return { ok: false, mensaje: "Una posición no puede seleccionarse más de una vez." };
-  }
-  if (seleccion.length !== cantidadRequerida) {
-    return {
-      ok: false,
-      mensaje: `Seleccioná exactamente ${cantidadRequerida} ${
-        cantidadRequerida === 1 ? "posición" : "posiciones"
-      }.`
-    };
   }
   if (seleccion.some((fila) => !configuradas.has(fila))) {
     return { ok: false, mensaje: "La selección contiene posiciones no configuradas." };

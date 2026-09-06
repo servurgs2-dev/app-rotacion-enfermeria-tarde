@@ -436,8 +436,8 @@ const calendario = await readFile(
 );
 const pdf = await readFile(new URL("../src/utils/exportPDF.js", import.meta.url), "utf8");
 
-await probar("los cuatro turnos de Enfermeros usan el mismo flujo flexible", () => {
-  assert.match(componente, /if \(tipo === "enfermero"\)/);
+await probar("todas las categorías y turnos usan el mismo flujo flexible", () => {
+  assert.match(componente, /function generarMes\(\)[\s\S]*iniciarGeneracionFlexible\(\)/);
   assert.doesNotMatch(componente, /turnoId === "tarde"/);
 });
 

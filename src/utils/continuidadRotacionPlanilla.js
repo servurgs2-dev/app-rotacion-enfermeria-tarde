@@ -23,7 +23,8 @@ const esClaveMesValida = (mes) => /^\d{4}-(0[1-9]|1[0-2])$/.test(mes || "");
 export const evaluarPreparacionRotacion3Dias = ({
   estrategia,
   mesActivo,
-  rotacion3Dias
+  rotacion3Dias,
+  periodos = []
 } = {}) => {
   const esRotacionTresDias = estrategia?.tipo === "cada_3_dias";
   const mesValido = esClaveMesValida(mesActivo);
@@ -37,16 +38,25 @@ export const evaluarPreparacionRotacion3Dias = ({
     vigenciaValida &&
     mesActivo > estrategia.vigenteDesdeMes;
   const tieneBase = tieneAsignacionBaseRotacion3Dias(rotacion3Dias);
-  const debeBloquearGeneracion = esMesPosterior && !tieneBase;
+  const primerPeriodo = Array.isArray(periodos) ? periodos[0] : null;
+  const tieneBloqueReferencia = primerPeriodo
+    ? tieneAsignacionBaseRotacion3Dias({
+        asignacionBase: rotacion3Dias?.bloques?.[primerPeriodo.clave]
+      })
+    : false;
+  const debeBloquearGeneracion = primerPeriodo
+    ? esRotacionTresDias && !tieneBloqueReferencia
+    : esMesPosterior && !tieneBase;
 
   return {
     esRotacionTresDias,
     esMesInicial,
     esMesPosterior,
     tieneBase,
+    tieneBloqueReferencia,
     debeBloquearGeneracion,
     mensaje: debeBloquearGeneracion
-      ? "Este mes todavía no tiene la base de la rotación nocturna. Usá ‘Continuar desde mes anterior’ antes de generar la planilla."
+      ? "Completá el Bloque 1 antes de generar la rotación."
       : ""
   };
 };

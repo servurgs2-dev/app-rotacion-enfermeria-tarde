@@ -301,13 +301,14 @@ await probar("37g una persona agregada puede incorporarse antes de generar", () 
     )
   );
 });
-await probar("37h Noche expone asignacionBase editable antes de generar", async () => {
+await probar("37h Noche usa Bloque 1 y no expone asignacionBase como editor separado", async () => {
   const planilla = await readFile(
     new URL("../src/components/planilla/PlanillaMensual.jsx", import.meta.url),
     "utf8"
   );
-  assert.match(planilla, /Base editable de la rotación nocturna/);
-  assert.match(planilla, /actualizarAsignacionBaseNocturna/);
+  assert.doesNotMatch(planilla, /Base editable de la rotación nocturna/);
+  assert.doesNotMatch(planilla, /actualizarAsignacionBaseNocturna/);
+  assert.match(planilla, /Bloque \$\{indicePeriodo \+ 1\}/);
 });
 await probar("38 cobertura semanal conserva solo base pertinente", () => {
   assert.deepEqual(Object.keys(construidoBase.estado.planillas.enfermeros.coberturaLibreSM), ["semana1"]);

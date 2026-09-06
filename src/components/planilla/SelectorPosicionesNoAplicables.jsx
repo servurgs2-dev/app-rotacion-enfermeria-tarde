@@ -5,7 +5,6 @@ function SelectorPosicionesNoAplicables({
   filasVacias,
   nombresPorFila,
   seleccionadas,
-  cantidadRequerida,
   sectoresCriticos,
   advertenciaSobrescritura,
   error,
@@ -28,9 +27,11 @@ function SelectorPosicionesNoAplicables({
           Posiciones no aplicables
         </h3>
         <p className="mt-2 text-sm text-slate-600">
-          Seleccioná exactamente {cantidadRequerida} {
-            cantidadRequerida === 1 ? "posición vacía" : "posiciones vacías"
-          }. Las posiciones ocupadas no pueden excluirse.
+          Si alguna posición no debe participar de esta distribución, marcala como no aplicable.
+          Las posiciones vacías que dejes sin marcar permanecerán como huecos.
+        </p>
+        <p className="mt-1 text-sm font-medium text-slate-700">
+          No aplicables seleccionadas: {seleccionadas.length}
         </p>
         <p className="mt-1 text-sm text-slate-600">
           Para excluir una posición ocupada, cancelá, reorganizá manualmente la
@@ -88,7 +89,6 @@ function SelectorPosicionesNoAplicables({
           <button
             type="button"
             onClick={onConfirmar}
-            disabled={seleccionadas.length !== cantidadRequerida}
             className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:bg-slate-300"
           >
             Confirmar y generar

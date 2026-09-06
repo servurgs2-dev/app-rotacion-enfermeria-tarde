@@ -230,6 +230,45 @@ export const derivarAsignacionBaseDesdeBloque = ({
   });
 };
 
+export const sincronizarAsignacionBaseDesdeBloqueReferencia = ({
+  rotacion3Dias,
+  periodoReferencia,
+  bloqueReferencia,
+  filas,
+  filasFijas = [],
+  posicionesNoAplicables = []
+} = {}) => {
+  if (!Number.isInteger(periodoReferencia?.indice)) {
+    return { ok: false, codigo: "PERIODO_REFERENCIA_INVALIDO", rotacion3Dias };
+  }
+  if (!tieneAsignacionesUtiles(bloqueReferencia)) {
+    return {
+      ok: true,
+      asignacionBase: {},
+      rotacion3Dias: { ...(rotacion3Dias || {}), asignacionBase: {} }
+    };
+  }
+  const asignacionBase = derivarAsignacionBaseDesdeBloque({
+    bloqueReferencia,
+    indiceReferencia: periodoReferencia?.indice,
+    filas,
+    filasFijas,
+    posicionesNoAplicables
+  });
+  if (!asignacionBase) {
+    return { ok: false, codigo: "BLOQUE_REFERENCIA_AUSENTE", rotacion3Dias };
+  }
+
+  return {
+    ok: true,
+    asignacionBase,
+    rotacion3Dias: {
+      ...(rotacion3Dias || {}),
+      asignacionBase: clonarDistribucion(asignacionBase)
+    }
+  };
+};
+
 export const resolverAsignacionBaseRotacion3DiasEfectiva = ({
   rotacion3Dias,
   periodos,
@@ -372,9 +411,10 @@ export const regenerarRotacion3DiasDesdePrimerBloque = ({
     : {};
   const periodosValidos = (Array.isArray(periodos) ? periodos : [])
     .filter((periodo) => periodo?.clave && Number.isInteger(periodo.indice));
+  const primerPeriodo = periodosValidos[0];
   const baseEfectiva = resolverAsignacionBaseRotacion3DiasEfectiva({
     rotacion3Dias: { ...rotacion, asignacionBase: {} },
-    periodos: periodosValidos,
+    periodos: primerPeriodo ? [primerPeriodo] : [],
     filas,
     filasFijas,
     asignacionesFijas,

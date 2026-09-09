@@ -83,9 +83,16 @@ export const resolverTurnantesYCoberturasOperativas = ({
     return [...ordenadas, ...filas.filter((fila) => !incluidas.has(fila))];
   };
   const sectoresPrioritariosDirectos = ordenarPorPrioridad(sectores)
-    .filter((fila) => !idsDonantes?.has(fila.sectorId) && !idsOrigenPareja.has(fila.sectorId));
+    .filter((fila) =>
+      !idsDonantes?.has(fila.sectorId) && (!fila.cedidoAPareja || !fila.sectorId)
+    );
   sectoresPrioritariosDirectos.forEach((fila) => {
-    if (!fila.enfermero && fila.reemplazo && !fila.vacioManual) {
+    if (
+      !fila.enfermero &&
+      fila.reemplazo &&
+      !fila.vacioManual &&
+      !idsOrigenPareja.has(fila.sectorId)
+    ) {
       fila.enfermero = tomarTurnante();
     }
   });

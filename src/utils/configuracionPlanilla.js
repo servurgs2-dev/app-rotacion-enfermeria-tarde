@@ -152,6 +152,10 @@ const copiarFilaSnapshot = (fila) => Object.fromEntries(
 );
 
 const tieneTexto = (valor) => typeof valor === "string" && valor.trim().length > 0;
+const SECTORES_CON_ETIQUETA_ESPECIFICA_POR_TURNO = new Set([
+  "boxes_14_19",
+  "boxes_20_22_24"
+]);
 const resolverEtiquetasVigentesMesEditable = ({
   filas,
   categoria,
@@ -160,7 +164,7 @@ const resolverEtiquetasVigentesMesEditable = ({
   mesReferencia
 }) => {
   if (categoria !== "enfermero" || esMesHistoricoCerrado({ mes, mesReferencia })) return filas;
-  return filas.map((fila) => fila?.sectorId === "boxes_20_22_24"
+  return filas.map((fila) => SECTORES_CON_ETIQUETA_ESPECIFICA_POR_TURNO.has(fila?.sectorId)
     ? {
         ...fila,
         etiqueta: resolverEtiquetaSectorPorTurno({

@@ -230,26 +230,32 @@ probar("20 snapshots históricos conservan su etiqueta congelada y la identidad"
   }
 });
 
-probar("21 mes editable reetiqueta la copia efectiva sin mutar el snapshot preparado", () => {
-  for (const [turno, etiquetaAnterior, etiquetaVigente] of [
-    ["manana", "19-22+24", "19-20+22-24"],
-    ["tarde", "20-22-24", "20+22-24"],
-    ["vespertino", "20-22+24", "20+22-24"],
-    ["noche", "20-22-24", "20+22-24"]
+probar("21 mes editable reetiqueta ambos sectores por turno sin mutar el snapshot preparado", () => {
+  for (const [turno, etiqueta14Vigente, etiqueta20Anterior, etiqueta20Vigente] of [
+    ["manana", "14-18", "19-22+24", "19-20+22-24"],
+    ["tarde", "14-19", "20-22-24", "20+22-24"],
+    ["vespertino", "14-19", "20-22+24", "20+22-24"],
+    ["noche", "14-19", "20-22-24", "20+22-24"]
   ]) {
     const contexto = { turno, categoria: "enfermero", mes: "2026-09" };
     const snapshot = crearSnapshotConfiguracionPlanilla(contexto);
-    const filaPersistida = snapshot.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
-    filaPersistida.etiqueta = etiquetaAnterior;
+    const fila14Persistida = snapshot.filas.find(({ sectorId }) => sectorId === "boxes_14_19");
+    const fila20Persistida = snapshot.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
+    fila14Persistida.etiqueta = "14-19";
+    fila20Persistida.etiqueta = etiqueta20Anterior;
     const resultado = obtenerConfiguracionPlanillaEfectiva({
       estadoMensual: { configuracionPlanilla: { enfermero: snapshot } },
       ...contexto,
       mesReferencia: "2026-08"
     });
-    const filaEfectiva = resultado.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
-    assert.equal(filaEfectiva.etiqueta, etiquetaVigente);
-    assert.equal(filaEfectiva.filaId, "enfermero.sector.boxes_20_22_24");
-    assert.equal(filaPersistida.etiqueta, etiquetaAnterior);
+    const fila14Efectiva = resultado.filas.find(({ sectorId }) => sectorId === "boxes_14_19");
+    const fila20Efectiva = resultado.filas.find(({ sectorId }) => sectorId === "boxes_20_22_24");
+    assert.equal(fila14Efectiva.etiqueta, etiqueta14Vigente);
+    assert.equal(fila14Efectiva.filaId, "enfermero.sector.boxes_14_19");
+    assert.equal(fila20Efectiva.etiqueta, etiqueta20Vigente);
+    assert.equal(fila20Efectiva.filaId, "enfermero.sector.boxes_20_22_24");
+    assert.equal(fila14Persistida.etiqueta, "14-19");
+    assert.equal(fila20Persistida.etiqueta, etiqueta20Anterior);
   }
 });
 

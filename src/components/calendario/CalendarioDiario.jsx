@@ -2346,7 +2346,8 @@ useEffect(() => {
           [keyDia]: Object.fromEntries(
             Object.keys(redistribucion.cambios).map((clave) => [
               clave,
-              PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
+              redistribucion.procedencias?.[clave] ||
+                PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
             ])
           )
         }

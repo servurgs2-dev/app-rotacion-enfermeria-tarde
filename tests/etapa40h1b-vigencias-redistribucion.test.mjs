@@ -121,7 +121,7 @@ for (const [nombre, ejecutar] of [
   });
 }
 
-probar("recalculadores exhiben la divergencia entre prioridad efectiva y constantes internas", () => {
+probar("recalculadores conservan las constantes únicamente como fallback", () => {
   assert.ok(PRIORIDAD_REDISTRIBUCION_OPCION_1.length > 0);
   assert.ok(PRIORIDAD_REDISTRIBUCION_OPCION_2.length > 0);
   const prioridadEfectiva = [...filasConfiguracion].reverse().map((fila) => fila.sectorId);
@@ -151,7 +151,7 @@ for (const [nombre, crear, recalcular] of [
     recalcularRedistribucionOpcion2Automatica
   ]
 ]) {
-  probar(`${nombre}: reconstrucciones sucesivas con prioridad personalizada no alcanzan punto fijo inmediato`, () => {
+  probar(`${nombre}: reconstrucciones sucesivas con prioridad personalizada alcanzan punto fijo`, () => {
     const inicial = crear();
     const procedenciaCambiosDia = Object.fromEntries(
       Object.keys(inicial.cambios).map((clave) => [clave, "redistribucion_automatica"])
@@ -167,18 +167,128 @@ for (const [nombre, crear, recalcular] of [
       ...parametros,
       asignaciones: inicial.asignaciones
     });
-    assert.notDeepEqual(primeraReconstruccion, inicial.asignaciones);
+    const distribucionVisible = (filas) => filas.map((fila) => ({
+      nombre: fila.nombre,
+      personaId: fila.enfermero?.id || null
+    }));
+    assert.deepEqual(
+      distribucionVisible(primeraReconstruccion),
+      distribucionVisible(inicial.asignaciones)
+    );
     const segundaReconstruccion = recalcular({
       ...parametros,
       asignaciones: primeraReconstruccion
     });
-    assert.notDeepEqual(segundaReconstruccion, primeraReconstruccion);
+    assert.deepEqual(segundaReconstruccion, primeraReconstruccion);
     const terceraReconstruccion = recalcular({
       ...parametros,
       asignaciones: segundaReconstruccion
     });
-    assert.notDeepEqual(terceraReconstruccion, primeraReconstruccion);
-    assert.notDeepEqual(terceraReconstruccion, segundaReconstruccion);
+    assert.deepEqual(terceraReconstruccion, primeraReconstruccion);
+    assert.deepEqual(terceraReconstruccion, segundaReconstruccion);
+  });
+}
+
+for (const [nombre, crear, recalcular] of [
+  [
+    "opción 1",
+    () => redistribuirCritica({ asignaciones, ordenVisual, filasConfiguracion }),
+    recalcularRedistribucionOpcion1Automatica
+  ],
+  [
+    "opción 2",
+    () => redistribuirPorBoxes({ asignaciones, ordenVisual, filasConfiguracion }),
+    recalcularRedistribucionOpcion2Automatica
+  ]
+]) {
+  probar(`${nombre}: sin prioridad efectiva usa fallback y permanece estable`, () => {
+    const inicial = crear();
+    const procedenciaCambiosDia = Object.fromEntries(
+      Object.keys(inicial.cambios).map((clave) => [clave, "redistribucion_automatica"])
+    );
+    const r1 = recalcular({
+      asignaciones: inicial.asignaciones,
+      cambiosDia: inicial.cambios,
+      procedenciaCambiosDia,
+      ordenVisual,
+      filasConfiguracion,
+      prioridadSectorIds: []
+    });
+    const r2 = recalcular({
+      asignaciones: r1,
+      cambiosDia: inicial.cambios,
+      procedenciaCambiosDia,
+      ordenVisual,
+      filasConfiguracion,
+      prioridadSectorIds: []
+    });
+    assert.deepEqual(r2, r1);
+  });
+}
+
+probar("opción 1 conserva un movimiento manual fuera del conjunto automático", () => {
+  const inicial = redistribuirCritica({ asignaciones, ordenVisual, filasConfiguracion });
+  const [claveManual, ...clavesAutomaticas] = Object.keys(inicial.cambios);
+  const personaManual = persona("manual-protegida");
+  const asignacionesConManual = inicial.asignaciones.map((fila, indice) =>
+    indice === 0 ? { ...fila, enfermero: personaManual, cambioManualProtegido: true } : fila
+  );
+  const procedenciaCambiosDia = Object.fromEntries([
+    [claveManual, "manual"],
+    ...clavesAutomaticas.map((clave) => [clave, "redistribucion_automatica"])
+  ]);
+  const resultado = recalcularRedistribucionOpcion1Automatica({
+    asignaciones: asignacionesConManual,
+    cambiosDia: inicial.cambios,
+    procedenciaCambiosDia,
+    ordenVisual,
+    filasConfiguracion,
+    prioridadSectorIds: [...filasConfiguracion].reverse().map((fila) => fila.sectorId)
+  });
+  assert.equal(resultado[0].enfermero, personaManual);
+  assert.equal(resultado[0].cambioManualProtegido, true);
+});
+
+probar("la prioridad resuelta desde B gobierna su generación sin usar top-level", () => {
+  const organizacionB = resolverOrganizacionMesPorFecha({
+    estado: estadoABC,
+    mes,
+    fecha: "2026-09-15"
+  });
+  const prioridadB = organizacionB.configuracionPlanilla.enfermero.prioridadCoberturaSectorIds;
+  const resultado = redistribuirCritica({
+    asignaciones,
+    ordenVisual,
+    filasConfiguracion,
+    prioridadSectorIds: prioridadB
+  });
+  assert.equal(resultado.asignaciones[0].nombre, "SILLON 2");
+  assert.notEqual(resultado.asignaciones[0].nombre, "REA 2");
+});
+
+for (const [nombre, crear] of [
+  ["opción 1", redistribuirCritica],
+  ["opción 2", redistribuirPorBoxes]
+]) {
+  probar(`${nombre}: la prioridad no convierte un destino ajeno a la modalidad en prioritario`, () => {
+    const personasCompatibles = asignaciones.slice(0, 13);
+    const resultado = crear({
+      asignaciones: personasCompatibles,
+      ordenVisual,
+      filasConfiguracion,
+      prioridadSectorIds: [
+        "sillones_3",
+        "pre_int_2",
+        ...filasConfiguracion.map((fila) => fila.sectorId)
+      ]
+    });
+    const sillon3 = resultado.asignaciones.find((fila) => fila.nombre === "SILLONES 3");
+    assert.equal(resultado.asignaciones[0].nombre, "PRE INT 2");
+    assert.equal(sillon3?.enfermero || null, null);
+    assert.equal(
+      new Set(resultado.asignaciones.map((fila) => fila.enfermero?.id).filter(Boolean)).size,
+      personasCompatibles.length
+    );
   });
 }
 

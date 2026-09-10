@@ -114,10 +114,14 @@ const crearRedistribucionPorIdentidades = ({ asignaciones, destinos, prioridad }
 
 const resolverPrioridadRedistribucion = ({ prioridadSectorIds, destinos, modo, fallback }) => {
   if (!Array.isArray(prioridadSectorIds) || prioridadSectorIds.length === 0) return fallback;
-  const sectoresPorId = new Map(destinos.flatMap((destino) =>
+  const clavesPermitidas = new Set(fallback.map(claveDestino));
+  const destinosPermitidos = destinos.filter((destino) =>
+    clavesPermitidas.has(claveDestino(destino))
+  );
+  const sectoresPorId = new Map(destinosPermitidos.flatMap((destino) =>
     destino?.tipo === "sector" && destino.sectorId ? [[destino.sectorId, destino]] : []
   ));
-  const grupos = destinos.filter((destino) => destino?.tipo === "grupo");
+  const grupos = destinosPermitidos.filter((destino) => destino?.tipo === "grupo");
   const reemplazados = new Set(modo.replacedSectorIds);
   const prioridad = [];
   let gruposAgregados = false;
@@ -132,7 +136,146 @@ const resolverPrioridadRedistribucion = ({ prioridadSectorIds, destinos, modo, f
     const destino = sectoresPorId.get(sectorId);
     if (destino) prioridad.push(destino);
   });
-  return [...prioridad, ...destinos];
+  return [...prioridad, ...fallback, ...destinos];
+};
+
+const PARALELISMO_OPCION_1 = new Map([
+  ["boxes_1_3_21", "opcion_1_boxes_1_3_19_22"],
+  ["boxes_4_7", "opcion_1_boxes_4_10"],
+  ["boxes_8_13", "opcion_1_boxes_11_18"],
+  ["dx_25_30", "opcion_1_boxes_23_30"]
+]);
+const SECTORES_ANULADOS_OPCION_1 = new Set([
+  "boxes_14_19",
+  "boxes_20_22_24"
+]);
+
+const crearRedistribucionOpcion1PorSectores = ({
+  asignaciones,
+  destinos,
+  filasConfiguracion,
+  prioridad
+}) => {
+  const tienePoolTurnantes = filasConfiguracion.some((fila) => fila?.tipo === "turnante");
+  if (!tienePoolTurnantes) {
+    return crearRedistribucionPorIdentidades({ asignaciones, destinos, prioridad });
+  }
+  const filasPorEtiqueta = new Map(filasConfiguracion.map((fila) => [
+    normalizar(fila.etiqueta),
+    fila
+  ]));
+  const turnantes = filasConfiguracion
+    .filter((fila) => fila?.tipo === "turnante")
+    .map((fila) => ({
+      tipo: "turnante",
+      turnanteId: fila.turnanteId,
+      etiqueta: fila.etiqueta
+    }));
+  const destinosCompletos = [...destinos, ...turnantes];
+  const orden = crearRedistribucionPorIdentidades({
+    asignaciones: [],
+    destinos: destinosCompletos,
+    prioridad
+  }).asignaciones.map((fila) => {
+    const destino = destinosCompletos.find((item) =>
+      normalizar(etiquetaDestino(item)) === normalizar(fila.nombre)
+    );
+    return { ...destino, enfermero: null };
+  });
+  const destinoPorClave = new Map(orden.map((destino) => [claveDestino(destino), destino]));
+  const identidadesUsadas = new Set();
+  const recursosLiberados = [];
+  const usarEnDestino = (destino, persona) => {
+    const identidad = obtenerClaveIdentidadPersona(persona);
+    if (!destino || !persona || !identidad || identidadesUsadas.has(identidad)) return false;
+    destino.enfermero = persona;
+    identidadesUsadas.add(identidad);
+    return true;
+  };
+  const preservarDecisionManual = (destino, asignacion) => {
+    if (!destino || (!asignacion?.cambioManualProtegido && !asignacion?.vacioManual)) return;
+    destino.procedenciaManual = true;
+  };
+  const resolverOrigen = (asignacion) => {
+    const fila = filasPorEtiqueta.get(normalizar(asignacion?.nombre));
+    const sectorId = asignacion?.sectorId || fila?.sectorId ||
+      obtenerSectorIdPorNombreHistorico(asignacion?.nombre);
+    const grupo = resolverGrupoRedistribucion(asignacion?.nombre);
+    return {
+      tipo: asignacion?.tipo || fila?.tipo,
+      sectorId,
+      turnanteId: asignacion?.turnanteId || fila?.turnanteId,
+      groupId: grupo?.modeId === MODE_IDS_REDISTRIBUCION.OPCION_1
+        ? grupo.groupId
+        : null
+    };
+  };
+  const entradas = (asignaciones || []).map((asignacion) => ({
+    asignacion,
+    origen: resolverOrigen(asignacion)
+  }));
+  const entradasSector = entradas.filter(({ origen }) => origen.tipo !== "turnante");
+  let tieneOrigenEstructural = false;
+
+  entradasSector.forEach(({ asignacion, origen }) => {
+    const persona = asignacion?.enfermero;
+    if (!persona) return;
+    if (origen.groupId) {
+      tieneOrigenEstructural = true;
+      const destino = destinoPorClave.get(`grupo:${origen.groupId}`);
+      preservarDecisionManual(destino, asignacion);
+      usarEnDestino(destino, persona);
+      return;
+    }
+    if (!origen.sectorId) return;
+    tieneOrigenEstructural = true;
+    if (SECTORES_ANULADOS_OPCION_1.has(origen.sectorId)) {
+      recursosLiberados.push(persona);
+      return;
+    }
+    const groupId = PARALELISMO_OPCION_1.get(origen.sectorId);
+    const destino = destinoPorClave.get(
+      groupId ? `grupo:${groupId}` : `sector:${origen.sectorId}`
+    );
+    preservarDecisionManual(destino, asignacion);
+    usarEnDestino(destino, persona);
+  });
+
+  if (!tieneOrigenEstructural) {
+    return crearRedistribucionPorIdentidades({ asignaciones, destinos, prioridad });
+  }
+
+  entradas.filter(({ origen }) => origen.tipo === "turnante")
+    .forEach(({ asignacion }) => recursosLiberados.push(asignacion?.enfermero));
+  const destinosTurnantes = orden.filter((destino) => destino?.tipo === "turnante");
+  recursosLiberados.forEach((persona) => {
+    if (!persona || identidadesUsadas.has(obtenerClaveIdentidadPersona(persona))) return;
+    const destinoLibre = destinosTurnantes.find((destino) => !destino.enfermero);
+    usarEnDestino(destinoLibre, persona);
+  });
+
+  const cambios = {};
+  const procedencias = {};
+  const resultado = orden.map((destino) => {
+    const etiqueta = etiquetaDestino(destino);
+    const clave = normalizar(etiqueta);
+    cambios[clave] = destino.enfermero
+      ? crearReferenciaPersona(destino.enfermero)
+      : "__EMPTY__";
+    if (destino.procedenciaManual) procedencias[clave] = "manual";
+    return {
+      nombre: etiqueta,
+      enfermero: destino.enfermero || null,
+      tipo: destino.tipo === "turnante" ? "turnante" : "sector"
+    };
+  });
+  return {
+    ok: true,
+    asignaciones: resultado,
+    cambios,
+    procedencias,
+    personasConsideradas: identidadesUsadas.size
+  };
 };
 
 export const obtenerDestinosVisiblesOpcion1 = ({
@@ -247,9 +390,10 @@ export const redistribuirCritica = ({
   prioridadSectorIds = []
 }) => {
   const destinos = obtenerDestinosVisiblesOpcion1({ ordenVisual, filasConfiguracion });
-  return crearRedistribucionPorIdentidades({
+  return crearRedistribucionOpcion1PorSectores({
     asignaciones,
     destinos,
+    filasConfiguracion,
     prioridad: resolverPrioridadRedistribucion({
       prioridadSectorIds, destinos, modo: MODO_OPCION_1,
       fallback: PRIORIDAD_REDISTRIBUCION_OPCION_1
@@ -277,13 +421,16 @@ export const recalcularRedistribucionOpcion1Automatica = ({
   const clavesAutomaticas = new Set(destinosAutomaticos.map((destino) =>
     normalizar(etiquetaDestino(destino))
   ));
+  const prioridadEfectiva = resolverPrioridadRedistribucion({
+    prioridadSectorIds,
+    destinos: destinosAutomaticos,
+    modo: MODO_OPCION_1,
+    fallback: PRIORIDAD_REDISTRIBUCION_OPCION_1
+  });
   const ordenAutomatico = crearRedistribucionPorIdentidades({
     asignaciones: [],
     destinos: destinosAutomaticos,
-    prioridad: resolverPrioridadRedistribucion({
-      prioridadSectorIds, destinos: destinosAutomaticos, modo: MODO_OPCION_1,
-      fallback: PRIORIDAD_REDISTRIBUCION_OPCION_1
-    })
+    prioridad: prioridadEfectiva
   }).asignaciones;
   const candidatos = obtenerPersonasUnicas(ordenAutomatico.map((destino) =>
     asignacionesPorClave.get(normalizar(destino.nombre))
@@ -291,7 +438,7 @@ export const recalcularRedistribucionOpcion1Automatica = ({
   const redistribucion = crearRedistribucionPorIdentidades({
     asignaciones: candidatos.map((enfermero) => ({ enfermero })),
     destinos: destinosAutomaticos,
-    prioridad: PRIORIDAD_REDISTRIBUCION_OPCION_1
+    prioridad: prioridadEfectiva
   });
   const personasPorDestino = new Map(redistribucion.asignaciones.map((fila) =>
     [normalizar(fila.nombre), fila.enfermero]
@@ -345,13 +492,16 @@ export const recalcularRedistribucionOpcion2Automatica = ({
   const clavesAutomaticas = new Set(destinosAutomaticos.map((destino) =>
     normalizar(etiquetaDestino(destino))
   ));
+  const prioridadEfectiva = resolverPrioridadRedistribucion({
+    prioridadSectorIds,
+    destinos: destinosAutomaticos,
+    modo: MODO_OPCION_2,
+    fallback: PRIORIDAD_REDISTRIBUCION_OPCION_2
+  });
   const ordenAutomatico = crearRedistribucionPorIdentidades({
     asignaciones: [],
     destinos: destinosAutomaticos,
-    prioridad: resolverPrioridadRedistribucion({
-      prioridadSectorIds, destinos: destinosAutomaticos, modo: MODO_OPCION_2,
-      fallback: PRIORIDAD_REDISTRIBUCION_OPCION_2
-    })
+    prioridad: prioridadEfectiva
   }).asignaciones;
   const candidatos = obtenerPersonasUnicas(ordenAutomatico.map((destino) =>
     asignacionesPorClave.get(normalizar(destino.nombre))
@@ -359,7 +509,7 @@ export const recalcularRedistribucionOpcion2Automatica = ({
   const redistribucion = crearRedistribucionPorIdentidades({
     asignaciones: candidatos.map((enfermero) => ({ enfermero })),
     destinos: destinosAutomaticos,
-    prioridad: PRIORIDAD_REDISTRIBUCION_OPCION_2
+    prioridad: prioridadEfectiva
   });
   const personasPorDestino = new Map(redistribucion.asignaciones.map((fila) =>
     [normalizar(fila.nombre), fila.enfermero]

@@ -354,11 +354,11 @@ probar("58 parejas preceden a cobertura directa; donantes se resuelven antes del
 });
 probar("59 la prioridad por parejas ocurre antes de sacrificar sectores", () => {
   assert.ok(
-    calendario.indexOf("const resolucionOperativa = resolverTurnantesYCoberturasOperativas") <
+    calendario.indexOf("const resolucionOperativa = usarOrquestadorEnfermeros") <
     calendario.indexOf("sectoresCriticos.forEach")
   );
   assert.ok(
-    calendario.indexOf("const resolucionOperativa = resolverTurnantesYCoberturasOperativas") <
+    calendario.indexOf("const resolucionOperativa = usarOrquestadorEnfermeros") <
     calendario.indexOf("asignacionBase = aplicarPrioridadGeneralPorSectorId")
   );
 });
@@ -417,7 +417,8 @@ probar("68 la prioridad no se aplica a Observación", () => {
   assert.equal(resultado[1].enfermero, personas[0]);
 });
 probar("69 la prioridad se limita a Enfermeros", () => {
-  assert.match(calendario, /tipo === "enfermero" && !esDiaParo\s*\? aplicarPrioridadCoberturaParejas/);
+  assert.match(calendario, /const usarOrquestadorEnfermeros = tipo === "enfermero" && !esDiaParo/);
+  assert.match(calendario, /reglasParejas: \{/);
 });
 probar("70 los cambios manuales de cualquiera de las dos filas se respetan", () => {
   for (const clave of ["rea 1", "REA 2"]) {

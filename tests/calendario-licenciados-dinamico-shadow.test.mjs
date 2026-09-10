@@ -382,7 +382,8 @@ probar("Calendario consume v2 visible sin doble motor ni splitter legacy", () =>
   assert.match(fuente, /resolverClaveMovimientoCalendario\(/);
   assert.doesNotMatch(fuente, /void calendarioLicenciadosDinamico/);
   assert.match(fuente, /if \(usarCalendarioLicenciadosDinamico\) \{\s*asignacionBase = calendarioLicenciadosDinamico\.asignacionesOperativas/);
-  assert.match(fuente, /else \{\s*const resolucionOperativa = resolverTurnantesYCoberturasOperativas/);
+  assert.match(fuente, /else \{\s*const usarOrquestadorEnfermeros/);
+  assert.match(fuente, /: resolverTurnantesYCoberturasOperativas\(\{/);
   assert.match(fuente, /usarCalendarioLicenciadosDinamico\s*\? \{ seDivide: false/);
   assert.match(fuente, /item\.destinoId \|\| item\.syntheticId/);
   assert.match(fuente, /const sobrantes = \[\.\.\.personalFiltrado, \.\.\.extrasDia\]\.filter/);

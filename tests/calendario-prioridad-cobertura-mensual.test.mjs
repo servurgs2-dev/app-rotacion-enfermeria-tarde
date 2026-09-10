@@ -144,7 +144,7 @@ probar("snapshot legacy conserva una resolución concreta del fallback global", 
 
 probar("Enfermeros pasa la prioridad efectiva al resolver operativo", () => {
   const fuente = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
-  assert.match(fuente, /prioridadSectorIds: tipo === "enfermero" && !esDiaParo\s*\? prioridadCoberturaEfectivaIds/);
+  assert.match(fuente, /resolverDistribucionDiaria\(\{[\s\S]*prioridadSectorIds: prioridadCoberturaEfectivaIds/);
 });
 
 probar("Licenciados usa su prioridad mensual en su fase existente", () => {
@@ -199,7 +199,7 @@ probar("renombrar etiquetas no cambia la decisión por sectorId", () => {
 probar("Enfermeros conserva parejas y no configura donantes generales", () => {
   const fuente = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
   assert.match(fuente, /sectoresDonantesIds\.length > 0 \? sectoresDonantesIds : undefined/);
-  assert.match(fuente, /aplicarPrioridadCoberturaParejas\(\{/);
+  assert.match(fuente, /reglasParejas: \{/);
   assert.doesNotMatch(fuente, /prioridadCoberturaSectorIds.*sectoresDonantesIds/);
   assert.deepEqual(configuracionSectores.enfermero.sectoresDonantesIds, []);
   assert.equal(fs.readFileSync("src/utils/distribucionTurnantesCoberturas.js", "utf8").includes("cedidoAPareja"), true);

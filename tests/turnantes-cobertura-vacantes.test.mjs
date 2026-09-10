@@ -343,8 +343,9 @@ probar("Licenciados conservan el orden vigente cuando no reciben prioridad de En
 });
 
 probar("Calendario activa la prioridad previa sólo para Enfermeros fuera de paro", () => {
-  assert.match(calendarioFuente, /prioridadSectorIds: tipo === "enfermero" && !esDiaParo/);
-  assert.match(calendarioFuente, /sectorIdsDonantes: tipo === "enfermero" && !esDiaParo/);
+  assert.match(calendarioFuente, /const usarOrquestadorEnfermeros = tipo === "enfermero" && !esDiaParo/);
+  assert.match(calendarioFuente, /resolverDistribucionDiaria\(\{/);
+  assert.match(calendarioFuente, /sectorIdsDonantes: sectoresDonantesIds\.length > 0/);
   assert.match(
     calendarioFuente,
     /else if \(tipo !== "enfermero" && !usarCalendarioLicenciadosDinamico\)/

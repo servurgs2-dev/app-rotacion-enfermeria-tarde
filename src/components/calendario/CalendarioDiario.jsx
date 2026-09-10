@@ -54,6 +54,7 @@ import {
   prepararCandidatosExtraOtroTurno
 } from "../../utils/extrasPersonas.js";
 import { resolverTurnantesYCoberturasOperativas } from "../../utils/distribucionTurnantesCoberturas.js";
+import { resolverDistribucionDiaria } from "../../utils/resolverDistribucionDiaria.js";
 import PanelExtraLibre from "./PanelExtraLibre.jsx";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 import {
@@ -107,7 +108,6 @@ import {
   validarContextoRedistribucion
 } from "../../utils/redistribucionEnfermeros.js";
 import {
-  aplicarPrioridadCoberturaParejas,
   PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
 } from "../../utils/coberturaParejasEnfermeros.js";
 import {
@@ -855,34 +855,36 @@ let asignacionBase;
 if (usarCalendarioLicenciadosDinamico) {
   asignacionBase = calendarioLicenciadosDinamico.asignacionesOperativas;
 } else {
-  const resolucionOperativa = resolverTurnantesYCoberturasOperativas({
-    asignaciones: asignacionCompleta,
-    extras: extrasDia,
-    personal,
-    esPersonaDisponible: (persona) => !estaAusente(persona),
-    esPersonaDisponibleParaCobertura: puedeAplicarseCoberturaDirecta,
-    prioridadSectorIds: tipo === "enfermero" && !esDiaParo
-      ? prioridadCoberturaEfectivaIds
-      : [],
-    sectorIdsDonantes: tipo === "enfermero" && !esDiaParo
-      ? (sectoresDonantesIds.length > 0 ? sectoresDonantesIds : undefined)
-      : [],
-    ajustarSectores: (sectores) =>
-      tipo === "enfermero" && !esDiaParo
-        ? aplicarPrioridadCoberturaParejas({
-            asignaciones: sectores,
-            distribucionBase: planillaPeriodo,
-            personal,
-            cambiosDia: cambiosDia[keyDia],
-            procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
-            esPersonaDisponible: puedeAplicarseCoberturaDirecta,
-            estadoMensual,
-            turno: turnoActivo,
-            categoria: tipo,
-            mes: mesActivo
-          })
-        : sectores
-  });
+  const usarOrquestadorEnfermeros = tipo === "enfermero" && !esDiaParo;
+  const resolucionOperativa = usarOrquestadorEnfermeros
+    ? resolverDistribucionDiaria({
+        asignacionBase: asignacionCompleta,
+        personalEfectivo: personal,
+        extras: extrasDia,
+        esPersonaDisponible: (persona) => !estaAusente(persona),
+        esPersonaDisponibleParaCobertura: puedeAplicarseCoberturaDirecta,
+        prioridadSectorIds: prioridadCoberturaEfectivaIds,
+        sectorIdsDonantes: sectoresDonantesIds.length > 0 ? sectoresDonantesIds : undefined,
+        reglasParejas: {
+          distribucionBase: planillaPeriodo,
+          cambiosDia: cambiosDia[keyDia],
+          procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
+          estadoMensual,
+          turno: turnoActivo,
+          categoria: tipo,
+          mes: mesActivo
+        }
+      })
+    : resolverTurnantesYCoberturasOperativas({
+        asignaciones: asignacionCompleta,
+        extras: extrasDia,
+        personal,
+        esPersonaDisponible: (persona) => !estaAusente(persona),
+        esPersonaDisponibleParaCobertura: puedeAplicarseCoberturaDirecta,
+        prioridadSectorIds: [],
+        sectorIdsDonantes: [],
+        ajustarSectores: (sectores) => sectores
+      });
   asignacionBase = resolucionOperativa.asignaciones;
 }
 

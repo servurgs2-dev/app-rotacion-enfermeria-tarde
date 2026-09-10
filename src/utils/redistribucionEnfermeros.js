@@ -149,12 +149,23 @@ const SECTORES_ANULADOS_OPCION_1 = new Set([
   "boxes_14_19",
   "boxes_20_22_24"
 ]);
+const PARALELISMO_OPCION_2 = new Map([
+  ["boxes_1_3_21", "opcion_2_boxes_1_3_21_22"],
+  ["boxes_4_7", "opcion_2_boxes_4_7_30"],
+  ["boxes_8_13", "opcion_2_boxes_8_14"],
+  ["boxes_14_19", "opcion_2_boxes_15_20"],
+  ["dx_25_30", "opcion_2_dx_23_29"]
+]);
+const SECTORES_ANULADOS_OPCION_2 = new Set(["boxes_20_22_24"]);
 
-const crearRedistribucionOpcion1PorSectores = ({
+const crearRedistribucionPorParalelismo = ({
   asignaciones,
   destinos,
   filasConfiguracion,
-  prioridad
+  prioridad,
+  modeId,
+  paralelismo,
+  sectoresAnulados
 }) => {
   const tienePoolTurnantes = filasConfiguracion.some((fila) => fila?.tipo === "turnante");
   if (!tienePoolTurnantes) {
@@ -205,7 +216,7 @@ const crearRedistribucionOpcion1PorSectores = ({
       tipo: asignacion?.tipo || fila?.tipo,
       sectorId,
       turnanteId: asignacion?.turnanteId || fila?.turnanteId,
-      groupId: grupo?.modeId === MODE_IDS_REDISTRIBUCION.OPCION_1
+      groupId: grupo?.modeId === modeId
         ? grupo.groupId
         : null
     };
@@ -219,26 +230,25 @@ const crearRedistribucionOpcion1PorSectores = ({
 
   entradasSector.forEach(({ asignacion, origen }) => {
     const persona = asignacion?.enfermero;
-    if (!persona) return;
     if (origen.groupId) {
       tieneOrigenEstructural = true;
       const destino = destinoPorClave.get(`grupo:${origen.groupId}`);
       preservarDecisionManual(destino, asignacion);
-      usarEnDestino(destino, persona);
+      if (persona) usarEnDestino(destino, persona);
       return;
     }
     if (!origen.sectorId) return;
     tieneOrigenEstructural = true;
-    if (SECTORES_ANULADOS_OPCION_1.has(origen.sectorId)) {
-      recursosLiberados.push(persona);
+    if (sectoresAnulados.has(origen.sectorId)) {
+      if (persona) recursosLiberados.push(persona);
       return;
     }
-    const groupId = PARALELISMO_OPCION_1.get(origen.sectorId);
+    const groupId = paralelismo.get(origen.sectorId);
     const destino = destinoPorClave.get(
       groupId ? `grupo:${groupId}` : `sector:${origen.sectorId}`
     );
     preservarDecisionManual(destino, asignacion);
-    usarEnDestino(destino, persona);
+    if (persona) usarEnDestino(destino, persona);
   });
 
   if (!tieneOrigenEstructural) {
@@ -390,10 +400,13 @@ export const redistribuirCritica = ({
   prioridadSectorIds = []
 }) => {
   const destinos = obtenerDestinosVisiblesOpcion1({ ordenVisual, filasConfiguracion });
-  return crearRedistribucionOpcion1PorSectores({
+  return crearRedistribucionPorParalelismo({
     asignaciones,
     destinos,
     filasConfiguracion,
+    modeId: MODE_IDS_REDISTRIBUCION.OPCION_1,
+    paralelismo: PARALELISMO_OPCION_1,
+    sectoresAnulados: SECTORES_ANULADOS_OPCION_1,
     prioridad: resolverPrioridadRedistribucion({
       prioridadSectorIds, destinos, modo: MODO_OPCION_1,
       fallback: PRIORIDAD_REDISTRIBUCION_OPCION_1
@@ -462,9 +475,13 @@ export const redistribuirPorBoxes = ({
   prioridadSectorIds = []
 }) => {
   const destinos = obtenerDestinosVisiblesOpcion2({ ordenVisual, filasConfiguracion });
-  return crearRedistribucionPorIdentidades({
+  return crearRedistribucionPorParalelismo({
     asignaciones,
     destinos,
+    filasConfiguracion,
+    modeId: MODE_IDS_REDISTRIBUCION.OPCION_2,
+    paralelismo: PARALELISMO_OPCION_2,
+    sectoresAnulados: SECTORES_ANULADOS_OPCION_2,
     prioridad: resolverPrioridadRedistribucion({
       prioridadSectorIds, destinos, modo: MODO_OPCION_2,
       fallback: PRIORIDAD_REDISTRIBUCION_OPCION_2

@@ -96,16 +96,20 @@ export const resolverDistribucionDiaria = ({
     contexto: contextoRedistribucion
   });
   if (contextoRedistribucion?.accion === "generar" && redistribucion) {
+    const trazasDerivadas = lista(redistribucion.trazasDerivadas).map((traza) => ({ ...traza }));
+    const trazasDestino = trazasDerivadas.length > 0
+      ? []
+      : redistribucion.asignaciones.map((fila) => ({
+          personaId: obtenerClaveIdentidadPersona(fila?.enfermero),
+          origenSectorId: null,
+          destinoSectorId: fila?.sectorId || null,
+          causa: modoRedistribucion
+        }));
     return {
       ...redistribucion,
       usados: new Set(redistribucion.asignaciones
         .map((fila) => obtenerClaveIdentidadPersona(fila?.enfermero)).filter(Boolean)),
-      trazas: redistribucion.asignaciones.map((fila) => ({
-        personaId: obtenerClaveIdentidadPersona(fila?.enfermero),
-        origenSectorId: null,
-        destinoSectorId: fila?.sectorId || null,
-        causa: modoRedistribucion
-      }))
+      trazas: [...trazasDerivadas, ...trazasDestino]
     };
   }
   const asignacionesEntrada = lista(redistribucion?.asignaciones || asignacionesOriginales)

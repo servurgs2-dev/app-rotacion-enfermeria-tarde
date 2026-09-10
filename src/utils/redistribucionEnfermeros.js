@@ -164,6 +164,7 @@ const crearRedistribucionPorParalelismo = ({
   filasConfiguracion,
   prioridad,
   modeId,
+  causa,
   paralelismo,
   sectoresAnulados
 }) => {
@@ -196,6 +197,9 @@ const crearRedistribucionPorParalelismo = ({
   const destinoPorClave = new Map(orden.map((destino) => [claveDestino(destino), destino]));
   const identidadesUsadas = new Set();
   const recursosLiberados = [];
+  const trazasDerivadas = [];
+  const obtenerDestinoId = (destino) =>
+    destino?.sectorId || destino?.groupId || destino?.turnanteId || null;
   const usarEnDestino = (destino, persona) => {
     const identidad = obtenerClaveIdentidadPersona(persona);
     if (!destino || !persona || !identidad || identidadesUsadas.has(identidad)) return false;
@@ -240,7 +244,15 @@ const crearRedistribucionPorParalelismo = ({
     if (!origen.sectorId) return;
     tieneOrigenEstructural = true;
     if (sectoresAnulados.has(origen.sectorId)) {
-      if (persona) recursosLiberados.push(persona);
+      if (persona) {
+        recursosLiberados.push(persona);
+        trazasDerivadas.push({
+          personaId: obtenerClaveIdentidadPersona(persona),
+          origenSectorId: origen.sectorId,
+          destinoSectorId: null,
+          causa: "recurso_liberado"
+        });
+      }
       return;
     }
     const groupId = paralelismo.get(origen.sectorId);
@@ -248,7 +260,14 @@ const crearRedistribucionPorParalelismo = ({
       groupId ? `grupo:${groupId}` : `sector:${origen.sectorId}`
     );
     preservarDecisionManual(destino, asignacion);
-    if (persona) usarEnDestino(destino, persona);
+    if (persona && usarEnDestino(destino, persona)) {
+      trazasDerivadas.push({
+        personaId: obtenerClaveIdentidadPersona(persona),
+        origenSectorId: origen.sectorId,
+        destinoSectorId: obtenerDestinoId(destino),
+        causa: asignacion?.cambioManualProtegido ? "manual" : causa
+      });
+    }
   });
 
   if (!tieneOrigenEstructural) {
@@ -261,7 +280,14 @@ const crearRedistribucionPorParalelismo = ({
   recursosLiberados.forEach((persona) => {
     if (!persona || identidadesUsadas.has(obtenerClaveIdentidadPersona(persona))) return;
     const destinoLibre = destinosTurnantes.find((destino) => !destino.enfermero);
-    usarEnDestino(destinoLibre, persona);
+    if (usarEnDestino(destinoLibre, persona)) {
+      trazasDerivadas.push({
+        personaId: obtenerClaveIdentidadPersona(persona),
+        origenSectorId: null,
+        destinoSectorId: obtenerDestinoId(destinoLibre),
+        causa
+      });
+    }
   });
 
   const cambios = {};
@@ -284,6 +310,7 @@ const crearRedistribucionPorParalelismo = ({
     asignaciones: resultado,
     cambios,
     procedencias,
+    trazasDerivadas,
     personasConsideradas: identidadesUsadas.size
   };
 };
@@ -405,6 +432,7 @@ export const redistribuirCritica = ({
     destinos,
     filasConfiguracion,
     modeId: MODE_IDS_REDISTRIBUCION.OPCION_1,
+    causa: "opcion_1",
     paralelismo: PARALELISMO_OPCION_1,
     sectoresAnulados: SECTORES_ANULADOS_OPCION_1,
     prioridad: resolverPrioridadRedistribucion({
@@ -480,6 +508,7 @@ export const redistribuirPorBoxes = ({
     destinos,
     filasConfiguracion,
     modeId: MODE_IDS_REDISTRIBUCION.OPCION_2,
+    causa: "opcion_2",
     paralelismo: PARALELISMO_OPCION_2,
     sectoresAnulados: SECTORES_ANULADOS_OPCION_2,
     prioridad: resolverPrioridadRedistribucion({

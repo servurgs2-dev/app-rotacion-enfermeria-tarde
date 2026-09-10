@@ -3,8 +3,47 @@ import { resolverTurnantesYCoberturasOperativas } from "./distribucionTurnantesC
 import { esExtraCobertura } from "./extrasPersonas.js";
 import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
 import { incorporarPersonasSinAsignar } from "./pipelineCalendarioDiario.js";
+import {
+  recalcularRedistribucionOpcion1Automatica,
+  recalcularRedistribucionOpcion2Automatica,
+  redistribuirCritica,
+  redistribuirPorBoxes
+} from "./redistribucionEnfermeros.js";
 
 const lista = (valor) => Array.isArray(valor) ? valor : [];
+
+export const MODOS_REDISTRIBUCION_DIARIA = Object.freeze({
+  OPCION_1: "opcion_1",
+  OPCION_2: "opcion_2"
+});
+
+const resolverRedistribucion = ({ modoRedistribucion, accion, asignaciones, contexto }) => {
+  const opcion1 = modoRedistribucion === MODOS_REDISTRIBUCION_DIARIA.OPCION_1;
+  const opcion2 = modoRedistribucion === MODOS_REDISTRIBUCION_DIARIA.OPCION_2;
+  if (!opcion1 && !opcion2) return null;
+  const parametros = {
+    asignaciones,
+    ordenVisual: contexto?.ordenVisual,
+    filasConfiguracion: contexto?.filasConfiguracion,
+    prioridadSectorIds: contexto?.prioridadSectorIds
+  };
+  if (accion === "generar") {
+    return (opcion1 ? redistribuirCritica : redistribuirPorBoxes)(parametros);
+  }
+  if (accion === "recalcular") {
+    return {
+      asignaciones: (opcion1
+        ? recalcularRedistribucionOpcion1Automatica
+        : recalcularRedistribucionOpcion2Automatica)({
+        ...parametros,
+        cambiosDia: contexto?.cambiosDia,
+        procedenciaCambiosDia: contexto?.procedenciaCambiosDia,
+        procedenciaAutomatica: contexto?.procedenciaAutomatica
+      })
+    };
+  }
+  return null;
+};
 
 const obtenerCausaAsignacion = ({ fila, identidadesTurnantes, identidadesExtras }) => {
   const identidad = obtenerClaveIdentidadPersona(fila?.enfermero);
@@ -45,9 +84,32 @@ export const resolverDistribucionDiaria = ({
   esPersonaDisponible = () => true,
   esPersonaDisponibleParaCobertura = esPersonaDisponible,
   reglasParejas = null,
-  personasSinAsignar = []
+  personasSinAsignar = [],
+  modoRedistribucion = null,
+  contextoRedistribucion = null
 } = {}) => {
-  const asignacionesEntrada = lista(asignacionBase).map((fila) => ({ ...fila }));
+  const asignacionesOriginales = lista(asignacionBase).map((fila) => ({ ...fila }));
+  const redistribucion = resolverRedistribucion({
+    modoRedistribucion,
+    accion: contextoRedistribucion?.accion,
+    asignaciones: asignacionesOriginales,
+    contexto: contextoRedistribucion
+  });
+  if (contextoRedistribucion?.accion === "generar" && redistribucion) {
+    return {
+      ...redistribucion,
+      usados: new Set(redistribucion.asignaciones
+        .map((fila) => obtenerClaveIdentidadPersona(fila?.enfermero)).filter(Boolean)),
+      trazas: redistribucion.asignaciones.map((fila) => ({
+        personaId: obtenerClaveIdentidadPersona(fila?.enfermero),
+        origenSectorId: null,
+        destinoSectorId: fila?.sectorId || null,
+        causa: modoRedistribucion
+      }))
+    };
+  }
+  const asignacionesEntrada = lista(redistribucion?.asignaciones || asignacionesOriginales)
+    .map((fila) => ({ ...fila }));
   const contextoParejas = reglasParejas && typeof reglasParejas === "object"
     ? { ...reglasParejas }
     : null;

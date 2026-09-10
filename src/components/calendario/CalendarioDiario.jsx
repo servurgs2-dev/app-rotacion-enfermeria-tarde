@@ -54,7 +54,10 @@ import {
   prepararCandidatosExtraOtroTurno
 } from "../../utils/extrasPersonas.js";
 import { resolverTurnantesYCoberturasOperativas } from "../../utils/distribucionTurnantesCoberturas.js";
-import { resolverDistribucionDiaria } from "../../utils/resolverDistribucionDiaria.js";
+import {
+  MODOS_REDISTRIBUCION_DIARIA,
+  resolverDistribucionDiaria
+} from "../../utils/resolverDistribucionDiaria.js";
 import PanelExtraLibre from "./PanelExtraLibre.jsx";
 import { obtenerEtiquetaPersona } from "../../utils/nombresPersonas.js";
 import {
@@ -101,10 +104,6 @@ import {
   obtenerSectoresVisiblesBoxes,
   obtenerSectoresVisiblesOpcion1,
   quitarRedistribucionFecha,
-  recalcularRedistribucionOpcion1Automatica,
-  recalcularRedistribucionOpcion2Automatica,
-  redistribuirCritica,
-  redistribuirPorBoxes,
   validarContextoRedistribucion
 } from "../../utils/redistribucionEnfermeros.js";
 import {
@@ -765,27 +764,6 @@ asignacionCompleta = excluirNoDisponiblesPorNovedadesDeAsignaciones({
   fecha: keyDia,
   turno: turnoActivo
 });
-if (distribucionOpcion1Activa) {
-  asignacionCompleta = recalcularRedistribucionOpcion1Automatica({
-    asignaciones: asignacionCompleta,
-    cambiosDia: cambiosDia[keyDia],
-    procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
-    ordenVisual: ordenVisualEfectivo,
-    filasConfiguracion,
-    prioridadSectorIds: prioridadCoberturaEfectivaIds,
-    procedenciaAutomatica: PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
-  });
-} else if (distribucionPorBoxesActiva) {
-  asignacionCompleta = recalcularRedistribucionOpcion2Automatica({
-    asignaciones: asignacionCompleta,
-    cambiosDia: cambiosDia[keyDia],
-    procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
-    ordenVisual: ordenVisualEfectivo,
-    filasConfiguracion,
-    prioridadSectorIds: prioridadCoberturaEfectivaIds,
-    procedenciaAutomatica: PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
-  });
-}
 const filaSaludMental = filasConfiguracion.find(
   (fila) => fila.tipo === "sector" && fila.sectorId === SECTOR_ID_SALUD_MENTAL
 );
@@ -873,7 +851,23 @@ if (usarCalendarioLicenciadosDinamico) {
           turno: turnoActivo,
           categoria: tipo,
           mes: mesActivo
-        }
+        },
+        modoRedistribucion: distribucionOpcion1Activa
+          ? MODOS_REDISTRIBUCION_DIARIA.OPCION_1
+          : distribucionPorBoxesActiva
+            ? MODOS_REDISTRIBUCION_DIARIA.OPCION_2
+            : null,
+        contextoRedistribucion: distribucionOpcion1Activa || distribucionPorBoxesActiva
+          ? {
+              accion: "recalcular",
+              ordenVisual: ordenVisualEfectivo,
+              filasConfiguracion,
+              prioridadSectorIds: prioridadCoberturaEfectivaIds,
+              cambiosDia: cambiosDia[keyDia],
+              procedenciaCambiosDia: procedenciaCambiosDia[keyDia],
+              procedenciaAutomatica: PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
+            }
+          : null
       })
     : resolverTurnantesYCoberturasOperativas({
         asignaciones: asignacionCompleta,
@@ -2314,19 +2308,19 @@ useEffect(() => {
     });
     const redistribucion = confirmacionRedistribucion.tipo === "comun"
       ? null
-      : confirmacionRedistribucion.tipo === "boxes"
-        ? redistribuirPorBoxes({
-            asignaciones: asignacionesSinAusentes,
+      : resolverDistribucionDiaria({
+          asignacionBase: asignacionesSinAusentes,
+          prioridadSectorIds: prioridadCoberturaEfectivaIds,
+          modoRedistribucion: confirmacionRedistribucion.tipo === "boxes"
+            ? MODOS_REDISTRIBUCION_DIARIA.OPCION_2
+            : MODOS_REDISTRIBUCION_DIARIA.OPCION_1,
+          contextoRedistribucion: {
+            accion: "generar",
             ordenVisual: ordenVisualEfectivo,
             filasConfiguracion,
             prioridadSectorIds: prioridadCoberturaEfectivaIds
-          })
-        : redistribuirCritica({
-            asignaciones: asignacionesSinAusentes,
-            ordenVisual: ordenVisualEfectivo,
-            filasConfiguracion,
-            prioridadSectorIds: prioridadCoberturaEfectivaIds
-          });
+          }
+        });
 
     setCalendario((prev) => {
       if (prev !== confirmacionRedistribucion.contexto.calendario) return prev;

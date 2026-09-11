@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { configuracionSectores } from "../../data/sectores";
 import {
-  obtenerConfiguracionPlanillaEfectiva,
-  obtenerSectorIdPorNombreHistorico
+  obtenerConfiguracionPlanillaEfectiva
 } from "../../utils/configuracionPlanilla.js";
 import {
   obtenerCandidatosPrioridadCoberturaMes,
@@ -218,7 +217,6 @@ function CalendarioDiario({
   actualizarCalendarioNoDisponibleOrigen = () => false,
   cargarPersonalOtrosTurnos,
   setCalendario,
-  esDiaParo,
   onDataReady,
   fecha,
   setFecha,
@@ -241,7 +239,6 @@ const {
   cambiosDia = {},
   procedenciaCambiosDia = {},
   procedenciaCoberturaAutomaticaDia = {},
-  cambiosParoDia = {},
   extras = {},
   asistenciaDia = {},
   cierresDia = {}
@@ -265,12 +262,9 @@ const {
 
   const {
     sectoresCriticos = [],
-    sectoresBajaPrioridad = [],
     sectoresCriticosIds = [],
     prioridadSectoresIds: prioridadSectoresIdsFallback = [],
     sectoresDonantesIds = [],
-    sectoresParo = [],
-    prioridadesParo = {},
     ordenVisual = []
   } = configuracionSectores[tipo] || {};
 
@@ -372,8 +366,8 @@ const ausentesDelDia = obtenerAusentesDelDia({
   ]
 });
 const configTurnoCalendario = obtenerConfiguracionTurno(turnoActivo);
-const cambiosActivos = esDiaParo ? cambiosParoDia : cambiosDia;
-const claveCambiosActivos = esDiaParo ? "cambiosParoDia" : "cambiosDia";
+const cambiosActivos = cambiosDia;
+const claveCambiosActivos = "cambiosDia";
 const fechaMinima = `${mesActivo}-01`;
 const [yearMesActivo, monthMesActivo] = mesActivo.split("-").map(Number);
 const ultimoDiaDelMes = new Date(yearMesActivo, monthMesActivo, 0).getDate();
@@ -824,8 +818,7 @@ const calendarioLicenciadosDinamico = esLicenciadosV2
     })
   : null;
 const usarCalendarioLicenciadosDinamico = debeUsarCalendarioLicenciadosDinamicoVisible({
-  resultado: calendarioLicenciadosDinamico,
-  esDiaParo
+  resultado: calendarioLicenciadosDinamico
 });
 
 const identidadesCubiertas = obtenerIdentidadesPersonasCubiertas(extrasDia, personal);
@@ -833,7 +826,7 @@ let asignacionBase;
 if (usarCalendarioLicenciadosDinamico) {
   asignacionBase = calendarioLicenciadosDinamico.asignacionesOperativas;
 } else {
-  const usarOrquestadorEnfermeros = tipo === "enfermero" && !esDiaParo;
+  const usarOrquestadorEnfermeros = tipo === "enfermero";
   const resolucionOperativa = usarOrquestadorEnfermeros
     ? resolverDistribucionDiaria({
         asignacionBase: asignacionCompleta,
@@ -882,24 +875,7 @@ if (usarCalendarioLicenciadosDinamico) {
   asignacionBase = resolucionOperativa.asignaciones;
 }
 
-  if (esDiaParo) {
-    sectoresCriticos.forEach((critico) => {
-      const sectorCritico = asignacionBase.find((item) => item.nombre === critico);
-
-      if (sectorCritico && !sectorCritico.enfermero && !sectorCritico.vacioManual) {
-        for (const sectorBajaPrioridad of sectoresBajaPrioridad) {
-          const donante = asignacionBase.find((item) => item.nombre === sectorBajaPrioridad);
-
-          if (donante?.enfermero && !estaAusente(donante.enfermero)) {
-            sectorCritico.enfermero = donante.enfermero;
-            donante.enfermero = null;
-            donante.sacrificado = true;
-            break;
-          }
-        }
-      }
-    });
-  } else if (tipo !== "enfermero" && !usarCalendarioLicenciadosDinamico) {
+  if (tipo !== "enfermero" && !usarCalendarioLicenciadosDinamico) {
     asignacionBase = aplicarPrioridadGeneralPorSectorId({
       asignaciones: asignacionBase,
       prioridadSectorIds: prioridadCoberturaEfectivaIds,
@@ -947,7 +923,6 @@ const divisionReanimacionSillones = usarCalendarioLicenciadosDinamico
   asignaciones: asignacionFinal,
   sobrantes,
   categoria: tipo,
-  esDiaParo,
   cambiosDia: cambiosDia[keyDia],
   personalDisponible: [...personalFiltrado, ...extrasDia],
   ordenVisual: ordenVisualEfectivo
@@ -980,118 +955,6 @@ if (divisionReanimacionSillones.seDivide) {
   asignacionParaMostrar = incorporarPersonasSinAsignar({
     asignaciones: asignacionParaMostrar,
     personas: destinosDinamicos.sobrantes
-  });
-}
-
-if (esDiaParo) {
-  const candidatos = [];
-  const candidatosSet = new Set();
-  const agregarCandidato = (enfermero) => {
-    if (!enfermero || estaAusente(enfermero)) return;
-
-    const claveIdentidad = obtenerClaveIdentidadPersona(enfermero);
-    if (!claveIdentidad || candidatosSet.has(claveIdentidad)) return;
-
-    candidatosSet.add(claveIdentidad);
-    candidatos.push(enfermero);
-  };
-
-  asignacionFinal.forEach((item) => agregarCandidato(item.enfermero));
-  extrasDia.forEach(agregarCandidato);
-
-  const usadosParo = new Set();
-  const tomarCandidato = (enfermero) => {
-    if (!enfermero) return null;
-
-    const claveIdentidad = obtenerClaveIdentidadPersona(enfermero);
-    if (!claveIdentidad || usadosParo.has(claveIdentidad)) return null;
-
-    usadosParo.add(claveIdentidad);
-    return enfermero;
-  };
-  const resolverCambioParo = (referencia) =>
-    resolverPersonaDesdeReferencia(referencia, candidatos);
-  const tomarSobrante = (sectorActual) => {
-    const sectorNormalizado = normalizar(sectorActual);
-
-    for (const candidato of candidatos) {
-      const sectorReservado = reservasParo.get(
-        obtenerClaveIdentidadPersona(candidato)
-      );
-      if (sectorReservado && sectorReservado !== sectorNormalizado) {
-        continue;
-      }
-
-      const enfermero = tomarCandidato(candidato);
-      if (enfermero) return enfermero;
-    }
-
-    return null;
-  };
-  const cambiosParo = cambiosParoDia[keyDia] || {};
-  const reservasParo = new Map();
-
-  sectoresParo.forEach((sector) => {
-    const override = cambiosParo[normalizar(sector)];
-    const enfermero = override && override !== "__EMPTY__"
-      ? resolverCambioParo(override)
-      : null;
-    const claveIdentidad = obtenerClaveIdentidadPersona(enfermero);
-
-    if (claveIdentidad && !reservasParo.has(claveIdentidad)) {
-      reservasParo.set(claveIdentidad, normalizar(sector));
-    }
-  });
-
-  const asignacionParo = sectoresParo.map((sector) => {
-    const override = cambiosParo[normalizar(sector)];
-    let enfermero = null;
-
-    if (override === "__EMPTY__") {
-      return { nombre: sector, enfermero: null, tipo: "sector" };
-    }
-
-    if (override) {
-      enfermero = tomarCandidato(resolverCambioParo(override));
-    } else {
-      for (const sectorPrioritario of prioridadesParo[sector] || []) {
-        const sectorPrioritarioId = obtenerSectorIdPorNombreHistorico(sectorPrioritario);
-        const candidatoPrioritario = asignacionFinal.find(
-          (item) => (sectorPrioritarioId && item.sectorId === sectorPrioritarioId) ||
-            normalizar(item.nombre) === normalizar(sectorPrioritario)
-        )?.enfermero;
-
-        const sectorReservado = candidatoPrioritario &&
-          reservasParo.get(obtenerClaveIdentidadPersona(candidatoPrioritario));
-
-        if (sectorReservado && sectorReservado !== normalizar(sector)) {
-          continue;
-        }
-
-        enfermero = tomarCandidato(candidatoPrioritario);
-        if (enfermero) break;
-      }
-    }
-
-    if (!enfermero) enfermero = tomarSobrante(sector);
-
-    return { nombre: sector, enfermero, tipo: "sector" };
-  });
-
-  candidatos.forEach((candidato) => {
-    const enfermero = tomarCandidato(candidato);
-    if (enfermero) {
-      asignacionParo.push({
-        nombre: "SIN ASIGNAR",
-        enfermero,
-        tipo: "sector"
-      });
-    }
-  });
-
-  return excluirCertificadosDeAsignaciones({
-    asignaciones: asignacionParo,
-    estaCertificada: estaCertificadoHoy
   });
 }
 
@@ -1744,8 +1607,8 @@ useEffect(() => {
         ? (snapshotPresentacion.sectoresSinCobertura || [])
         : obtenerSectoresCriticosSinCobertura({
             asignaciones: asignacionesMostradas,
-            sectoresCriticosIds: esDiaParo ? [] : sectoresCriticosIds,
-            sectoresCriticosLegacy: esDiaParo ? sectoresCriticos : [],
+            sectoresCriticosIds,
+            sectoresCriticosLegacy: [],
             categoria: tipo,
             versionEstructura: configuracionEfectiva
           })
@@ -1767,7 +1630,6 @@ useEffect(() => {
   ausentesDelDia,
   certificacionesMostradas,
   configuracionEfectiva,
-  esDiaParo,
   estaCertificadoHoy,
   estaDeLicenciaHoy,
   extrasMostrados,
@@ -1805,21 +1667,17 @@ useEffect(() => {
       ? obtenerFilasRedistribucion(ordenVisualEfectivo).filter(
           (fila) => fila !== "DIVIDER" && normalizar(fila) !== "SIN ASIGNAR"
         )
-      : esDiaParo
-        ? expandirReanimacion(sectoresParo)
-        : sectoresEfectivosPresentacion;
+      : sectoresEfectivosPresentacion;
     const criticosPanel = expandirReanimacion(sectoresCriticos);
     const personasConLicencia = personalFiltrado.filter(estaDeLicenciaHoy);
     const personasNoDisponibles = personalFiltrado.filter(estaNoDisponible);
     const sectoresSaludMental = tipo === "enfermero"
       ? ["SM"]
-      : esDiaParo
-        ? ["SM + Preinternación"]
-        : ["Salud Mental"];
+      : ["Salud Mental"];
 
-    const destinosOperativos = esDiaParo
-      ? undefined
-      : asignacionOrdenada.filter((fila) => fila?.tipo !== "divider");
+    const destinosOperativos = asignacionOrdenada.filter(
+      (fila) => fila?.tipo !== "divider"
+    );
 
     return {
       libres,
@@ -1842,8 +1700,8 @@ useEffect(() => {
   });
   const sectoresCriticosSinCobertura = obtenerSectoresCriticosSinCobertura({
     asignaciones: asignacionesMostradas,
-    sectoresCriticosIds: esDiaParo ? [] : sectoresCriticosIds,
-    sectoresCriticosLegacy: esDiaParo ? sectoresCriticos : [],
+    sectoresCriticosIds,
+    sectoresCriticosLegacy: [],
     categoria: tipo,
     versionEstructura: configuracionEfectiva
   });
@@ -2172,7 +2030,6 @@ useEffect(() => {
 
     const esFilaDividida = (fila) =>
       tipo === "licenciado" &&
-      !esDiaParo &&
       esDestinoSinteticoReanimacionSillones(fila) &&
       asignacionOrdenada.some(
         (asignacion) => asignacion.syntheticId === fila.syntheticId
@@ -2241,8 +2098,7 @@ useEffect(() => {
   const abrirRedistribucion = (tipoRedistribucion) => {
     if (
       tipo !== "enfermero" ||
-      soloLecturaEfectiva ||
-      esDiaParo
+      soloLecturaEfectiva
     ) return;
 
     setSeleccionado(null);
@@ -2456,7 +2312,7 @@ useEffect(() => {
     setFecha(new Date(y, m - 1, d, 12));
   }}
 />
-      {tipo === "enfermero" && !esDiaParo && !tipoRedistribucionActiva && (
+      {tipo === "enfermero" && !tipoRedistribucionActiva && (
         <>
           <button
             type="button"
@@ -2477,7 +2333,6 @@ useEffect(() => {
         </>
       )}
       {tipo === "enfermero" &&
-        !esDiaParo &&
         tipoRedistribucionActiva && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800">
@@ -2495,12 +2350,6 @@ useEffect(() => {
           </div>
         )}
       </div>
-
-      {esDiaParo && (
-        <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          Esta fecha conserva una redistribución histórica por paro.
-        </p>
-      )}
 
       {confirmacionRedistribucionVisible && (
         <PanelConfirmacionRedistribucion

@@ -342,13 +342,13 @@ probar("Licenciados conservan el orden vigente cuando no reciben prioridad de En
   assert.equal(resultado.find((fila) => fila.sectorId === "explora")?.enfermero, titular);
 });
 
-probar("Calendario activa la prioridad previa sólo para Enfermeros fuera de paro", () => {
-  assert.match(calendarioFuente, /const usarOrquestadorEnfermeros = tipo === "enfermero" && !esDiaParo/);
+probar("Calendario activa el orquestador común para Enfermeros también con adhesiones", () => {
+  assert.match(calendarioFuente, /const usarOrquestadorEnfermeros = tipo === "enfermero"/);
   assert.match(calendarioFuente, /resolverDistribucionDiaria\(\{/);
   assert.match(calendarioFuente, /sectorIdsDonantes: sectoresDonantesIds\.length > 0/);
   assert.match(
     calendarioFuente,
-    /else if \(tipo !== "enfermero" && !usarCalendarioLicenciadosDinamico\)/
+    /if \(tipo !== "enfermero" && !usarCalendarioLicenciadosDinamico\)/
   );
 });
 

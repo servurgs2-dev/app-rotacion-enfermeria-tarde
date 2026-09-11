@@ -275,7 +275,7 @@ probar("crearResumenTurno recibe exactamente cuatro destinos v2 para 11+", () =>
 });
 probar("Calendario cablea la distribución final al resumen interno", () => {
   const calendario = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
-  assert.match(calendario, /const destinosOperativos = esDiaParo[\s\S]*asignacionOrdenada\.filter/);
+  assert.match(calendario, /const destinosOperativos = asignacionOrdenada\.filter/);
   assert.match(calendario, /return \{[\s\S]*destinosOperativos,[\s\S]*\};[\s\S]*crearResumenTurno\(\{[\s\S]*\.\.\.datosResumenTurno/);
 });
 probar("Inicio conserva UI y shape históricos mientras el dominio v2 permanece", () => {

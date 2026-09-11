@@ -3846,7 +3846,6 @@ return (
     }}
     actualizarCalendarioNoDisponibleOrigen={actualizarCalendarioNoDisponibleEnOrigen}
     cargarPersonalOtrosTurnos={cargarPersonalDeOtrosTurnos}
-    esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
      onDataReady={setDataPDFEnf}
     fecha={fecha}
     setFecha={setFecha}
@@ -3915,7 +3914,6 @@ return (
     }}
     actualizarCalendarioNoDisponibleOrigen={actualizarCalendarioNoDisponibleEnOrigen}
     cargarPersonalOtrosTurnos={cargarPersonalDeOtrosTurnos}
-    esDiaParo={Boolean(diasParo[keyDiaFromDate(fecha)])}
     onDataReady={setDataPDFLic}
     fecha={fecha}
     setFecha={setFecha}

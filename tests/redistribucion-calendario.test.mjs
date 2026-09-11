@@ -56,7 +56,7 @@ probar("3 Preparar mes siguiente permanece", () => assert.match(app, />\s*Prepar
 probar("4 Reiniciar mes completo permanece", () => assert.match(app, />\s*Reiniciar mes completo\s*</));
 probar("5 no existe el botón general Día de paro", () => assert.doesNotMatch(calendario, />\s*Día de paro\s*</));
 probar("6 Licenciados no muestran redistribuciones", () => {
-  assert.match(calendario, /tipo === "enfermero" && !esDiaParo/);
+  assert.match(calendario, /tipo === "enfermero" && !tipoRedistribucionActiva/);
 });
 probar("7 Enfermeros muestran Redistribución opción 1", () => assert.match(calendario, />\s*Redistribución opción 1\s*</));
 probar("8 Enfermeros muestran Redistribución opción 2", () => assert.match(calendario, />\s*Redistribución opción 2\s*</));
@@ -180,7 +180,7 @@ probar("27 opción 2 no duplica personas", () => {
   const ids = boxes.asignaciones.map((fila) => fila.enfermero?.id).filter(Boolean);
   assert.equal(new Set(ids).size, ids.length);
 });
-probar("28 solo Enfermeros muestra los botones", () => assert.match(calendario, /tipo === "enfermero" && !esDiaParo/));
+probar("28 solo Enfermeros muestra los botones", () => assert.match(calendario, /tipo === "enfermero" && !tipoRedistribucionActiva/));
 probar("29 Licenciados y Planilla no se modifican", () => {
   assert.doesNotMatch(calendario, /setPlanilla|setPersonal/);
   assert.equal(boxes.asignaciones.every((fila) => fila.tipo === "sector"), true);
@@ -208,7 +208,8 @@ probar("32 cambio de contexto invalida", () => {
 });
 probar("33 la aplicación usa una actualización funcional", () => assert.match(calendario, /setCalendario\(\(prev\) => \{/));
 probar("34 datos históricos de paro siguen cargándose", () => {
-  assert.match(calendario, /cambiosParoDia/);
+  assert.doesNotMatch(calendario, /cambiosParoDia/);
+  assert.match(fs.readFileSync(new URL("../src/utils/estadoMensual.js", import.meta.url), "utf8"), /cambiosParoDia/);
   assert.match(app, /diasParo/);
 });
 probar("35 el modo opción 2 se reconoce por sus claves", () => {
@@ -249,10 +250,10 @@ probar("39 volver aparece para opciones activas", () => {
   assert.equal(esDistribucionOpcion1(critica.cambios), true);
   assert.equal(esDistribucionPorBoxes(boxes.cambios), true);
 });
-probar("40 volver no aparece en común, Licenciados, lectura o paro", () => {
+probar("40 volver aparece sólo con redistribución activa y respeta solo lectura", () => {
   assert.match(
     calendario,
-    /tipo === "enfermero" &&\s*!esDiaParo &&\s*tipoRedistribucionActiva/
+    /tipo === "enfermero" &&\s*tipoRedistribucionActiva/
   );
   assert.match(calendario, /\{!soloLecturaEfectiva && \(/);
   assert.equal(esDistribucionOpcion1({}), false);
@@ -298,8 +299,9 @@ probar("48 cambio de fecha o turno invalida la vuelta", () => {
   assert.equal(validarContextoRedistribucion(contexto, { ...contexto, fecha: "2026-08-06" }), false);
   assert.equal(validarContextoRedistribucion(contexto, { ...contexto, turno: "manana" }), false);
 });
-probar("49 los datos históricos de paro siguen separados", () => {
-  assert.match(calendario, /cambiosActivos = esDiaParo \? cambiosParoDia : cambiosDia/);
+probar("49 los datos legacy de paro no gobiernan la distribución actual", () => {
+  assert.match(calendario, /cambiosActivos = cambiosDia/);
+  assert.doesNotMatch(calendario, /\besDiaParo\b|\bcambiosParoDia\b/);
   assert.doesNotMatch(
     fs.readFileSync(new URL("../src/utils/redistribucionEnfermeros.js", import.meta.url), "utf8"),
     /cambiosParoDia|diasParo/
@@ -352,11 +354,8 @@ probar("58 parejas preceden a cobertura directa; donantes se resuelven antes del
   assert.ok(buscarExtra < prioridadGeneral);
   assert.ok(prioridadGeneral < coberturaDirecta);
 });
-probar("59 la prioridad por parejas ocurre antes de sacrificar sectores", () => {
-  assert.ok(
-    calendario.indexOf("const resolucionOperativa = usarOrquestadorEnfermeros") <
-    calendario.indexOf("sectoresCriticos.forEach")
-  );
+probar("59 la ruta común no conserva el sacrificio especial de Paro", () => {
+  assert.doesNotMatch(calendario, /sectoresCriticos\.forEach/);
   assert.ok(
     calendario.indexOf("const resolucionOperativa = usarOrquestadorEnfermeros") <
     calendario.indexOf("asignacionBase = aplicarPrioridadGeneralPorSectorId")
@@ -417,7 +416,7 @@ probar("68 la prioridad no se aplica a Observación", () => {
   assert.equal(resultado[1].enfermero, personas[0]);
 });
 probar("69 la prioridad se limita a Enfermeros", () => {
-  assert.match(calendario, /const usarOrquestadorEnfermeros = tipo === "enfermero" && !esDiaParo/);
+  assert.match(calendario, /const usarOrquestadorEnfermeros = tipo === "enfermero"/);
   assert.match(calendario, /reglasParejas: \{/);
 });
 probar("70 los cambios manuales de cualquiera de las dos filas se respetan", () => {

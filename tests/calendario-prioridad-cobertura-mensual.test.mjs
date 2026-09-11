@@ -205,10 +205,10 @@ probar("Enfermeros conserva parejas y no configura donantes generales", () => {
   assert.equal(fs.readFileSync("src/utils/distribucionTurnantesCoberturas.js", "utf8").includes("cedidoAPareja"), true);
 });
 
-probar("Paro conserva su rama independiente", () => {
+probar("Paro no selecciona una rama distributiva independiente", () => {
   const fuente = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
-  assert.match(fuente, /tipo === "enfermero" && !esDiaParo/);
-  assert.match(fuente, /if \(esDiaParo\)/);
+  assert.match(fuente, /const usarOrquestadorEnfermeros = tipo === "enfermero"/);
+  assert.doesNotMatch(fuente, /\besDiaParo\b/);
 });
 
 console.log(`\nEtapa 37C3: ${total} pruebas de prioridad mensual en Calendario aprobadas.`);

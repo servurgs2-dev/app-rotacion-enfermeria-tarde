@@ -288,11 +288,12 @@ probar("opción 2 conserva su salida histórica exacta", () => {
   });
   assert.deepEqual(resultado.asignaciones.slice(0, 6).map((fila) => fila.nombre), ["REA 1", ...SECTORES_REDISTRIBUCION_BOXES]);
 });
-probar("Calendario conserva procedencia automática y no conecta paro", () => {
+probar("Calendario conserva procedencia automática y usa cambios comunes", () => {
   const calendario = fs.readFileSync(new URL("../src/components/calendario/CalendarioDiario.jsx", import.meta.url), "utf8");
   assert.match(calendario, /PROCEDENCIA_REDISTRIBUCION_AUTOMATICA/);
   assert.match(calendario, /procedenciaCambiosDia/);
-  assert.match(calendario, /cambiosActivos = esDiaParo \? cambiosParoDia : cambiosDia/);
+  assert.match(calendario, /cambiosActivos = cambiosDia/);
+  assert.doesNotMatch(calendario, /\besDiaParo\b|\bcambiosParoDia\b/);
   assert.doesNotMatch(fs.readFileSync(new URL("../src/utils/gruposRedistribucion.js", import.meta.url), "utf8"), /sectoresParo|prioridadesParo|cambiosParoDia/);
 });
 

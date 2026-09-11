@@ -346,10 +346,7 @@ probar("Calendario activa el orquestador común para Enfermeros también con adh
   assert.match(calendarioFuente, /const usarOrquestadorEnfermeros = tipo === "enfermero"/);
   assert.match(calendarioFuente, /resolverDistribucionDiaria\(\{/);
   assert.match(calendarioFuente, /sectorIdsDonantes: sectoresDonantesIds\.length > 0/);
-  assert.match(
-    calendarioFuente,
-    /if \(tipo !== "enfermero" && !usarCalendarioLicenciadosDinamico\)/
-  );
+  assert.match(calendarioFuente, /resolverDistribucionLicenciadosLegacy\(\{/);
 });
 
 console.log(`\n${total} pruebas de Turnantes y vacantes por sectorId aprobadas.`);

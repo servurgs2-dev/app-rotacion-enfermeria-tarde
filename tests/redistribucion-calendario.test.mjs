@@ -356,10 +356,8 @@ probar("58 parejas preceden a cobertura directa; donantes se resuelven antes del
 });
 probar("59 la ruta común no conserva el sacrificio especial de Paro", () => {
   assert.doesNotMatch(calendario, /sectoresCriticos\.forEach/);
-  assert.ok(
-    calendario.indexOf("const resolucionOperativa = usarOrquestadorEnfermeros") <
-    calendario.indexOf("asignacionBase = aplicarPrioridadGeneralPorSectorId")
-  );
+  assert.match(calendario, /resolverDistribucionLicenciadosLegacy\(\{/);
+  assert.doesNotMatch(calendario, /asignacionBase = aplicarPrioridadGeneralPorSectorId/);
 });
 probar("60 un sector principal cubierto no mueve la pareja", () => {
   const resultado = aplicarPrioridadCoberturaParejas({

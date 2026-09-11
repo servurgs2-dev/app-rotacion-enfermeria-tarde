@@ -52,7 +52,7 @@ import {
   obtenerOpcionesCoberturaExtra,
   prepararCandidatosExtraOtroTurno
 } from "../../utils/extrasPersonas.js";
-import { resolverTurnantesYCoberturasOperativas } from "../../utils/distribucionTurnantesCoberturas.js";
+import { resolverDistribucionLicenciadosLegacy } from "../../utils/resolverDistribucionLicenciadosLegacy.js";
 import {
   MODOS_REDISTRIBUCION_DIARIA,
   resolverDistribucionDiaria
@@ -83,7 +83,6 @@ import {
   puedeCubrirLibreSaludMental,
   resolverCoberturaSaludMental
 } from "../../utils/coberturaSaludMental.js";
-import { aplicarPrioridadGeneralPorSectorId } from "../../utils/prioridadesSectores.js";
 import {
   resolverClaveNormalizadaParaFila
 } from "../../utils/resolucionIdentidadesPlanilla.js";
@@ -823,12 +822,13 @@ const usarCalendarioLicenciadosDinamico = debeUsarCalendarioLicenciadosDinamicoV
 
 const identidadesCubiertas = obtenerIdentidadesPersonasCubiertas(extrasDia, personal);
 let asignacionBase;
+let resolucionLicenciadosLegacy = null;
 if (usarCalendarioLicenciadosDinamico) {
   asignacionBase = calendarioLicenciadosDinamico.asignacionesOperativas;
 } else {
   const usarOrquestadorEnfermeros = tipo === "enfermero";
-  const resolucionOperativa = usarOrquestadorEnfermeros
-    ? resolverDistribucionDiaria({
+  if (usarOrquestadorEnfermeros) {
+    asignacionBase = resolverDistribucionDiaria({
         asignacionBase: asignacionCompleta,
         personalEfectivo: personal,
         extras: extrasDia,
@@ -861,27 +861,24 @@ if (usarCalendarioLicenciadosDinamico) {
               procedenciaAutomatica: PROCEDENCIA_REDISTRIBUCION_AUTOMATICA
             }
           : null
-      })
-    : resolverTurnantesYCoberturasOperativas({
+      }).asignaciones;
+  } else {
+    resolucionLicenciadosLegacy = resolverDistribucionLicenciadosLegacy({
         asignaciones: asignacionCompleta,
         extras: extrasDia,
         personal,
+        personasSinAsignar: personalFiltrado,
         esPersonaDisponible: (persona) => !estaAusente(persona),
         esPersonaDisponibleParaCobertura: puedeAplicarseCoberturaDirecta,
-        prioridadSectorIds: [],
-        sectorIdsDonantes: [],
-        ajustarSectores: (sectores) => sectores
+        prioridadSectorIds: prioridadCoberturaEfectivaIds,
+        identidadesExcluidasSinAsignar: [
+          ...identidadesCubiertas,
+          ...identidadesReintegradosSinSector
+        ]
       });
-  asignacionBase = resolucionOperativa.asignaciones;
-}
-
-  if (tipo !== "enfermero" && !usarCalendarioLicenciadosDinamico) {
-    asignacionBase = aplicarPrioridadGeneralPorSectorId({
-      asignaciones: asignacionBase,
-      prioridadSectorIds: prioridadCoberturaEfectivaIds,
-      esPersonaDisponible: (persona) => !estaAusente(persona)
-    });
+    asignacionBase = resolucionLicenciadosLegacy.asignaciones;
   }
+}
 
   const asignacionFinal = asignacionBase;
 
@@ -892,7 +889,7 @@ const usados = asignacionFinal
   .filter(Boolean);
 
 const identidadesSobrantes = new Set(usados);
-const sobrantes = [...personalFiltrado, ...extrasDia].filter((e) => {
+const sobrantes = resolucionLicenciadosLegacy?.sobrantes || [...personalFiltrado, ...extrasDia].filter((e) => {
   if (!e || estaAusente(e)) return false;
 
   const claveIdentidad = obtenerClaveIdentidadPersona(e);

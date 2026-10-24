@@ -33,7 +33,10 @@ export default function PanelNoDisponible({
 
   if (!formulario) return null;
   const cambio = formulario.motivo === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO;
-  const supervision = formulario.motivo === MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO;
+  const supervision = [
+    MOTIVOS_NO_DISPONIBLE.SUPERVISION_SOLICITO_OTRO_TURNO,
+    MOTIVOS_NO_DISPONIBLE.SUPERVISION_OTRO_TURNO
+  ].includes(formulario.motivo);
   const requiereDetalle = formulario.motivo === MOTIVOS_NO_DISPONIBLE.OTRO;
   const certificacionDia = formulario.motivo === MOTIVOS_NO_DISPONIBLE.CERTIFICACION_DIA;
 

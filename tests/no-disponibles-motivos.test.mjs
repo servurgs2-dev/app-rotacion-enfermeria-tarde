@@ -191,7 +191,7 @@ probar("16 una persona certificada no se duplica y la certificación tiene prior
   assert.equal(resultado.length, 1);
   assert.equal(resultado[0].tipo, "certificacion");
 });
-probar("17 la fila vacía muestra Falta con aviso", () => {
+probar("17 la fila vacía conserva el label histórico de Falta con aviso", () => {
   assert.match(calendarioFuente, /Sin cobertura — \$\{noDisponibleDelSector\.motivoBreve\}/);
   assert.equal(
     obtenerEtiquetaMotivoNoDisponible({ motivo: "falta_con_aviso" }, { breve: true }),
@@ -296,11 +296,11 @@ probar("29 el panel diario presenta motivos sin tocar Planilla semanal", () => {
   assert.match(calendarioFuente, /PanelNoDisponible/);
   assert.doesNotMatch(panelFuente, /planilla|generarRotacion/i);
 });
-probar("30 Adhesión a PARO es opción manual exacta y Cambio con otro turno no lo es", () => {
+probar("30 Adhesión a PARO y Cambio con otro turno no son opciones manuales", () => {
   assert.equal(MOTIVOS_NO_DISPONIBLE.ADHESION_PARO, "adhesion_paro");
-  assert.deepEqual(
-    OPCIONES_MOTIVO_NO_DISPONIBLE.find((opcion) => opcion.valor === "adhesion_paro"),
-    { valor: "adhesion_paro", etiqueta: "Adhesión a PARO" }
+  assert.equal(
+    OPCIONES_MOTIVO_NO_DISPONIBLE.some((opcion) => opcion.valor === "adhesion_paro"),
+    false
   );
   assert.equal(
     OPCIONES_MOTIVO_NO_DISPONIBLE.some(

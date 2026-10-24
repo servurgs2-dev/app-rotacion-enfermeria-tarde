@@ -73,12 +73,16 @@ probar("1 aparece Certificación por el día", () => {
   assert.ok(OPCIONES_MOTIVO_NO_DISPONIBLE.some((opcion) => opcion.etiqueta === "Certificación por el día"));
   assert.match(panelFuente, /Certificación por el día|CERTIFICACION_DIA/);
 });
-probar("2 el catálogo actual excluye el alta Cambio con otro turno y conserva su lectura legacy", () => {
+probar("2 el catálogo actual excluye altas legacy e internas", () => {
   for (const motivo of [
-    "falta_con_aviso",
-    "supervision_otro_turno",
+    "falta_sin_aviso",
+    "supervision_autorizo_inasistencia",
+    "supervision_solicito_otro_turno",
     "certificacion_dia",
-    "adhesion_paro",
+    "donacion_sangre",
+    "pap",
+    "mamografia",
+    "libre_feriado",
     "otro"
   ]) {
     assert.ok(OPCIONES_MOTIVO_NO_DISPONIBLE.some((opcion) => opcion.valor === motivo));
@@ -86,6 +90,12 @@ probar("2 el catálogo actual excluye el alta Cambio con otro turno y conserva s
   assert.equal(
     OPCIONES_MOTIVO_NO_DISPONIBLE.some(
       (opcion) => opcion.valor === MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO
+    ),
+    false
+  );
+  assert.equal(
+    OPCIONES_MOTIVO_NO_DISPONIBLE.some(
+      (opcion) => opcion.valor === MOTIVOS_NO_DISPONIBLE.ADHESION_PARO
     ),
     false
   );

@@ -1,16 +1,10 @@
 import { TURNOS } from "../config/turnos.js";
-import { estaCertificado, estaDeLicencia, parsearFechaLocal } from "./fechas.js";
 import { normalizarFuncionarioIdentidad, obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
 import { resolverPersonaDeLicencia } from "./licenciasPersonas.js";
 import { resolverPersonaDeCertificacion } from "./certificacionesPersonas.js";
-import {
-  novedadAfectaDisponibilidadEnFecha,
-  TIPOS_NOVEDAD_PERSONAL
-} from "./novedadesPersonal.js";
-import { MOTIVOS_NO_DISPONIBLE } from "./noDisponiblesMotivos.js";
-import { resolverPersonaDesdeReferencia } from "./referenciasPersonas.js";
 import { normalizar } from "./texto.js";
 import { esOrigenExtraOtroTurno } from "./extrasPersonas.js";
+import { resolverDisponibilidadPersonalPorFecha } from "./resolverDisponibilidadPersonalPorFecha.js";
 
 export const CAUSAS_INDISPONIBILIDAD_SUPERVISION = Object.freeze([
   "licencia",
@@ -30,14 +24,10 @@ export const ESTADOS_VALIDACION_EXTRA_ORIGEN = Object.freeze({
 const claveCategoriaCalendario = (categoria) =>
   categoria === "enfermero" ? "enfermeros" : "licenciados";
 
-const causaNovedad = (novedad) => {
-  if (novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.LICENCIA) return "licencia";
-  if (novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.CERTIFICACION) return "certificacion";
-  if (novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.SUSPENSION) return "suspension";
-  if (novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.ADHESION_PARO) return "adhesion_paro";
-  if (novedad?.tipo === TIPOS_NOVEDAD_PERSONAL.OTRA) return "no_disponible";
-  return null;
-};
+const normalizarCausaSupervision = (codigo) =>
+  CAUSAS_INDISPONIBILIDAD_SUPERVISION.includes(codigo)
+    ? codigo
+    : "no_disponible";
 
 export const resolverIndisponibilidadesDia = ({
   estadoMensual,
@@ -51,7 +41,10 @@ export const resolverIndisponibilidadesDia = ({
     : [];
   const personalCategoria = personalCompleto
     .filter((persona) => persona?.categoria === categoria);
-  const fechaLocal = parsearFechaLocal(fecha);
+  const calendario = estadoMensual?.calendario?.[claveCategoriaCalendario(categoria)] || {};
+  const noDisponiblesDiaTurno = Array.isArray(calendario?.noDisponibles?.[fecha])
+    ? calendario.noDisponibles[fecha]
+    : [];
   const porIdentidad = new Map();
   const advertencias = [];
   const agregar = (persona, causa) => {
@@ -64,12 +57,28 @@ export const resolverIndisponibilidadesDia = ({
   };
 
   personalCategoria.forEach((persona) => {
-    if (estaDeLicencia(estadoMensual?.licencias, persona, fechaLocal, personalCompleto)) {
-      agregar(persona, "licencia");
-    }
-    if (estaCertificado(estadoMensual?.certificaciones, persona, fechaLocal, personalCompleto)) {
-      agregar(persona, "certificacion");
-    }
+    const disponibilidad = resolverDisponibilidadPersonalPorFecha({
+      persona,
+      personal: personalCompleto,
+      fecha,
+      turnoConsultado: turno,
+      padronVigencias: estadoMensual?.padronVigencias || [],
+      novedadesModernas,
+      licenciasLegacy: estadoMensual?.licencias,
+      certificacionesLegacy: estadoMensual?.certificaciones,
+      noDisponiblesDiaTurno,
+      asistenciaDia: {},
+      libresTurno: [],
+      extrasDiaTurno: [],
+      cambiosHorario: novedadesModernas
+    });
+    disponibilidad.causasBloqueantes.forEach((causa) =>
+      agregar(persona, normalizarCausaSupervision(causa.codigo))
+    );
+    disponibilidad.advertencias.forEach((advertencia) => advertencias.push({
+      ...advertencia,
+      personaId: disponibilidad.personaId
+    }));
   });
   (Array.isArray(estadoMensual?.licencias) ? estadoMensual.licencias : [])
     .filter((registro) => registro?.desde <= fecha && fecha <= registro?.hasta)
@@ -80,40 +89,10 @@ export const resolverIndisponibilidadesDia = ({
     .filter((registro) => !resolverPersonaDeCertificacion(registro, personalCompleto))
     .forEach(() => advertencias.push({ codigo: "CERTIFICACION_PERSONA_NO_RESUELTA" }));
 
-  (Array.isArray(novedadesModernas) ? novedadesModernas : []).forEach((novedad) => {
-    if (novedad?.turno && novedad.turno !== turno) return;
-    if (novedad?.categoria && novedad.categoria !== categoria) return;
-    const persona = resolverPersonaDesdeReferencia(
-      { personaId: novedad?.personaId, nombre: novedad?.personaNombre },
-      personalCompleto
-    );
-    if (!persona) {
-      advertencias.push({ codigo: "NOVEDAD_PERSONA_NO_RESUELTA", novedadId: novedad?.id || null });
-      return;
-    }
-    if (persona.categoria !== categoria) return;
-    if (!novedadAfectaDisponibilidadEnFecha(novedad, persona, fecha)) return;
-    const causa = causaNovedad(novedad);
-    if (causa) agregar(persona, causa);
-  });
-
-  const calendario = estadoMensual?.calendario?.[claveCategoriaCalendario(categoria)] || {};
-  const noDisponibles = Array.isArray(calendario?.noDisponibles?.[fecha])
-    ? calendario.noDisponibles[fecha]
-    : [];
-  noDisponibles.forEach((registro) => {
-    if (registro?.motivo === MOTIVOS_NO_DISPONIBLE.CERTIFICACION_DIA) return;
-    const persona = resolverPersonaDesdeReferencia(registro, personalCategoria);
-    if (!persona) {
-      advertencias.push({ codigo: "NO_DISPONIBLE_PERSONA_NO_RESUELTA" });
-      return;
-    }
-    agregar(
-      persona,
-      registro?.motivo === MOTIVOS_NO_DISPONIBLE.ADHESION_PARO
-        ? "adhesion_paro"
-        : "no_disponible"
-    );
+  porIdentidad.forEach((entrada) => {
+    entrada.causas = new Set(CAUSAS_INDISPONIBILIDAD_SUPERVISION.filter(
+      (causa) => entrada.causas.has(causa)
+    ));
   });
 
   return { personalCompleto, personalCategoria, porIdentidad, advertencias };

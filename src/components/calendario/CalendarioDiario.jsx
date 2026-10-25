@@ -555,9 +555,7 @@ const evaluacionParcialesDia = evaluarAsignacionesParcialesDia({
   asignacionesParciales: asignacionesParcialesPeriodo,
   fecha: keyDia,
   personal,
-  esPersonaDisponible: (persona) =>
-    personalFiltrado.some((actual) => personasCompartenIdentidad(actual, persona)) &&
-    !estaAusente(persona),
+  esPersonaDisponible: esPersonaDisponibleNormalizada,
   estaPersonaBaseDeLicencia: (personaBase) => estaDeLicenciaHoy(personaBase)
 });
 const planillaPeriodoEfectiva = evaluacionParcialesDia.distribucion;
@@ -585,9 +583,7 @@ const reintegradosSinSectorHoy = filtrarReintegradosSinSectorDia({
   fecha: keyDia,
   idsParcialesAplicadas: identidadesParcialesAplicadas,
   categoria: tipo,
-  esPersonaDisponible: (persona) =>
-    !estaAusente(persona) &&
-    personalFiltrado.some((actual) => personasCompartenIdentidad(actual, persona))
+  esPersonaDisponible: esPersonaDisponibleNormalizada
 });
 const identidadesReintegradosSinSector = new Set(
   reintegradosSinSectorHoy.map(obtenerClaveIdentidadPersona).filter(Boolean)
@@ -935,7 +931,7 @@ const usados = asignacionFinal
 
 const identidadesSobrantes = new Set(usados);
 const sobrantes = resolucionLicenciadosLegacy?.sobrantes || [...personalFiltrado, ...extrasDia].filter((e) => {
-  if (!e || estaAusente(e)) return false;
+  if (!e || !esPersonaDisponibleNormalizada(e)) return false;
 
   const claveIdentidad = obtenerClaveIdentidadPersona(e);
 
@@ -1015,7 +1011,7 @@ personasParaSinAsignar.forEach((persona) => {
     !identidad ||
     identidadesAsignadas.has(identidad) ||
     identidadesCubiertas.has(identidad) ||
-    estaAusente(persona)
+    !esPersonaDisponibleNormalizada(persona)
   ) return;
   identidadesAsignadas.add(identidad);
   asignacionParaMostrar.push({
@@ -1027,7 +1023,11 @@ personasParaSinAsignar.forEach((persona) => {
 });
 reintegradosSinSectorHoy.forEach((persona) => {
   const identidad = obtenerClaveIdentidadPersona(persona);
-  if (!identidad || identidadesAsignadas.has(identidad) || estaAusente(persona)) return;
+  if (
+    !identidad ||
+    identidadesAsignadas.has(identidad) ||
+    !esPersonaDisponibleNormalizada(persona)
+  ) return;
   identidadesAsignadas.add(identidad);
   asignacionParaMostrar.push({
     nombre: "SIN ASIGNAR",
@@ -1095,7 +1095,7 @@ const personasCubribles = obtenerOpcionesCoberturaExtra({
   }),
   extras: extrasDia,
   categoria: tipo,
-  esPersonaDisponible: (persona) => !estaAusente(persona)
+  esPersonaDisponible: esPersonaDisponibleParaCoberturaNormalizada
 });
 
 const personasCubriblesParaLibre = formularioExtraLibre
@@ -2121,7 +2121,7 @@ useEffect(() => {
       return;
     }
 
-    if (estaAusente(item.enfermero)) return;
+    if (!esPersonaDisponibleNormalizada(item.enfermero)) return;
 
     if (!seleccionado) {
       setSeleccionado(item);

@@ -158,6 +158,10 @@ import {
   excluirNoDisponiblesPorNovedadesDeAsignaciones
 } from "../../utils/novedadesPersonal.js";
 import {
+  compararDisponibilidadCalendario,
+  prepararContextoOperativoDisponibilidad
+} from "../../utils/comparacionDisponibilidadCalendario.js";
+import {
   agregarCertificacionPorElDia,
   eliminarCertificacionPorElDia
 } from "../../utils/certificacionesPersonas.js";
@@ -417,6 +421,10 @@ const libres = personalFiltrado.filter(
     obtenerEstadoAsistencia(asistenciaFecha, persona) !==
       ESTADOS_ASISTENCIA.AUSENTE
 );
+const libresTurnoDiagnostico = personalFiltrado.filter((persona) =>
+  esLibreReal(persona) &&
+  !extrasDia.some((extra) => personasCompartenIdentidad(extra, persona))
+);
 
 const estaLibre = (e) => {
     const esExtraHoy = extrasDia.some((ex) => personasCompartenIdentidad(ex, e));
@@ -504,6 +512,32 @@ const puedeAplicarseCoberturaDirecta = (persona) => {
     !estaCertificadoHoy(persona) &&
     obtenerEstadoAsistencia(asistenciaFecha, persona) !== ESTADOS_ASISTENCIA.AUSENTE;
 };
+
+const contextoOperativoDisponibilidad = prepararContextoOperativoDisponibilidad({
+  noDisponiblesDiaTurno: noDisponiblesDia,
+  asistenciaDia: asistenciaFecha,
+  libresTurno: libresTurnoDiagnostico,
+  extrasDiaTurno: extrasDia
+});
+const diagnosticoDisponibilidad = compararDisponibilidadCalendario({
+  personas: personalFiltrado,
+  contextoOperativo: contextoOperativoDisponibilidad,
+  contextoAdministrativo: {
+    personal,
+    fecha: keyDia,
+    turnoConsultado: turnoActivo,
+    padronVigencias,
+    novedadesModernas: novedades,
+    licenciasLegacy: licenciasLectura,
+    certificacionesLegacy: certificacionesLectura,
+    cambiosHorario: novedades,
+    configTurno: configTurnoCalendario
+  },
+  esPersonaDisponibleActual: (persona) => !estaAusente(persona),
+  esPersonaDisponibleParaCoberturaActual: puedeAplicarseCoberturaDirecta,
+  comparar: !(bloqueadoPorCierre && snapshotCierre)
+});
+void diagnosticoDisponibilidad;
 
 const evaluacionParcialesDia = evaluarAsignacionesParcialesDia({
   distribucionBase: planillaPeriodo,

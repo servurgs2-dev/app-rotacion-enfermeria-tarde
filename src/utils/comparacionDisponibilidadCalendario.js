@@ -15,6 +15,29 @@ export const prepararContextoOperativoDisponibilidad = ({
   extrasDiaTurno
 });
 
+export const prepararPersonasDisponibilidadCalendario = (...colecciones) => {
+  const porPersonaId = new Map();
+  colecciones.flatMap(lista).forEach((persona) => {
+    const personaId = String(persona?.id || "").trim();
+    if (personaId && !porPersonaId.has(personaId)) porPersonaId.set(personaId, persona);
+  });
+  return [...porPersonaId.values()];
+};
+
+export const crearPredicadosDisponibilidadNormalizada = (
+  disponibilidadNormalizadaPorPersonaId
+) => {
+  const obtener = (persona) => disponibilidadNormalizadaPorPersonaId.get(
+    String(persona?.id || "").trim()
+  );
+  return {
+    esPersonaDisponibleNormalizada: (persona) =>
+      obtener(persona)?.disponibleEnTurno === true,
+    esPersonaDisponibleParaCoberturaNormalizada: (persona) =>
+      obtener(persona)?.disponibleParaCobertura === true
+  };
+};
+
 export const compararDisponibilidadCalendario = ({
   personas = [],
   contextoOperativo,

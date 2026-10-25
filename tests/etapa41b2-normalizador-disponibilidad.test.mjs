@@ -318,4 +318,24 @@ probar("33 Novedades se filtran después de resolver el turno efectivo", () => {
   assert.deepEqual(codigos(resultado), ["suspension"]);
 });
 
+probar("34 un Extra de otro turno participa en el turno consultado", () => {
+  const extra = { ...persona, id: "extra-otro-turno", turno: "manana" };
+  const resultado = resolver({
+    persona: extra,
+    personal: [extra],
+    extrasDiaTurno: [extra]
+  });
+  assert.equal(resultado.perteneceAlTurnoConsultado, false);
+  assert.equal(resultado.contextoOperativo.extraEnTurno, true);
+  assert.equal(resultado.disponibleEnTurno, true);
+  assert.equal(resultado.disponibleParaCobertura, true);
+});
+
+probar("35 un Extra habilitante no queda bloqueado por libre pre-acotado", () => {
+  const resultado = resolver({ extrasDiaTurno: [persona], libresTurno: [] });
+  assert.equal(resultado.contextoOperativo.extraEnTurno, true);
+  assert.equal(resultado.contextoOperativo.libre, false);
+  assert.equal(resultado.disponibleEnTurno, true);
+});
+
 console.log(`\n${aprobadas} comprobaciones del normalizador puro pasaron.`);

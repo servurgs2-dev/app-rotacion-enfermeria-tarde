@@ -168,6 +168,10 @@ export const resolverDisponibilidadPersonalPorFecha = ({
   );
   if (libre) agregarCausa(causasBloqueantes, { codigo: "libre", origen: "calendario" });
 
+  const extraEnTurno = lista(extrasDiaTurno).some((extra) =>
+    referenciaEsPersona(extra, persona, personal)
+  );
+
   const cambioOtroTurnoVinculado = esCambioOtroTurnoVinculado({
     persona,
     registros: noDisponiblesDiaTurno,
@@ -177,8 +181,9 @@ export const resolverDisponibilidadPersonalPorFecha = ({
   const causasSinCambioVinculado = [...causasBloqueantes.values()].filter(
     (causa) => causa.codigo !== MOTIVOS_NO_DISPONIBLE.CAMBIO_OTRO_TURNO
   );
-  const disponibleEnTurno = perteneceAlTurnoConsultado && causasBloqueantes.size === 0;
-  const disponibleParaCobertura = perteneceAlTurnoConsultado && (
+  const participaEnTurnoConsultado = perteneceAlTurnoConsultado || extraEnTurno;
+  const disponibleEnTurno = participaEnTurnoConsultado && causasBloqueantes.size === 0;
+  const disponibleParaCobertura = participaEnTurnoConsultado && (
     disponibleEnTurno || (cambioOtroTurnoVinculado && causasSinCambioVinculado.length === 0)
   );
 
@@ -200,10 +205,6 @@ export const resolverDisponibilidadPersonalPorFecha = ({
         registroId: horario.novedadId || null
       }
     : null;
-
-  const extraEnTurno = lista(extrasDiaTurno).some((extra) =>
-    referenciaEsPersona(extra, persona, personal)
-  );
 
   return {
     personaId: personaId || null,

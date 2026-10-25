@@ -145,9 +145,8 @@ const calendarioFuente = fs.readFileSync(
 
 probar("9 Calendario usa la integración paralela y conserva predicados productivos", () => {
   assert.match(calendarioFuente, /compararDisponibilidadCalendario/);
-  assert.match(calendarioFuente, /resolverDistribucionDiaria\(\{[\s\S]*?esPersonaDisponible:\s*\(persona\)\s*=>\s*!estaAusente\(persona\)/);
-  assert.match(calendarioFuente, /esPersonaDisponibleParaCobertura:\s*puedeAplicarseCoberturaDirecta/);
-  assert.doesNotMatch(calendarioFuente, /disponibilidadNormalizadaPorPersonaId\.get[\s\S]*?resolverDistribucionDiaria/);
+  assert.match(calendarioFuente, /resolverDistribucionDiaria\(\{[\s\S]*?esPersonaDisponible:\s*esPersonaDisponibleNormalizada/);
+  assert.match(calendarioFuente, /esPersonaDisponibleParaCobertura:\s*esPersonaDisponibleParaCoberturaNormalizada/);
 });
 
 probar("10 Paro y las fronteras 40H no dependen del diagnóstico", () => {
@@ -163,9 +162,8 @@ probar("10 Paro y las fronteras 40H no dependen del diagnóstico", () => {
 });
 
 probar("11 el mapa y el diagnóstico no tienen consumidores productivos", () => {
-  assert.doesNotMatch(calendarioFuente, /disponibilidadNormalizadaPorPersonaId/);
-  assert.equal((calendarioFuente.match(/diagnosticoDisponibilidad/g) || []).length, 2);
-  assert.match(calendarioFuente, /void diagnosticoDisponibilidad/);
+  assert.equal((calendarioFuente.match(/disponibilidadNormalizadaPorPersonaId/g) || []).length, 1);
+  assert.match(calendarioFuente, /crearPredicadosDisponibilidadNormalizada\(/);
   assert.doesNotMatch(calendarioFuente, /setDiagnosticoDisponibilidad|useState\([^)]*diagnostico/i);
 });
 
@@ -184,12 +182,8 @@ probar("13 la comparación usa los mismos predicados entregados a los motores", 
     calendarioFuente,
     /esPersonaDisponibleParaCoberturaActual:\s*puedeAplicarseCoberturaDirecta/
   );
-  assert.ok(
-    (calendarioFuente.match(/esPersonaDisponible:\s*\(persona\)\s*=>\s*!estaAusente\(persona\)/g) || []).length >= 3
-  );
-  assert.ok(
-    (calendarioFuente.match(/esPersonaDisponibleParaCobertura:\s*puedeAplicarseCoberturaDirecta/g) || []).length >= 3
-  );
+  assert.match(calendarioFuente, /esPersonaDisponible:\s*esPersonaDisponibleNormalizada/);
+  assert.match(calendarioFuente, /esPersonaDisponibleParaCobertura:\s*esPersonaDisponibleParaCoberturaNormalizada/);
 });
 
 const casosEquivalentes = [

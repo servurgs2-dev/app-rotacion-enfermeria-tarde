@@ -159,7 +159,9 @@ import {
 } from "../../utils/novedadesPersonal.js";
 import {
   compararDisponibilidadCalendario,
-  prepararContextoOperativoDisponibilidad
+  crearPredicadosDisponibilidadNormalizada,
+  prepararContextoOperativoDisponibilidad,
+  prepararPersonasDisponibilidadCalendario
 } from "../../utils/comparacionDisponibilidadCalendario.js";
 import {
   agregarCertificacionPorElDia,
@@ -481,21 +483,6 @@ const estaAusente = (e) =>
       obtenerEstadoAsistencia(asistenciaFecha, e) === ESTADOS_ASISTENCIA.AUSENTE
     );
 
-const perfilEstructuraLicenciadosDia = tipo === "licenciado"
-  ? resolverPerfilEstructuraLicenciadosDia({
-      fecha: keyDia,
-      turno: turnoActivo,
-      prioridadTurno: prioridadCoberturaEfectivaIds,
-      personalBase: personalFiltrado,
-      extras: extrasDia,
-      esPersonaUtilizable: (persona) => !estaAusente(persona)
-    })
-  : null;
-
-useEffect(() => {
-  perfilEstructuraLicenciadosDiaRef.current = perfilEstructuraLicenciadosDia;
-}, [perfilEstructuraLicenciadosDia]);
-
 const puedeAplicarseCoberturaDirecta = (persona) => {
   if (!persona) return false;
   if (!estaAusente(persona)) return true;
@@ -519,8 +506,12 @@ const contextoOperativoDisponibilidad = prepararContextoOperativoDisponibilidad(
   libresTurno: libresTurnoDiagnostico,
   extrasDiaTurno: extrasDia
 });
+const personasDisponibilidadMotor = prepararPersonasDisponibilidadCalendario(
+  personalFiltrado,
+  extrasDia
+);
 const diagnosticoDisponibilidad = compararDisponibilidadCalendario({
-  personas: personalFiltrado,
+  personas: personasDisponibilidadMotor,
   contextoOperativo: contextoOperativoDisponibilidad,
   contextoAdministrativo: {
     personal,
@@ -537,7 +528,27 @@ const diagnosticoDisponibilidad = compararDisponibilidadCalendario({
   esPersonaDisponibleParaCoberturaActual: puedeAplicarseCoberturaDirecta,
   comparar: !(bloqueadoPorCierre && snapshotCierre)
 });
-void diagnosticoDisponibilidad;
+const {
+  esPersonaDisponibleNormalizada,
+  esPersonaDisponibleParaCoberturaNormalizada
+} = crearPredicadosDisponibilidadNormalizada(
+  diagnosticoDisponibilidad.disponibilidadNormalizadaPorPersonaId
+);
+
+const perfilEstructuraLicenciadosDia = tipo === "licenciado"
+  ? resolverPerfilEstructuraLicenciadosDia({
+      fecha: keyDia,
+      turno: turnoActivo,
+      prioridadTurno: prioridadCoberturaEfectivaIds,
+      personalBase: personalFiltrado,
+      extras: extrasDia,
+      esPersonaUtilizable: esPersonaDisponibleNormalizada
+    })
+  : null;
+
+useEffect(() => {
+  perfilEstructuraLicenciadosDiaRef.current = perfilEstructuraLicenciadosDia;
+}, [perfilEstructuraLicenciadosDia]);
 
 const evaluacionParcialesDia = evaluarAsignacionesParcialesDia({
   distribucionBase: planillaPeriodo,
@@ -844,8 +855,8 @@ const calendarioLicenciadosDinamico = esLicenciadosV2
       candidatosPrioridad: candidatosPrioridadCoberturaEfectivos,
       extras: extrasDia,
       personal,
-      esPersonaDisponible: (persona) => !estaAusente(persona),
-      esPersonaDisponibleParaCobertura: puedeAplicarseCoberturaDirecta,
+      esPersonaDisponible: esPersonaDisponibleNormalizada,
+      esPersonaDisponibleParaCobertura: esPersonaDisponibleParaCoberturaNormalizada,
       sectorIdsDonantes: sectoresDonantesIds,
       cambiosDia: cambiosDia[keyDia]
     })
@@ -866,8 +877,8 @@ if (usarCalendarioLicenciadosDinamico) {
         asignacionBase: asignacionCompleta,
         personalEfectivo: personal,
         extras: extrasDia,
-        esPersonaDisponible: (persona) => !estaAusente(persona),
-        esPersonaDisponibleParaCobertura: puedeAplicarseCoberturaDirecta,
+        esPersonaDisponible: esPersonaDisponibleNormalizada,
+        esPersonaDisponibleParaCobertura: esPersonaDisponibleParaCoberturaNormalizada,
         prioridadSectorIds: prioridadCoberturaEfectivaIds,
         sectorIdsDonantes: sectoresDonantesIds.length > 0 ? sectoresDonantesIds : undefined,
         reglasParejas: {
@@ -902,8 +913,8 @@ if (usarCalendarioLicenciadosDinamico) {
         extras: extrasDia,
         personal,
         personasSinAsignar: personalFiltrado,
-        esPersonaDisponible: (persona) => !estaAusente(persona),
-        esPersonaDisponibleParaCobertura: puedeAplicarseCoberturaDirecta,
+        esPersonaDisponible: esPersonaDisponibleNormalizada,
+        esPersonaDisponibleParaCobertura: esPersonaDisponibleParaCoberturaNormalizada,
         prioridadSectorIds: prioridadCoberturaEfectivaIds,
         identidadesExcluidasSinAsignar: [
           ...identidadesCubiertas,

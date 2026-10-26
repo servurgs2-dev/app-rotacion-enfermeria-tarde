@@ -338,4 +338,18 @@ probar("35 un Extra habilitante no queda bloqueado por libre pre-acotado", () =>
   assert.equal(resultado.disponibleEnTurno, true);
 });
 
+probar("36 el contexto mensual aporta turno base cuando la persona no lo embebe", () => {
+  const personaMensual = { id: "p-mensual", nombre: "Persona mensual", categoria: "enfermero" };
+  const resultado = resolverDisponibilidadPersonalPorFecha({
+    persona: personaMensual,
+    personal: [personaMensual],
+    fecha: FECHA,
+    turnoConsultado: "tarde",
+    turnoBaseContexto: "tarde"
+  });
+  assert.equal(resultado.turnoEfectivo, "tarde");
+  assert.equal(resultado.perteneceAlTurnoConsultado, true);
+  assert.equal(resultado.disponibleEnTurno, true);
+});
+
 console.log(`\n${aprobadas} comprobaciones del normalizador puro pasaron.`);

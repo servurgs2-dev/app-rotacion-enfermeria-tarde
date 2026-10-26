@@ -69,6 +69,14 @@ import {
   obtenerPersonasPrevistasConAusentes
 } from "../../utils/asistenciaPersonas.js";
 import {
+  cambiarPresenciaV2,
+  invalidarPresenteV2,
+  limpiarPresentesV2,
+  marcarCohortePresenteV2,
+  obtenerCohorteConfirmable,
+  obtenerCohortePresentacionAsistenciaV2
+} from "../../utils/asistenciaV2.js";
+import {
   cambiarAsistenciaCalendario,
   filtrarAsignacionesAusentes,
   obtenerAusentesDelDia,
@@ -114,6 +122,7 @@ import {
 import PanelConfirmacionRedistribucion from "./PanelConfirmacionRedistribucion.jsx";
 import PanelAgregarExtra from "./PanelAgregarExtra.jsx";
 import PanelNoDisponible from "./PanelNoDisponible.jsx";
+import ControlesAsistenciaV2 from "./ControlesAsistenciaV2.jsx";
 import {
   eliminarExtraVinculadoCambioOtroTurno,
   eliminarNoDisponibleVinculado,
@@ -191,6 +200,7 @@ import {
 } from "../../utils/calendarioLicenciadosDinamico.js";
 
 const ASISTENCIA_VACIA = Object.freeze({});
+const LISTA_VACIA = Object.freeze([]);
 
 const obtenerAsistenciaDeSnapshot = (snapshot, referencia) => {
   const clave = obtenerClaveIdentidadPersona({
@@ -517,6 +527,7 @@ const diagnosticoDisponibilidad = compararDisponibilidadCalendario({
     personal,
     fecha: keyDia,
     turnoConsultado: turnoActivo,
+    turnoBaseContexto: turnoActivo,
     padronVigencias,
     novedadesModernas: novedades,
     licenciasLegacy: licenciasLectura,
@@ -1390,6 +1401,11 @@ const confirmarNoDisponible = () => {
         personal
       }).certificaciones
     );
+    setCalendario((prev) => invalidarPresenteV2({
+      calendario: prev,
+      fecha: keyDia,
+      persona: personaActual
+    }));
     setFormularioNoDisponible(null);
     return;
   }
@@ -1446,15 +1462,19 @@ const confirmarNoDisponible = () => {
       setFormularioNoDisponible((actual) => ({ ...actual, error: vinculado.error }));
       return;
     }
-    setCalendario((prev) => vincularCambioOtroTurno({
-      calendarioCategoria: prev,
+    setCalendario((prev) => invalidarPresenteV2({
+      calendario: vincularCambioOtroTurno({
+        calendarioCategoria: prev,
+        fecha: keyDia,
+        titular: formularioNoDisponible.persona,
+        sector: formularioNoDisponible.sectorOrigen,
+        extra: personaCobertura,
+        detalle: formularioNoDisponible.detalle,
+        personal: personalFiltrado
+      }).calendario,
       fecha: keyDia,
-      titular: formularioNoDisponible.persona,
-      sector: formularioNoDisponible.sectorOrigen,
-      extra: personaCobertura,
-      detalle: formularioNoDisponible.detalle,
-      personal: personalFiltrado
-    }).calendario);
+      persona: formularioNoDisponible.persona
+    }));
     setFormularioNoDisponible(null);
     return;
   }
@@ -1474,7 +1494,8 @@ const confirmarNoDisponible = () => {
 
   actualizarNoDisponibleEnOrigen(formularioNoDisponible.registro, (prev) => {
     const lista = prev.noDisponibles?.[keyDia] || [];
-    return {
+    return invalidarPresenteV2({
+      calendario: {
       ...prev,
       noDisponibles: {
         ...(prev.noDisponibles || {}),
@@ -1485,7 +1506,10 @@ const confirmarNoDisponible = () => {
           personal: personalFiltrado
         })
       }
-    };
+      },
+      fecha: keyDia,
+      persona: formularioNoDisponible.persona
+    });
   }, formularioNoDisponible.contexto.calendario);
   setFormularioNoDisponible(null);
 };
@@ -1494,16 +1518,21 @@ const aplicarQuitarNoDisponible = ({ persona, registro, accionExtra = "", calend
   actualizarNoDisponibleEnOrigen(registro, (prev) => {
     const tieneExtraVinculado = Boolean(registro?.personaCoberturaId);
     if (tieneExtraVinculado) {
-      return eliminarNoDisponibleVinculado({
+      return invalidarPresenteV2({
+        calendario: eliminarNoDisponibleVinculado({
         calendarioCategoria: prev,
         fecha: keyDia,
         titular: persona,
         accionExtra,
         personal: personalFiltrado
+        }),
+        fecha: keyDia,
+        persona
       });
     }
     const lista = prev.noDisponibles?.[keyDia] || [];
-    return {
+    return invalidarPresenteV2({
+      calendario: {
       ...prev,
       noDisponibles: {
         ...(prev.noDisponibles || {}),
@@ -1513,7 +1542,10 @@ const aplicarQuitarNoDisponible = ({ persona, registro, accionExtra = "", calend
           personalFiltrado
         )
       }
-    };
+      },
+      fecha: keyDia,
+      persona
+    });
   }, calendarioEsperado);
 };
 
@@ -1558,16 +1590,35 @@ const quitarNoDisponibleDesdeBloque = (item) => {
 
 const quitarCertificacionRapida = (certificacion) => {
   if (soloLecturaEfectiva || !certificacion?.id) return;
+  const persona = resolverPersonaDesdeReferencia(certificacion, personal);
   setCertificaciones((actuales) => eliminarCertificacionPorElDia({
     certificaciones: actuales,
     certificacionId: certificacion.id
   }));
+  if (persona) {
+    setCalendario((prev) => invalidarPresenteV2({
+      calendario: prev,
+      fecha: keyDia,
+      persona
+    }));
+  }
 };
 
 const personasPrevistas = obtenerPersonasPrevistasConAusentes({
   asignaciones: asignacionOrdenada,
   ausentes: ausentesDelDia
     });
+const cohorteConfirmable = obtenerCohorteConfirmable({
+  asignaciones: asignacionOrdenada,
+  esPersonaDisponible: esPersonaDisponibleNormalizada
+});
+const cohortePresentacionAsistencia = obtenerCohortePresentacionAsistenciaV2({
+  cohorteConfirmable,
+  ausentesLegacy: ausentesDelDia
+});
+const puedeConfirmarPresente = (persona) => cohorteConfirmable.some((actual) =>
+  personasCompartenIdentidad(actual, persona)
+);
 const snapshotPresentacion = bloqueadoPorCierre && snapshotCierre
   ? snapshotCierre
   : null;
@@ -1576,11 +1627,12 @@ const datosPresentacionDia = resolverDatosPresentacionCierreTurno({
   reconstruccion: {
     asignaciones: asignacionOrdenada,
     asistencia: asistenciaFecha,
-    personasPrevistas,
+    personasPrevistas: cohortePresentacionAsistencia,
     libres,
     licencias: personalFiltrado.filter(estaDeLicenciaHoy),
     certificaciones: certificados,
     noDisponibles: noDisponiblesPresentacion.map((registro) => registro.persona).filter(Boolean),
+    noDisponiblesDetalle: noDisponiblesPresentacion,
     extrasRegistrados: Array.isArray(extras[keyDia]) ? extras[keyDia].filter(Boolean) : []
   }
 });
@@ -1591,6 +1643,7 @@ const libresMostrados = datosPresentacionDia.libres;
 const licenciasMostradas = datosPresentacionDia.licencias;
 const certificacionesMostradas = datosPresentacionDia.certificaciones;
 const noDisponiblesMostrados = datosPresentacionDia.noDisponibles;
+const noDisponiblesDetalleMostrados = datosPresentacionDia.noDisponiblesDetalle || LISTA_VACIA;
 const extrasMostrados = datosPresentacionDia.extrasRegistrados;
 
 useEffect(() => {
@@ -1629,6 +1682,9 @@ useEffect(() => {
   const datosParaPDF = {
     asignaciones: asignacionesParaPDF,
     libres: libresParaPDF,
+    noDisponiblesDetalle: snapshotPresentacion
+      ? noDisponiblesDetalleMostrados
+      : noDisponiblesPresentacion,
     ...(snapshotPresentacion ? { certificacionesCongeladas: certificacionesMostradas } : {}),
     fuentePresentacion: snapshotPresentacion ? "snapshot_cierre" : "reconstruccion_operativa",
     resumenInicio: {
@@ -1636,14 +1692,17 @@ useEffect(() => {
       personasPrevistas: personasPrevistasMostradas,
       asistencia: asistenciaMostrada,
       libres: libresParaPDF,
-      ausentes: [
-        ...(snapshotPresentacion
-          ? []
-          : ausentesDelDia.map((registro) => registro.persona).filter(Boolean)),
-        ...licenciasMostradas,
-        ...certificacionesMostradas,
-        ...noDisponiblesMostrados
-      ],
+      ausentes: snapshotPresentacion
+        ? personasPrevistasMostradas.filter((persona) =>
+            obtenerEstadoAsistencia(asistenciaMostrada, persona) === ESTADOS_ASISTENCIA.AUSENTE
+          )
+        : ausentesDelDia.map((registro) => registro.persona).filter(Boolean),
+      noDisponibles: noDisponiblesMostrados,
+      noDisponiblesDetalle: snapshotPresentacion
+        ? noDisponiblesDetalleMostrados
+        : noDisponiblesPresentacion,
+      licencias: licenciasMostradas,
+      certificaciones: certificacionesMostradas,
       extras: extrasMostrados,
       sectoresCriticosSinCobertura: snapshotPresentacion
         ? (snapshotPresentacion.sectoresSinCobertura || [])
@@ -1680,6 +1739,7 @@ useEffect(() => {
   licenciasMostradas,
   noDisponiblesDia,
   noDisponiblesMostrados,
+  noDisponiblesDetalleMostrados,
   noDisponiblesPresentacion,
   onDataReady,
   personalFiltrado,
@@ -1736,7 +1796,7 @@ useEffect(() => {
   })();
   const resumenTurno = crearResumenTurno({
     asignaciones: asignacionOrdenada,
-    personasPrevistas,
+    personasPrevistas: cohortePresentacionAsistencia,
     asistencia: asistenciaFecha,
     ...datosResumenTurno
   });
@@ -1823,6 +1883,9 @@ useEffect(() => {
       estadoAsistencia: item.enfermero
         ? obtenerEstadoAsistencia(asistenciaMostrada, item.enfermero)
         : ESTADOS_ASISTENCIA.PENDIENTE,
+      puedeConfirmarPresente: Boolean(
+        item.enfermero && puedeConfirmarPresente(item.enfermero)
+      ),
       criticoSinCobertura: !item.enfermero && nombresCriticosSinCobertura.has(
         normalizar(item.etiqueta || item.nombre)
       )
@@ -1861,12 +1924,28 @@ useEffect(() => {
       fecha: keyDia,
       tipo,
       resumen: resumenTurno,
-      asignaciones: asignacionOrdenada,
+      asignaciones: asignacionOrdenada.map((item) => {
+        if (item.tipo === "divider" || item.enfermero) return item;
+        const liberadoPorAusencia = ausentesDelDia.some(
+          (ausente) => normalizar(ausente.sectorOrigen) === normalizar(item.nombre)
+        );
+        if (liberadoPorAusencia) {
+          return { ...item, etiquetaVacio: "Sin asignar - ausencia" };
+        }
+        const noDisponible = noDisponiblesPresentacion.find(
+          (registro) => normalizar(registro.sectorOrigen) === normalizar(item.nombre)
+        );
+        return noDisponible
+          ? { ...item, etiquetaVacio: `Sin cobertura — ${noDisponible.motivoBreve}` }
+          : item;
+      }),
       asistencia: asistenciaFecha,
+      personasPrevistas: cohortePresentacionAsistencia,
       libres: datosResumenTurno.libres,
       licencias: datosResumenTurno.licencias,
       certificaciones: datosResumenTurno.certificaciones,
       noDisponibles: datosResumenTurno.noDisponibles,
+      noDisponiblesDetalle: noDisponiblesPresentacion,
       extrasRegistrados: datosResumenTurno.extras,
       destinosOperativos: datosResumenTurno.destinosOperativos,
       sectoresReales: datosResumenTurno.sectoresReales
@@ -1910,6 +1989,17 @@ useEffect(() => {
     const estabaAusente =
       obtenerEstadoAsistencia(asistenciaFecha, persona) ===
       ESTADOS_ASISTENCIA.AUSENTE;
+    if (estado === ESTADOS_ASISTENCIA.AUSENTE && !estabaAusente) {
+      setErrorAsistencia("Las nuevas ausencias se registran desde No disponible.");
+      return;
+    }
+    const personaConfirmable = cohorteConfirmable.some((actual) =>
+      personasCompartenIdentidad(actual, persona)
+    );
+    if (estado === ESTADOS_ASISTENCIA.PRESENTE && !estabaAusente && !personaConfirmable) {
+      setErrorAsistencia("La persona no está disponible para confirmar presencia.");
+      return;
+    }
     if (
       (estado === ESTADOS_ASISTENCIA.AUSENTE && !asignacionActual) ||
       (
@@ -1922,10 +2012,22 @@ useEffect(() => {
       return;
     }
     const sectorActual = asignacionActual?.nombre || "";
+    const calendarioActual = obtenerCalendarioActual
+      ? obtenerCalendarioActual()
+      : calendario;
+    if (!estabaAusente) {
+      if (calendarioActual !== calendario) {
+        setErrorAsistencia("El calendario cambió. Revisá nuevamente la asistencia.");
+        return;
+      }
+      setErrorAsistencia("");
+      setCalendario((prev) => prev === calendario
+        ? cambiarPresenciaV2({ calendario: prev, fecha: keyDia, persona, estado })
+        : prev);
+      return;
+    }
     const resultado = prepararCambioAsistencia({
-      calendarioActual: obtenerCalendarioActual
-        ? obtenerCalendarioActual()
-        : calendario,
+      calendarioActual,
       calendarioEsperado: calendario,
       fecha: keyDia,
       persona,
@@ -1947,24 +2049,14 @@ useEffect(() => {
   };
 
   const marcarTodosPresentes = () => {
-    if (soloLecturaEfectiva || personasPrevistas.length === 0) return;
+    if (soloLecturaEfectiva || cohorteConfirmable.length === 0) return;
     setCalendario((prev) => {
       if (prev !== calendario) return prev;
-      return personasPrevistas.reduce(
-        (actual, persona) => cambiarAsistenciaCalendario({
-          calendario: actual,
-          fecha: keyDia,
-          persona,
-          sectorActual: asignacionOrdenada.find(
-            (item) => personasCompartenIdentidad(item.enfermero, persona)
-          )?.nombre || "",
-          estado: ESTADOS_ASISTENCIA.PRESENTE,
-          sectoresVisibles: asignacionOrdenada
-            .filter((item) => item.tipo !== "divider")
-            .map((item) => item.nombre)
-        }),
-        prev
-      );
+      return marcarCohortePresenteV2({
+        calendario: prev,
+        fecha: keyDia,
+        personas: cohorteConfirmable
+      });
     });
   };
 
@@ -1987,24 +2079,10 @@ useEffect(() => {
           : actual,
         prev
       );
-      const asistenciaActual = { ...(conAusenciasResueltas.asistenciaDia || {}) };
-      const registrosPendientes = Object.fromEntries(
-        Object.entries(asistenciaActual[keyDia] || {}).filter(
-          ([, registro]) =>
-            registro &&
-            typeof registro === "object" &&
-            registro.sinAsignar === true
-        )
-      );
-      if (Object.keys(registrosPendientes).length > 0) {
-        asistenciaActual[keyDia] = registrosPendientes;
-      } else {
-        delete asistenciaActual[keyDia];
-      }
-      return {
-        ...conAusenciasResueltas,
-        asistenciaDia: asistenciaActual
-      };
+      return limpiarPresentesV2({
+        calendario: conAusenciasResueltas,
+        fecha: keyDia
+      });
     });
   };
 
@@ -2497,7 +2575,30 @@ useEffect(() => {
           (registro) => normalizar(registro.sectorOrigen) === normalizar(item.nombre)
         )
       : null;
-    const bg = bloqueadoPorCierre
+    const personaGestionNoDisponible = item.enfermero
+      ? personalFiltrado.find((persona) =>
+          personasCompartenIdentidad(persona, item.enfermero)
+        ) || null
+      : null;
+    const esExtraDelDia = item.enfermero && extrasDia.some((extra) =>
+      personasCompartenIdentidad(extra, item.enfermero)
+    );
+    const registroNoDisponible = personaGestionNoDisponible
+      ? noDisponiblesDia.find((referencia) =>
+          referenciaCorrespondeAPersona(
+            referencia,
+            personaGestionNoDisponible,
+            personalFiltrado
+          )
+        ) || null
+      : null;
+    const estadoAsistenciaItem = item.enfermero
+      ? obtenerEstadoAsistencia(asistenciaMostrada, item.enfermero)
+      : ESTADOS_ASISTENCIA.PENDIENTE;
+    const estaPresente = estadoAsistenciaItem === ESTADOS_ASISTENCIA.PRESENTE;
+    const bg = estaPresente
+      ? "border-emerald-300 bg-emerald-50 ring-1 ring-inset ring-emerald-200 shadow-md shadow-emerald-200/60"
+      : bloqueadoPorCierre
       ? item.sacrificado
         ? "bg-slate-200"
         : "bg-white"
@@ -2538,27 +2639,23 @@ useEffect(() => {
                   : "Sin cobertura"}
           </span>
           {item.enfermero && (
-            <select
-              aria-label={`Asistencia de ${obtenerNombreConMarcaTurnante(item.enfermero)}`}
-              value={obtenerEstadoAsistencia(asistenciaMostrada, item.enfermero)}
-              disabled={soloLecturaEfectiva}
-              onClick={(evento) => evento.stopPropagation()}
-              onChange={(evento) => {
-                evento.stopPropagation();
-                cambiarAsistencia(item.enfermero, evento.target.value);
-              }}
-              className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                obtenerEstadoAsistencia(asistenciaMostrada, item.enfermero) === ESTADOS_ASISTENCIA.PRESENTE
-                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                  : obtenerEstadoAsistencia(asistenciaMostrada, item.enfermero) === ESTADOS_ASISTENCIA.AUSENTE
-                    ? "border-red-300 bg-red-50 text-red-800"
-                    : "border-slate-300 bg-white text-slate-600"
-              }`}
-            >
-              <option value={ESTADOS_ASISTENCIA.PENDIENTE}>Pendiente</option>
-              <option value={ESTADOS_ASISTENCIA.PRESENTE}>✓ Presente</option>
-              <option value={ESTADOS_ASISTENCIA.AUSENTE}>✕ Ausente</option>
-            </select>
+            <ControlesAsistenciaV2
+              persona={item.enfermero}
+              nombre={obtenerNombreConMarcaTurnante(item.enfermero)}
+              estado={estadoAsistenciaItem}
+              confirmable={puedeConfirmarPresente(item.enfermero)}
+              puedeGestionarNoDisponible={Boolean(
+                personaGestionNoDisponible &&
+                !esExtraDelDia &&
+                !estaCertificadoHoy(personaGestionNoDisponible)
+              )}
+              soloLectura={soloLecturaEfectiva}
+              onCambiarAsistencia={cambiarAsistencia}
+              onGestionarNoDisponible={() => abrirFormularioNoDisponible(
+                personaGestionNoDisponible,
+                registroNoDisponible
+              )}
+            />
           )}
         </div>
       </div>
@@ -2698,23 +2795,24 @@ useEffect(() => {
             <p>
               Categoría: {ausente.categoria === "licenciado" ? "Licenciados" : "Enfermeros"}
             </p>
-            <label className="mt-2 block font-medium">
-              Estado
-              <select
-                aria-label={`Asistencia de ${ausente.nombre}`}
-                value={ESTADOS_ASISTENCIA.AUSENTE}
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <span className="rounded-full border border-violet-300 bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-900">
+                Ausente legacy
+              </span>
+              <button
+                type="button"
+                aria-label={`Restaurar ausencia de ${ausente.nombre}`}
                 disabled={soloLecturaEfectiva || !ausente.persona}
-                onChange={(evento) => {
-                  if (!ausente.persona) return;
-                  cambiarAsistencia(ausente.persona, evento.target.value);
+                onClick={() => {
+                  if (ausente.persona) {
+                    cambiarAsistencia(ausente.persona, ESTADOS_ASISTENCIA.PENDIENTE);
+                  }
                 }}
-                className="mt-1 w-full rounded-md border border-violet-300 bg-white px-2 py-1.5"
+                className="min-h-11 rounded-lg border border-violet-300 bg-white px-3 text-xs font-semibold text-violet-900 transition hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-500/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <option value={ESTADOS_ASISTENCIA.PENDIENTE}>Pendiente</option>
-                <option value={ESTADOS_ASISTENCIA.PRESENTE}>✓ Presente</option>
-                <option value={ESTADOS_ASISTENCIA.AUSENTE}>✕ Ausente</option>
-              </select>
-            </label>
+                Restaurar / quitar ausencia
+              </button>
+            </div>
           </article>
         );
       })}

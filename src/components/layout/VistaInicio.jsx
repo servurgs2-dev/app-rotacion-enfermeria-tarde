@@ -44,7 +44,10 @@ function ResumenCategoria({ titulo, datos }) {
       <h3 className="font-bold text-slate-900">{titulo}</h3>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Metrica etiqueta="Previstos" valor={datos.previstos} />
-        <Metrica etiqueta="Ausentes" valor={datos.ausentes} destacada={datos.ausentes > 0} />
+        <Metrica etiqueta="Presentes" valor={datos.presentes || 0} />
+        <Metrica etiqueta="Pendientes de confirmar" valor={datos.pendientes || 0} destacada={datos.pendientes > 0} />
+        <Metrica etiqueta="No disponibles" valor={datos.noDisponibles || 0} destacada={datos.noDisponibles > 0} />
+        <Metrica etiqueta="Ausentes legacy" valor={datos.ausentesAsistencia || 0} destacada={datos.ausentesAsistencia > 0} />
         <Metrica etiqueta="Libres" valor={datos.libres} />
         <Metrica etiqueta="Extras" valor={datos.extras} />
         <Metrica etiqueta="Sin asignar" valor={datos.sinAsignar} />
@@ -136,7 +139,10 @@ function VistaInicio({
 
       <section aria-label="Resumen general" className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Metrica etiqueta="Dotación prevista" valor={general.previstos || 0} />
-        <Metrica etiqueta="Ausentes / No disponibles" valor={general.ausentes || 0} destacada={general.ausentes > 0} />
+        <Metrica etiqueta="Presentes" valor={general.presentes || 0} />
+        <Metrica etiqueta="Pendientes de confirmar" valor={general.pendientes || 0} destacada={general.pendientes > 0} />
+        <Metrica etiqueta="No disponibles" valor={general.noDisponibles || 0} destacada={general.noDisponibles > 0} />
+        <Metrica etiqueta="Ausentes legacy" valor={general.ausentesAsistencia || 0} destacada={general.ausentesAsistencia > 0} />
         <Metrica etiqueta="Libres" valor={general.libres || 0} />
         <Metrica etiqueta="Extras" valor={general.extras || 0} />
         <Metrica etiqueta="Sin asignar" valor={general.sinAsignar || 0} />
@@ -146,6 +152,20 @@ function VistaInicio({
         <ResumenCategoria titulo="Enfermeros" datos={enfermeros} />
         <ResumenCategoria titulo="Licenciados" datos={licenciados} />
       </div>
+
+      {(general.noDisponiblesDetalle || []).length > 0 && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+          <h3 className="font-bold text-slate-900">No disponibles del turno</h3>
+          <ul className="mt-2 space-y-1 text-sm text-amber-950">
+            {general.noDisponiblesDetalle.map((detalle, indice) => (
+              <li key={detalle?.persona?.personaId || detalle?.persona?.id || detalle?.registro?.id || indice}>
+                <strong>{detalle?.persona?.nombre || detalle?.nombre || "Persona"}</strong>
+                {` — ${detalle?.motivoEtiqueta || detalle?.motivoBreve || detalle?.motivo || "Motivo no informado"}`}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className={`rounded-2xl border p-4 shadow-sm ${sectoresCriticos.length > 0 ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}>
         <h3 className="font-bold text-slate-900">Sectores críticos</h3>

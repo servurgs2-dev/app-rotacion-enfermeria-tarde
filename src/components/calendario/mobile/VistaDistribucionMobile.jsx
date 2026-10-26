@@ -1,3 +1,4 @@
+import ControlesAsistenciaV2 from "../ControlesAsistenciaV2.jsx";
 import { ESTADOS_ASISTENCIA } from "../../../utils/asistenciaPersonas.js";
 
 const clasesEstado = Object.freeze({
@@ -8,35 +9,19 @@ const clasesEstado = Object.freeze({
   normal: "border-slate-200 bg-white"
 });
 
-function IconoSacarDeDistribucion() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      width="22"
-      height="22"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="7.5" cy="7" r="3" />
-      <path d="M2.75 18.5c.45-3 2.1-4.75 4.75-4.75 1.35 0 2.45.45 3.25 1.25" />
-      <path d="M13 11.5h8" />
-      <path d="m18 8.5 3 3-3 3" />
-    </svg>
-  );
-}
-
 function TarjetaSectorMobile({ fila, soloLectura, onSeleccionar, onCambiarAsistencia, onGestionarNoDisponible }) {
   if (fila.tipo === "divider") {
     return <div className="h-2" role="separator" />;
   }
 
+  const presente = fila.estadoAsistencia === ESTADOS_ASISTENCIA.PRESENTE;
+  const claseTarjeta = presente
+    ? "border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200 shadow-md shadow-emerald-200/60"
+    : clasesEstado[fila.estadoVisual] || clasesEstado.normal;
+
   return (
     <article
-      className={`rounded-xl border px-3 py-2 shadow-sm ${clasesEstado[fila.estadoVisual] || clasesEstado.normal}`}
+      className={`rounded-xl border px-3 py-2 transition-shadow ${claseTarjeta}`}
       data-sector-id={fila.sectorId || undefined}
       data-synthetic-id={fila.syntheticId || undefined}
     >
@@ -62,40 +47,19 @@ function TarjetaSectorMobile({ fila, soloLectura, onSeleccionar, onCambiarAsiste
         </button>
 
         {fila.persona && (
-          <>
-            <select
-              aria-label={`Asistencia de ${fila.textoPersona}`}
-              value={fila.estadoAsistencia}
-              disabled={soloLectura}
-              onClick={(evento) => evento.stopPropagation()}
-              onChange={(evento) => onCambiarAsistencia(fila.persona, evento.target.value)}
-              className={`min-h-11 max-w-28 rounded-lg border px-1.5 text-xs font-medium ${
-                fila.estadoAsistencia === ESTADOS_ASISTENCIA.PRESENTE
-                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                  : fila.estadoAsistencia === ESTADOS_ASISTENCIA.AUSENTE
-                    ? "border-red-300 bg-red-50 text-red-800"
-                    : "border-slate-300 bg-white text-slate-600"
-              }`}
-            >
-              <option value={ESTADOS_ASISTENCIA.PENDIENTE}>Pendiente</option>
-              <option value={ESTADOS_ASISTENCIA.PRESENTE}>✓ Presente</option>
-              <option value={ESTADOS_ASISTENCIA.AUSENTE}>✕ Ausente</option>
-            </select>
-            {fila.puedeMarcarNoDisponible && (
-              <button
-                type="button"
-                aria-label={`Marcar a ${fila.textoPersona} como no disponible`}
-                title="Marcar no disponible"
-                onClick={(evento) => {
-                  evento.stopPropagation();
-                  onGestionarNoDisponible(fila.personaGestionNoDisponible, fila.registroNoDisponible);
-                }}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-amber-300 bg-amber-50 text-amber-800 transition hover:bg-amber-100 active:bg-amber-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-500/30"
-              >
-                <IconoSacarDeDistribucion />
-              </button>
+          <ControlesAsistenciaV2
+            persona={fila.persona}
+            nombre={fila.textoPersona}
+            estado={fila.estadoAsistencia}
+            confirmable={fila.puedeConfirmarPresente}
+            puedeGestionarNoDisponible={fila.puedeMarcarNoDisponible}
+            soloLectura={soloLectura}
+            onCambiarAsistencia={onCambiarAsistencia}
+            onGestionarNoDisponible={() => onGestionarNoDisponible(
+              fila.personaGestionNoDisponible,
+              fila.registroNoDisponible
             )}
-          </>
+          />
         )}
       </div>
     </article>

@@ -7,7 +7,8 @@ import {
   obtenerFilasPlanillaPDF,
   obtenerPerfilVisualCalendarioPDF,
   prepararCertificacionesDiaPDF,
-  prepararFilasCalendarioPDF
+  prepararFilasCalendarioPDF,
+  prepararNoDisponiblesCalendarioPDF
 } from "../src/utils/exportPDF.js";
 import { obtenerSemanasDelMes } from "../src/utils/fechas.js";
 import {
@@ -101,6 +102,24 @@ const opciones = {
 const copiaOpciones = structuredClone(opciones);
 const pdf = crearCalendarioDiarioPDF(opciones);
 
+const noDisponiblesPDF = prepararNoDisponiblesCalendarioPDF({
+  enfermeros: {
+    noDisponiblesDetalle: [
+      { persona: { id: "nd-1", nombre: "Gisella Gonzalez", categoria: "enfermero" }, motivo: "falta_sin_aviso" },
+      { persona: { id: "nd-2", nombre: "Silvina Noble", categoria: "enfermero" }, motivo: "supervision_autorizo_inasistencia" },
+      { persona: { id: "nd-3", nombre: "Donante", categoria: "enfermero" }, motivo: "donacion_sangre" },
+      { persona: { id: "nd-4", nombre: "Cambio", categoria: "enfermero" }, motivo: "cambio_otro_turno", sectorOrigen: "20+22-24", personaCoberturaNombre: "Cinthia del Rio" },
+      { persona: { id: "cert-dia", nombre: "Laura Gonzalez", categoria: "enfermero" }, motivo: "certificacion_dia", tipo: "certificacion_rapida" },
+      { persona: { id: "cert-rango", nombre: "Diego Correa", categoria: "enfermero" }, motivo: "certificacion", tipo: "certificacion", motivoEtiqueta: "CertificaciÃ³n mÃ©dica" },
+      { persona: { id: "nd-1", nombre: "Gisella Gonzalez", categoria: "enfermero" }, motivo: "falta_sin_aviso" }
+    ]
+  },
+  certificacionesDia: [
+    { nombre: "Laura Gonzalez", categoria: "Enfermero" },
+    { nombre: "Diego Correa", categoria: "Enfermero" }
+  ]
+});
+
 const prioridadLicenciadosV2 = CANDIDATOS_PRIORIDAD_COBERTURA_LICENCIADOS_V2
   .map(({ id }) => id);
 const snapshotLicenciadosV2 = crearSnapshotConfiguracionPlanillaLicenciadosV2({
@@ -128,6 +147,55 @@ const filaV2 = (destinoId, nombre, enfermero = null) => ({
 
 probar("1 el PDF diario tiene exactamente una página", () => {
   assert.equal(pdf.getNumberOfPages(), 1);
+});
+probar("1a prepara la seccion No Disponibles del turno", () => {
+  assert.equal(noDisponiblesPDF.length, 4);
+});
+probar("1b Falta sin aviso conserva su etiqueta", () => {
+  assert.match(noDisponiblesPDF.find((item) => item.personaId === "nd-1").texto, /Falta sin aviso/);
+});
+probar("1c Supervision autorizo inasistencia conserva su etiqueta", () => {
+  assert.match(noDisponiblesPDF.find((item) => item.personaId === "nd-2").texto, /Supervisi\u00f3n autoriz\u00f3 inasistencia/);
+});
+probar("1d Donacion de sangre conserva su etiqueta", () => {
+  assert.match(noDisponiblesPDF.find((item) => item.personaId === "nd-3").texto, /Donaci\u00f3n de sangre/);
+});
+probar("1e Cambio con otro turno conserva su etiqueta", () => {
+  assert.match(noDisponiblesPDF.find((item) => item.personaId === "nd-4").texto, /Cambio con otro turno/);
+});
+probar("1f Cambio con otro turno conserva persona cubierta", () => {
+  assert.match(noDisponiblesPDF.find((item) => item.personaId === "nd-4").texto, /Cubierta por: Cinthia del Rio/);
+});
+probar("1g Cambio con otro turno conserva sector", () => {
+  assert.match(noDisponiblesPDF.find((item) => item.personaId === "nd-4").texto, /Sector: 20\+22-24/);
+});
+probar("1h certificacion por el dia no se duplica", () => {
+  assert.equal(noDisponiblesPDF.some((item) => item.personaId === "cert-dia"), false);
+});
+probar("1h2 certificacion medica de rango no se duplica", () => {
+  assert.equal(noDisponiblesPDF.some((item) => item.personaId === "cert-rango"), false);
+});
+probar("1i identidades No Disponibles no se duplican", () => {
+  assert.equal(noDisponiblesPDF.filter((item) => item.personaId === "nd-1").length, 1);
+});
+probar("1i2 una causa operativa real no se oculta aunque la persona este certificada", () => {
+  const resultado = prepararNoDisponiblesCalendarioPDF({
+    enfermeros: { noDisponiblesDetalle: [{ persona: { id: "real", nombre: "Persona Real", categoria: "enfermero" }, motivo: "supervision_autorizo_inasistencia" }] },
+    certificacionesDia: [{ nombre: "Persona Real", categoria: "Enfermero" }]
+  });
+  assert.equal(resultado.length, 1);
+  assert.match(resultado[0].texto, /Supervisi\u00f3n autoriz\u00f3 inasistencia/);
+});
+probar("1j sin No Disponibles no se generan elementos", () => {
+  assert.deepEqual(prepararNoDisponiblesCalendarioPDF({ enfermeros: opciones.enfermeros }), []);
+});
+probar("1k el PDF renderiza la seccion cuando hay No Disponibles", () => {
+  const pdfConNoDisponibles = crearCalendarioDiarioPDF({
+    ...opciones,
+    enfermeros: { ...opciones.enfermeros, noDisponiblesDetalle: noDisponiblesPDF }
+  });
+  const contenido = pdfConNoDisponibles.internal.pages.flat(Infinity).join(" ");
+  assert.match(contenido, /NO DISPONIBLES DEL TURNO/);
 });
 probar("2 utiliza A4 horizontal", () => {
   assert.ok(pdf.internal.pageSize.getWidth() > pdf.internal.pageSize.getHeight());

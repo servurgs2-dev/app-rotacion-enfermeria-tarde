@@ -109,17 +109,23 @@ function BloquesOperativosMobile({
                   <p className="truncate text-sm font-semibold text-slate-900">{item.nombre}</p>
                   <p className="text-xs text-slate-600">{item.detalle}</p>
                 </div>
-                <select
-                  aria-label={`Asistencia de ${item.nombre}`}
-                  value={ESTADOS_ASISTENCIA.AUSENTE}
-                  disabled={soloLectura || !item.persona}
-                  onChange={(evento) => item.persona && onCambiarAsistencia(item.persona, evento.target.value)}
-                  className="min-h-11 max-w-28 rounded-lg border border-violet-300 bg-white px-1.5 text-xs"
-                >
-                  <option value={ESTADOS_ASISTENCIA.PENDIENTE}>Pendiente</option>
-                  <option value={ESTADOS_ASISTENCIA.PRESENTE}>✓ Presente</option>
-                  <option value={ESTADOS_ASISTENCIA.AUSENTE}>✕ Ausente</option>
-                </select>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="rounded-full border border-violet-300 bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-900">
+                    Ausente legacy
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Restaurar ausencia de ${item.nombre}`}
+                    disabled={soloLectura || !item.persona}
+                    onClick={() => item.persona && onCambiarAsistencia(
+                      item.persona,
+                      ESTADOS_ASISTENCIA.PENDIENTE
+                    )}
+                    className="min-h-11 rounded-lg border border-violet-300 bg-white px-3 text-xs font-semibold text-violet-900 transition hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Restaurar
+                  </button>
+                </div>
               </div>
             ))}
           </div>

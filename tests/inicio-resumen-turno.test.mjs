@@ -95,7 +95,13 @@ probar("consolida libres, ausentes, Extras y sin asignar", () => {
   });
   assert.deepEqual(resumen.general, {
     previstos: 3,
+    presentes: 0,
+    pendientes: 3,
+    ausentesAsistencia: 0,
     ausentes: 2,
+    noDisponibles: 0,
+    licencias: 0,
+    certificaciones: 0,
     libres: 1,
     extras: 1,
     sinAsignar: 1
@@ -142,7 +148,7 @@ probar("Inicio usa fecha global, modo histórico y salidas productivas del Calen
   const calendario = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
   const vista = fs.readFileSync("src/components/layout/VistaInicio.jsx", "utf8");
   assert.match(app, /fecha=\{keyDiaActual\}/);
-  assert.match(app, /modoHistorico=\{mesActivo < mesActual\}/);
+  assert.match(app, /modoHistorico=\{mesHistoricoCerradoActivo\}/);
   assert.match(app, /dataPDFEnf\.resumenInicio/);
   assert.match(app, /dataPDFLic\.resumenInicio/);
   assert.doesNotMatch(app, /setResumenInicioEnfermeros|setResumenInicioLicenciados/);

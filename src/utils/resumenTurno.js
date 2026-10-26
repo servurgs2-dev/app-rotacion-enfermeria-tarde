@@ -189,6 +189,7 @@ export const crearResumenTurno = ({
       libres: contarPersonas(libres),
       licencias: contarPersonas(licencias),
       certificaciones: contarPersonas(certificaciones),
+      noDisponibles: contarPersonas(noDisponibles),
       extras: contarPersonas(extras),
       sectoresSinCobertura: sectoresVacios.length
     },

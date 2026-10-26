@@ -16,6 +16,16 @@ const personasUnicas = (personas) => [
   ).values()
 ];
 
+const detallesNoDisponiblesUnicos = (detalles) => [
+  ...new Map(
+    lista(detalles).map((detalle, indice) => {
+      const clave = obtenerClaveIdentidadPersona(detalle?.persona || detalle) ||
+        detalle?.registro?.id || detalle?.id || `detalle:${indice}`;
+      return [clave, detalle];
+    })
+  ).values()
+];
+
 const obtenerSinAsignar = (asignaciones) => personasUnicas(
   lista(asignaciones)
     .filter((asignacion) =>
@@ -26,6 +36,10 @@ const obtenerSinAsignar = (asignaciones) => personasUnicas(
 
 export const crearResumenCategoriaInicio = (datos = {}) => {
   const ausentes = personasUnicas(datos.ausentes);
+  const noDisponibles = personasUnicas(datos.noDisponibles);
+  const licencias = personasUnicas(datos.licencias);
+  const certificaciones = personasUnicas(datos.certificaciones);
+  const noDisponiblesDetalle = detallesNoDisponiblesUnicos(datos.noDisponiblesDetalle);
   const libres = personasUnicas(datos.libres);
   const extras = personasUnicas(datos.extras);
   const sinAsignar = obtenerSinAsignar(datos.asignaciones);
@@ -39,11 +53,18 @@ export const crearResumenCategoriaInicio = (datos = {}) => {
     pendientes: asistencia.pendiente,
     ausentesAsistencia: asistencia.ausente,
     ausentes: ausentes.length,
+    noDisponibles: noDisponibles.length,
+    licencias: licencias.length,
+    certificaciones: certificaciones.length,
     libres: libres.length,
     extras: extras.length,
     sinAsignar: sinAsignar.length,
     personasSinAsignar: sinAsignar,
     personasAusentes: ausentes,
+    personasNoDisponibles: noDisponibles,
+    personasLicencias: licencias,
+    personasCertificaciones: certificaciones,
+    noDisponiblesDetalle,
     personasLibres: libres,
     personasExtras: extras,
     sectoresCriticos: [...new Set(lista(datos.sectoresCriticosSinCobertura).filter(Boolean))]
@@ -75,13 +96,24 @@ export const crearResumenInicioTurno = ({
     ...porCategoria.enfermero.sectoresCriticos,
     ...porCategoria.licenciado.sectoresCriticos
   ])];
+  const noDisponiblesDetalle = detallesNoDisponiblesUnicos([
+    ...porCategoria.enfermero.noDisponiblesDetalle,
+    ...porCategoria.licenciado.noDisponiblesDetalle
+  ]);
 
   return {
     fecha,
     porCategoria,
     general: {
       previstos: porCategoria.enfermero.previstos + porCategoria.licenciado.previstos,
+      presentes: porCategoria.enfermero.presentes + porCategoria.licenciado.presentes,
+      pendientes: porCategoria.enfermero.pendientes + porCategoria.licenciado.pendientes,
+      ausentesAsistencia: porCategoria.enfermero.ausentesAsistencia + porCategoria.licenciado.ausentesAsistencia,
       ausentes: todasLasPersonas("personasAusentes").length,
+      noDisponibles: todasLasPersonas("personasNoDisponibles").length,
+      licencias: todasLasPersonas("personasLicencias").length,
+      certificaciones: todasLasPersonas("personasCertificaciones").length,
+      ...(noDisponiblesDetalle.length > 0 ? { noDisponiblesDetalle } : {}),
       libres: todasLasPersonas("personasLibres").length,
       extras: todasLasPersonas("personasExtras").length,
       sinAsignar: todasLasPersonas("personasSinAsignar").length

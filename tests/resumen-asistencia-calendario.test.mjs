@@ -171,7 +171,7 @@ probar("Inicio recibe la cohorte y la asistencia por onDataReady", () => {
 
 probar("la corrección no modifica distribución ni Planilla", () => {
   const fuente = fs.readFileSync("src/components/calendario/CalendarioDiario.jsx", "utf8");
-  assert.match(fuente, /resumenInicio:\s*\{[\s\S]*personasPrevistas,/);
+  assert.match(fuente, /resumenInicio:\s*\{[\s\S]*personasPrevistas:\s*personasPrevistasMostradas/);
   assert.doesNotMatch(
     fs.readFileSync("src/utils/asistenciaPersonas.js", "utf8"),
     /planilla|resolverTurnantesYCoberturasOperativas/

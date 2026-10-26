@@ -62,6 +62,7 @@ export const resolverIndisponibilidadesDia = ({
       personal: personalCompleto,
       fecha,
       turnoConsultado: turno,
+      turnoBaseContexto: turno,
       padronVigencias: estadoMensual?.padronVigencias || [],
       novedadesModernas,
       licenciasLegacy: estadoMensual?.licencias,

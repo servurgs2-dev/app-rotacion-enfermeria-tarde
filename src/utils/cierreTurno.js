@@ -85,15 +85,19 @@ export const crearSnapshotCierreTurno = ({
   resumen,
   asignaciones,
   asistencia,
+  personasPrevistas,
   libres,
   licencias,
   certificaciones,
   noDisponibles,
+  noDisponiblesDetalle,
   extrasRegistrados,
   destinosOperativos,
   sectoresReales = []
 }) => {
-  const previstas = obtenerPersonasPrevistas(asignaciones);
+  const previstas = Array.isArray(personasPrevistas)
+    ? obtenerPersonasPrevistas(personasPrevistas.map((persona) => ({ enfermero: persona })))
+    : obtenerPersonasPrevistas(asignaciones);
   const asistenciaPrevistas = Object.fromEntries(
     previstas.map((persona) => [
       obtenerClaveIdentidadPersona(persona),
@@ -146,6 +150,18 @@ export const crearSnapshotCierreTurno = ({
     licencias: referenciasUnicas(licencias),
     certificaciones: referenciasUnicas(certificaciones),
     noDisponibles: referenciasUnicas(noDisponibles),
+    noDisponiblesDetalle: clonarSerializable(
+      (Array.isArray(noDisponiblesDetalle) ? noDisponiblesDetalle : []).map((item) => ({
+        persona: crearReferenciaPersona(item?.persona),
+        motivo: item?.motivo || "",
+        motivoEtiqueta: item?.motivoEtiqueta || item?.motivoBreve || "",
+        motivoBreve: item?.motivoBreve || item?.motivoEtiqueta || "",
+        sectorOrigen: item?.sectorOrigen || "",
+        turnoDestino: item?.turnoDestino || null,
+        personaCobertura: crearReferenciaPersona(item?.personaCobertura),
+        personaCoberturaNombre: item?.personaCoberturaNombre || ""
+      }))
+    ),
     extrasRegistrados: referenciasUnicas(extrasRegistrados),
     sectoresSinCobertura
   });
@@ -274,6 +290,7 @@ export const resolverDatosPresentacionCierreTurno = ({
     licencias: copiarListaSnapshot(snapshot.licencias),
     certificaciones: copiarListaSnapshot(snapshot.certificaciones),
     noDisponibles: copiarListaSnapshot(snapshot.noDisponibles),
+    noDisponiblesDetalle: copiarListaSnapshot(snapshot.noDisponiblesDetalle),
     extrasRegistrados: copiarListaSnapshot(snapshot.extrasRegistrados),
     sectoresSinCobertura: copiarListaSnapshot(snapshot.sectoresSinCobertura)
   };

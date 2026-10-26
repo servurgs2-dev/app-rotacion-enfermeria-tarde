@@ -80,6 +80,7 @@ export const resolverDisponibilidadPersonalPorFecha = ({
   personal = persona ? [persona] : [],
   fecha,
   turnoConsultado,
+  turnoBaseContexto,
   padronVigencias = [],
   novedadesModernas = [],
   licenciasLegacy = [],
@@ -101,7 +102,7 @@ export const resolverDisponibilidadPersonalPorFecha = ({
     advertencias.push({ codigo: "vigencia_turno_invalida", detalle: resolucionTurno.codigo });
   }
   const turnoEfectivo = resolucionTurno.turno ||
-    texto(persona?.turno || persona?.turnoBase) || null;
+    texto(persona?.turno || persona?.turnoBase || turnoBaseContexto) || null;
   const perteneceAlTurnoConsultado = Boolean(
     turnoEfectivo && texto(turnoConsultado) && turnoEfectivo === texto(turnoConsultado)
   );

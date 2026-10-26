@@ -14,6 +14,10 @@ import {
 import { resolverPersonaDeCertificacion } from "./certificacionesPersonas.js";
 import { obtenerNombreAsignacionCalendario } from "./procedenciaCoberturaAutomatica.js";
 import {
+  MOTIVOS_NO_DISPONIBLE,
+  obtenerConfiguracionMotivoNoDisponible
+} from "./noDisponiblesMotivos.js";
+import {
   obtenerConfiguracionPlanillaEfectiva,
   obtenerFilasActivas,
   obtenerAliasesSector,
@@ -805,6 +809,82 @@ export const obtenerAsignacionesCalendarioPDF = ({ asignaciones } = {}) => {
   return Array.isArray(asignaciones) ? asignaciones : [];
 };
 
+const obtenerDetallesNoDisponiblesFuentePDF = (fuente) => {
+  if (Array.isArray(fuente?.noDisponiblesDetalle)) return fuente.noDisponiblesDetalle;
+  return Array.isArray(fuente?.resumenInicio?.noDisponiblesDetalle)
+    ? fuente.resumenInicio.noDisponiblesDetalle
+    : [];
+};
+
+export const prepararNoDisponiblesCalendarioPDF = ({
+  enfermeros = {},
+  licenciados = {},
+  certificacionesDia = []
+} = {}) => {
+  const unicos = new Map();
+  const normalizarClave = (valor) => String(valor || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+  const clavesCertificadas = new Set(
+    (Array.isArray(certificacionesDia) ? certificacionesDia : []).map((certificacion) =>
+      `${normalizarClave(certificacion?.categoria)}:${normalizarClave(certificacion?.nombre)}`
+    )
+  );
+  [
+    [enfermeros, "Enfermero"],
+    [licenciados, "Licenciado"]
+  ].forEach(([fuente, categoriaPredeterminada]) => {
+    obtenerDetallesNoDisponiblesFuentePDF(fuente).forEach((detalle, indice) => {
+      const motivo = String(detalle?.motivo || detalle?.registro?.motivo || "").trim();
+      const persona = detalle?.persona || {};
+      const nombre = String(persona?.nombre || detalle?.nombre || "Persona sin identificar").trim();
+      const personaId = String(persona?.personaId || persona?.id || detalle?.personaId || "").trim();
+      const configuracion = obtenerConfiguracionMotivoNoDisponible(motivo);
+      const motivoEtiqueta = String(
+        detalle?.motivoEtiqueta || detalle?.motivoBreve || configuracion?.label || motivo || "Motivo no informado"
+      ).trim();
+      const categoria = persona?.categoria === "licenciado"
+        ? "Licenciado"
+        : persona?.categoria === "enfermero"
+          ? "Enfermero"
+          : categoriaPredeterminada;
+      const firmaOrigen = normalizarClave([
+        detalle?.tipo,
+        detalle?.origen,
+        motivo,
+        detalle?.motivoEtiqueta,
+        detalle?.motivoBreve,
+        detalle?.registro?.tipo,
+        detalle?.registro?.origen
+      ].filter(Boolean).join(" "));
+      const derivaDeCertificacion = motivo === MOTIVOS_NO_DISPONIBLE.CERTIFICACION_DIA ||
+        firmaOrigen.includes("certificacion");
+      if (
+        derivaDeCertificacion &&
+        clavesCertificadas.has(`${normalizarClave(categoria)}:${normalizarClave(nombre)}`)
+      ) return;
+      const sector = String(detalle?.sectorOrigen || detalle?.sector || "").trim();
+      const personaCobertura = String(
+        detalle?.personaCoberturaNombre || detalle?.personaCobertura?.nombre || ""
+      ).trim();
+      const aclaracion = String(detalle?.detalle || detalle?.observacion || detalle?.registro?.detalle || "").trim();
+      const partes = [
+        `${nombre} (${categoria}) — ${motivoEtiqueta}`,
+        sector ? `Sector: ${sector}` : "",
+        personaCobertura ? `Cubierta por: ${personaCobertura}` : "",
+        aclaracion && aclaracion !== motivoEtiqueta ? aclaracion : ""
+      ].filter(Boolean);
+      const clave = personaId || `${nombre.toLowerCase()}:${motivo}:${sector}:${indice}`;
+      if (!unicos.has(clave)) {
+        unicos.set(clave, { personaId: personaId || null, nombre, motivo, motivoEtiqueta, sector, personaCobertura, texto: partes.join(" · ") });
+      }
+    });
+  });
+  return [...unicos.values()];
+};
+
 const dibujarListaCompactaPDF = ({
   pdf,
   titulo,
@@ -925,9 +1005,14 @@ export const crearCalendarioDiarioPDF = ({
     fecha,
     personal
   });
+  const noDisponiblesDia = prepararNoDisponiblesCalendarioPDF({
+    enfermeros,
+    licenciados,
+    certificacionesDia
+  });
   const maximoFilas = Math.max(filasEnfermeros.length, filasLicenciados.length);
   const cantidadInferior = libresEnfermeros.length +
-    libresLicenciados.length + certificacionesDia.length;
+    libresLicenciados.length + certificacionesDia.length + noDisponiblesDia.length;
   const perfilVisual = obtenerPerfilVisualCalendarioPDF({
     maximoFilas,
     cantidadInferior
@@ -1054,7 +1139,7 @@ export const crearCalendarioDiarioPDF = ({
     inicioLibres + Math.max(altoLibresEnfermeros, altoLibresLicenciados) + 3;
 
   pdf.line(8, inicioCertificaciones - 3, 289, inicioCertificaciones - 3);
-  dibujarListaCompactaPDF({
+  const altoCertificaciones = dibujarListaCompactaPDF({
     pdf,
     titulo: "Certificaciones médicas del día",
     elementos: certificacionesDia.map((certificacion) => certificacion.texto),
@@ -1068,6 +1153,33 @@ export const crearCalendarioDiarioPDF = ({
     separacionFila: perfilVisual.separacionFilaInferior,
     altoLinea: perfilVisual.altoLineaInferior
   });
+
+  if (noDisponiblesDia.length > 0) {
+    let inicioNoDisponibles = inicioCertificaciones + altoCertificaciones + 3;
+    const columnasNoDisponibles = noDisponiblesDia.length > 6 ? 2 : 1;
+    const altoEstimadoNoDisponibles = 8 +
+      Math.ceil(noDisponiblesDia.length / columnasNoDisponibles) * perfilVisual.separacionFilaInferior;
+    if (inicioNoDisponibles + altoEstimadoNoDisponibles > 205) {
+      pdf.addPage("a4", "landscape");
+      inicioNoDisponibles = 12;
+    } else {
+      pdf.line(8, inicioNoDisponibles - 3, 289, inicioNoDisponibles - 3);
+    }
+    dibujarListaCompactaPDF({
+      pdf,
+      titulo: "No disponibles del turno",
+      elementos: noDisponiblesDia.map((detalle) => detalle.texto),
+      x: 8,
+      y: inicioNoDisponibles,
+      ancho: 281,
+      columnas: columnasNoDisponibles,
+      mensajeVacio: "",
+      fuenteTitulo: perfilVisual.fuenteTituloInferior,
+      fuenteContenido: perfilVisual.fuenteContenidoInferior,
+      separacionFila: perfilVisual.separacionFilaInferior,
+      altoLinea: perfilVisual.altoLineaInferior
+    });
+  }
 
   return pdf;
 };

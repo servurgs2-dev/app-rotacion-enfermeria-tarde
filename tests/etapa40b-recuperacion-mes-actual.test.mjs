@@ -71,8 +71,10 @@ for (const [nombre, preparar] of [
   });
 }
 
-await probar("R-1 no entra en recuperación", () => {
-  assert.equal(analizar({ mes: "2026-08" }).codigo, "PERIODO_NO_ACTUAL");
+await probar("R-1 faltante puede recuperar continuidad mensual", () => {
+  const resultado = analizar({ mes: "2026-08" });
+  assert.equal(resultado.permitida, true);
+  assert.equal(resultado.codigo, "MES_ANTERIOR_INEXISTENTE");
 });
 
 await probar("R+1 conserva un modo separado", () => {
@@ -148,7 +150,7 @@ const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const panel = await readFile(new URL("../src/components/mes/PanelPrepararMes.jsx", import.meta.url), "utf8");
 
 await probar("la UI ofrece una acción explícita para R", () => {
-  assert.match(app, />\s*Preparar mes actual\s*</);
+  assert.match(app, /mesActivo === mesActual \? "Preparar mes actual" : "Preparar mes faltante"/);
   assert.match(app, /MODO_PREPARACION_MES\.RECUPERACION_ACTUAL/);
 });
 

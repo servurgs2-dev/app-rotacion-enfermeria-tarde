@@ -1,6 +1,7 @@
 import { supabase } from "../supabase.js";
 import { normalizarEstadoMensual } from "../utils/estadoMensual.js";
 import { validarMes as validarMesCentral } from "../utils/periodosMensuales.js";
+import { proyectarMesesEstadoMensualLegacy } from "../utils/descubrimientoMeses.js";
 
 const validarMes = (mes) => {
   validarMesCentral(mes);
@@ -47,10 +48,7 @@ export const crearRepositorioEstadoMensual = (clienteSupabase) => {
       .select("mes");
 
     if (error) throw error;
-    return [...new Set((Array.isArray(data) ? data : []).map((fila) => {
-      validarMes(fila?.mes);
-      return fila.mes;
-    }))].sort((mesA, mesB) => mesB.localeCompare(mesA));
+    return proyectarMesesEstadoMensualLegacy(data);
   };
 
   return { cargarEstadoMensual, guardarEstadoMensual, listarMesesEstadoMensual };

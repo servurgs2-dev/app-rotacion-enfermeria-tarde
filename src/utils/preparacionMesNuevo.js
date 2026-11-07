@@ -573,7 +573,8 @@ export const analizarPreparacionMesNuevo = ({
   const analisisEnfermeros = analizarDistribucionBaseEnfermeros({
     distribucionBase: baseEnfermeros,
     filas: filasEnfermeros,
-    personal: personalCanonico
+    personal: personalCanonico,
+    cantidadEsperada: filasEnfermeros.length
   });
   if (!analisisEnfermeros.ok) {
     return { ...analisisEnfermeros, codigo: "BASE_ENFERMEROS" };

@@ -35,6 +35,15 @@ const lista = crearListaMesesNavegables({
 });
 const meses = lista.map(({ mes }) => mes);
 
+const listaNoviembreNoche = crearListaMesesNavegables({
+  mesReferencia: "2026-11",
+  turno: "noche",
+  mesesExistentes: [
+    { mes: "2026-09", turnos: ["noche"] },
+    { mes: "2026-08", turnos: ["tarde"] }
+  ]
+});
+
 probar("incluye R-1", () => assert.ok(meses.includes("2026-08")));
 probar("incluye R", () => assert.ok(meses.includes("2026-09")));
 probar("incluye R+1", () => assert.ok(meses.includes("2026-10")));
@@ -84,6 +93,40 @@ probar("existencia global no implica existencia en Noche", () => {
 probar("Julio sí existe para Tarde", () => assert.equal(
   existeMesParaTurno({ lista, mes: "2026-07", turno: "tarde" }), true
 ));
+probar("Noviembre puede navegar a Octubre", () => assert.equal(
+  obtenerMesAdyacenteNavegable({
+    lista: listaNoviembreNoche,
+    mesActivo: "2026-11",
+    direccion: -1
+  }),
+  "2026-10"
+));
+probar("Noviembre conserva Septiembre cuando existe para Noche", () => assert.equal(
+  existeMesParaTurno({ lista: listaNoviembreNoche, mes: "2026-09", turno: "noche" }),
+  true
+));
+probar("desde Octubre se puede navegar a Septiembre existente", () => assert.equal(
+  obtenerMesAdyacenteNavegable({
+    lista: listaNoviembreNoche,
+    mesActivo: "2026-10",
+    direccion: -1
+  }),
+  "2026-09"
+));
+probar("otro turno no contamina la existencia de Noche", () => assert.equal(
+  listaNoviembreNoche.some(({ mes }) => mes === "2026-08"),
+  false
+));
+probar("un histórico inexistente no se inventa", () => assert.equal(
+  listaNoviembreNoche.some(({ mes }) => mes === "2026-07"),
+  false
+));
+probar("Septiembre existente queda histórico y de sólo lectura", () => assert.equal(
+  obtenerIndicadorPeriodo(
+    listaNoviembreNoche.find(({ mes }) => mes === "2026-09").clasificacion
+  ),
+  "Sólo lectura"
+));
 probar("control tiene objetivos táctiles", () => assert.match(componente, /min-h-11[\s\S]*min-w-11/));
 probar("flechas tienen nombres accesibles", () => {
   assert.match(componente, /aria-label="Mes anterior"/);
@@ -108,12 +151,15 @@ probar("App muestra estado sin información sin crear datos", () => {
   assert.match(app, /mesActivoSinInformacion/);
 });
 probar("App muestra banner histórico accesible", () => assert.match(app, /Mes histórico · Sólo lectura/));
-probar("Inicio vuelve al período y fecha actuales", () => {
-  assert.match(app, /nuevaVista === "inicio"/);
-  assert.match(app, /seleccionarMesNavegable\(mesActual, \{ usarFechaActual: true \}\)/);
+probar("Inicio conserva el mes activo en vez de redirigir al actual", () => {
+  const inicio = app.indexOf("const cambiarVistaPrincipal");
+  const fin = app.indexOf("return (", inicio);
+  assert.doesNotMatch(app.slice(inicio, fin), /seleccionarMesNavegable\(mesActual/);
 });
-probar("Inicio no ofrece selector histórico", () => assert.match(app,
-  /vistaActiva === "inicio" \? \([\s\S]*Período actual[\s\S]*\) : \([\s\S]*<NavegadorMeses/));
+probar("Inicio comparte el navegador histórico", () => {
+  assert.doesNotMatch(app, /vistaActiva === "inicio" \? \([\s\S]*Período actual/);
+  assert.match(app, /<NavegadorMeses[\s\S]*onSeleccionar=\{seleccionarMesNavegable\}/);
+});
 probar("App no conserva type month ni alerta antigua", () => {
   assert.doesNotMatch(app, /type="month"/);
   assert.doesNotMatch(app, /Solo podés usar el mes actual o el siguiente/);

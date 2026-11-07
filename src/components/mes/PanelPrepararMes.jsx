@@ -137,7 +137,7 @@ function PanelPrepararMes({
           {esRecuperacionActual ? "Preparar mes actual" : "Preparar mes siguiente"}
         </h3>
         <p className="mt-3 rounded-xl border border-purple-200 bg-purple-50 p-3 text-sm text-purple-950">
-          Se copiará la base del mes anterior como referencia. Las semanas o
+          Se copiará la base del último mes anterior registrado como referencia. Las semanas o
           bloques restantes quedarán vacíos hasta que revises el Personal y
           generes la rotación.
         </p>

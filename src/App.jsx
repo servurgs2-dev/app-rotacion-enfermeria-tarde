@@ -121,6 +121,7 @@ import {
   analizarRecuperacionMesActual,
   MODO_PREPARACION_MES
 } from "./utils/recuperacionMesActual.js";
+import { obtenerMesOrigenPreparacion } from "./utils/origenPreparacionMes.js";
 import {
   clasificarPreparacion,
   obtenerPreparacionesMes,
@@ -1734,8 +1735,9 @@ const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2,
 const mesSiguiente = obtenerMesSiguiente(mesActual);
 const mesesNavegables = useMemo(() => crearListaMesesNavegables({
   mesesExistentes,
-  mesReferencia: mesActual
-}), [mesActual, mesesExistentes]);
+  mesReferencia: mesActual,
+  turno: turnoActivo
+}), [mesActual, mesesExistentes, turnoActivo]);
 
 const clasificacionPeriodoActivo = clasificarPeriodoMes({ mes: mesActivo });
 const mesHistoricoCerradoActivo = esMesHistoricoCerrado({ mes: mesActivo });
@@ -2158,8 +2160,13 @@ const confirmarReinicioMes = async () => {
 
 const iniciarPreparacionMes = async (modo = MODO_PREPARACION_MES.SIGUIENTE) => {
   const mesDestino = mesActivo;
-  const mesOrigen = obtenerMesAnterior(mesDestino);
   const turnoId = turnoActivo;
+  const mesOrigen = obtenerMesOrigenPreparacion({
+    turno: turnoId,
+    mesDestino,
+    mesesExistentes,
+    estadosPorTurnoMes: estadoPorTurnoMesRef.current
+  });
   const claveDestino = claveActiva;
   const metadatosDestino = metadatosPorClaveRef.current.get(claveDestino);
   const revisionDestino = String(metadatosDestino?.revisionConfirmada ?? "");
@@ -2192,6 +2199,10 @@ const iniciarPreparacionMes = async (modo = MODO_PREPARACION_MES.SIGUIENTE) => {
     hayPendientesEnClave(claveDestino)
   ) {
     alert("El mes destino debe estar cargado, estable y sin guardados pendientes.");
+    return;
+  }
+  if (!mesOrigen) {
+    alert("No existe un mes anterior registrado y utilizable para este turno.");
     return;
   }
   const claveOrigen = crearClaveTurnoMes(turnoId, mesOrigen);
@@ -2257,7 +2268,12 @@ const iniciarPreparacionMes = async (modo = MODO_PREPARACION_MES.SIGUIENTE) => {
   const metadatosActuales = metadatosPorClaveRef.current.get(claveDestino);
   const contextoActual = {
     turnoId: turnoActivo,
-    mesOrigen: obtenerMesAnterior(mesActivo),
+    mesOrigen: obtenerMesOrigenPreparacion({
+      turno: turnoActivo,
+      mesDestino: mesActivo,
+      mesesExistentes,
+      estadosPorTurnoMes: estadoPorTurnoMesRef.current
+    }),
     mesDestino: mesActivo,
     modo,
     revisionDestino: String(metadatosActuales?.revisionConfirmada ?? "")
@@ -2366,7 +2382,12 @@ const confirmarPreparacionMes = ({ configuracionLicenciadosV2 } = {}) => {
   const metadatosDestino = metadatosPorClaveRef.current.get(claveActiva);
   const contextoActual = {
     turnoId: turnoActivo,
-    mesOrigen: obtenerMesAnterior(mesActivo),
+    mesOrigen: obtenerMesOrigenPreparacion({
+      turno: turnoActivo,
+      mesDestino: mesActivo,
+      mesesExistentes,
+      estadosPorTurnoMes: estadoPorTurnoMesRef.current
+    }),
     mesDestino: mesActivo,
     modo: preparacionMes.contexto.modo,
     revisionDestino: String(metadatosDestino?.revisionConfirmada ?? "")
@@ -2964,9 +2985,6 @@ const seleccionarMesNavegable = (nuevoMes, { usarFechaActual = false } = {}) => 
 
 const cambiarVistaPrincipal = (nuevaVista) => {
   if (nuevaVista === "mas") setSubvistaMas(null);
-  if (nuevaVista === "inicio") {
-    seleccionarMesNavegable(mesActual, { usarFechaActual: true });
-  }
   setVistaActiva(nuevaVista);
 };
 
@@ -2998,21 +3016,15 @@ return (
       </span>
     )}
 
-  {vistaActiva === "inicio" ? (
-    <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800">
-      Período actual · {periodoMesActivoVisible}
-    </div>
-  ) : (
-    <NavegadorMeses
-      key={`${turnoActivo}|${mesActivo}`}
-      mesActivo={mesActivo}
-      meses={mesesNavegables}
-      turnoActivo={turnoActivo}
-      cargando={estadoDescubrimientoMeses === "cargando"}
-      error={errorDescubrimientoMeses}
-      onSeleccionar={seleccionarMesNavegable}
-    />
-  )}
+  <NavegadorMeses
+    key={`${turnoActivo}|${mesActivo}`}
+    mesActivo={mesActivo}
+    meses={mesesNavegables}
+    turnoActivo={turnoActivo}
+    cargando={estadoDescubrimientoMeses === "cargando"}
+    error={errorDescubrimientoMeses}
+    onSeleccionar={seleccionarMesNavegable}
+  />
   {metadatosActivos?.conflicto && (
     <p className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
       Hay cambios más recientes guardados desde otra computadora. El guardado
@@ -3411,7 +3423,7 @@ return (
       <div className={vistaActiva === "mas" && subvistaMas === "gestionMes" ? "" : "hidden"}>
         <BotonVolverMas onVolver={() => setSubvistaMas(null)} />
         <h2 className="mb-4 text-xl font-semibold text-slate-800">🗓️ Gestión del mes</h2>
-        {(mesActivo === mesSiguiente || mesActivo === mesActual || !destinoActivoPreparacion.permitido) && (
+        {(mesActivo === mesSiguiente || mesActivo === mesActual || mesActivo === obtenerMesAnterior(mesActual) || !destinoActivoPreparacion.permitido) && (
         <div className="mb-4 rounded-xl border border-purple-200 bg-white p-4 shadow-sm">
           {mesActivo === mesSiguiente &&
           destinoActivoPreparacion.permitido &&
@@ -3434,7 +3446,7 @@ return (
               Preparar mes siguiente
             </button>
           )}
-          {mesActivo === mesActual &&
+          {[mesActual, obtenerMesAnterior(mesActual)].includes(mesActivo) &&
           recuperacionMesActual.permitida &&
           puedeEditarActivo &&
           !modoSoloLecturaEfectiva &&
@@ -3444,14 +3456,14 @@ return (
           !hayPendientesEnClave(claveActiva) && (
             <div className="mt-3">
               <p className="text-sm text-slate-600">
-                Este turno aún no tiene una preparación ni actividad operativa en el mes actual.
+                Este turno aún no tiene una preparación ni actividad operativa en este mes.
               </p>
               <button
                 type="button"
                 onClick={() => iniciarPreparacionMes(MODO_PREPARACION_MES.RECUPERACION_ACTUAL)}
                 className="mt-3 flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm text-white shadow-sm transition hover:bg-purple-700"
               >
-                Preparar mes actual
+                {mesActivo === mesActual ? "Preparar mes actual" : "Preparar mes faltante"}
               </button>
             </div>
           )}
@@ -3634,10 +3646,15 @@ return (
             </div>
           )}
           {preparacionMes?.estado === "lista" &&
-            (mesActivo === mesSiguiente || mesActivo === mesActual) &&
+            (mesActivo === mesSiguiente || mesActivo === mesActual || mesActivo === obtenerMesAnterior(mesActual)) &&
             validarContextoPreparacion(preparacionMes.contexto, {
               turnoId: turnoActivo,
-              mesOrigen: obtenerMesAnterior(mesActivo),
+              mesOrigen: obtenerMesOrigenPreparacion({
+                turno: turnoActivo,
+                mesDestino: mesActivo,
+                mesesExistentes,
+                estadosPorTurnoMes: estadoPorTurnoMesRef.current
+              }),
               mesDestino: mesActivo,
               modo: preparacionMes.contexto.modo,
               revisionDestino: String(metadatosActivos?.revisionConfirmada ?? "")

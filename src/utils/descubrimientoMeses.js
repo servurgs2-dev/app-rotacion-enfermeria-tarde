@@ -1,4 +1,30 @@
 import { TURNOS } from "../config/turnos.js";
+import { esMesValido } from "./periodosMensuales.js";
+
+const valorMesSeguro = (valor) => {
+  if (valor === null || valor === undefined) return valor ?? null;
+  if (["string", "number", "boolean"].includes(typeof valor)) {
+    return String(valor).slice(0, 32);
+  }
+  return `[${Array.isArray(valor) ? "array" : typeof valor}]`;
+};
+
+export const proyectarMesesEstadoMensualLegacy = (filas = []) => {
+  const meses = new Set();
+  const omitidos = [];
+  (Array.isArray(filas) ? filas : []).forEach((fila) => {
+    const mes = fila?.mes;
+    if (!esMesValido(mes)) {
+      omitidos.push({ motivo: "mes_invalido", valorMesSeguro: valorMesSeguro(mes) });
+      return;
+    }
+    meses.add(mes);
+  });
+  return {
+    meses: [...meses].sort((mesA, mesB) => mesB.localeCompare(mesA)),
+    omitidos
+  };
+};
 
 export const combinarMesesExistentes = ({ mesesPorTurno = [], mesesLegacyTarde = [] } = {}) => {
   const turnosPorMes = new Map(
@@ -19,9 +45,12 @@ export const combinarMesesExistentes = ({ mesesPorTurno = [], mesesLegacyTarde =
 
 export const crearServicioDescubrimientoMeses = ({ listarNuevos, listarLegacyTarde }) =>
   async () => {
-    const [mesesPorTurno, mesesLegacyTarde] = await Promise.all([
+    const [mesesPorTurno, resultadoLegacy] = await Promise.all([
       listarNuevos(),
       listarLegacyTarde()
     ]);
+    const mesesLegacyTarde = Array.isArray(resultadoLegacy)
+      ? resultadoLegacy
+      : resultadoLegacy?.meses || [];
     return combinarMesesExistentes({ mesesPorTurno, mesesLegacyTarde });
   };

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { agruparMesesExistentesPorTurno, crearRepositorioEstadoPorTurnoMes, existeMesParaTurno } from "../src/services/repositorioEstadoPorTurnoMes.js";
-import { combinarMesesExistentes, crearServicioDescubrimientoMeses } from "../src/utils/descubrimientoMeses.js";
+import {
+  combinarMesesExistentes,
+  crearServicioDescubrimientoMeses,
+  proyectarMesesEstadoMensualLegacy
+} from "../src/utils/descubrimientoMeses.js";
 
 let total = 0;
 const probar = async (nombre, prueba) => { await prueba(); total += 1; console.log(`✓ ${nombre}`); };
@@ -51,6 +55,35 @@ await probar("legacy consulta sólo mes y no escribe", async () => {
   assert.match(cuerpo, /from\("estado_por_mes"\)[\s\S]*select\("mes"\)/);
   assert.doesNotMatch(cuerpo, /upsert|insert|update|delete|select\([^)]*(?:data|updated_at)/);
 });
+await probar("legacy omite una fila inválida sin perder meses válidos", () => assert.deepEqual(
+  proyectarMesesEstadoMensualLegacy([
+    { mes: "2026-09" },
+    { mes: "mes roto" },
+    { mes: "2026-08" }
+  ]),
+  {
+    meses: ["2026-09", "2026-08"],
+    omitidos: [{ motivo: "mes_invalido", valorMesSeguro: "mes roto" }]
+  }
+));
+await probar("legacy omite múltiples shapes inválidos de forma segura", () => assert.deepEqual(
+  proyectarMesesEstadoMensualLegacy([
+    { mes: null },
+    { mes: "" },
+    { mes: "2026-09-01" },
+    { mes: { valor: "2026-09" } },
+    { mes: "2026-09" }
+  ]),
+  {
+    meses: ["2026-09"],
+    omitidos: [
+      { motivo: "mes_invalido", valorMesSeguro: null },
+      { motivo: "mes_invalido", valorMesSeguro: "" },
+      { motivo: "mes_invalido", valorMesSeguro: "2026-09-01" },
+      { motivo: "mes_invalido", valorMesSeguro: "[object]" }
+    ]
+  }
+));
 await probar("legacy se combina únicamente como Tarde", () => assert.deepEqual(combinarMesesExistentes({
   mesesPorTurno: [{ mes: "2026-08", turnos: ["noche"] }], mesesLegacyTarde: ["2026-08", "2026-07"]
 }), [
@@ -60,14 +93,46 @@ await probar("servicio consulta ambas fuentes una vez", async () => {
   const llamadas = { nuevas: 0, legacy: 0 };
   const listar = crearServicioDescubrimientoMeses({
     listarNuevos: async () => { llamadas.nuevas += 1; return []; },
-    listarLegacyTarde: async () => { llamadas.legacy += 1; return []; }
+    listarLegacyTarde: async () => { llamadas.legacy += 1; return { meses: [], omitidos: [] }; }
   });
   assert.deepEqual(await listar(), []);
   assert.deepEqual(llamadas, { nuevas: 1, legacy: 1 });
 });
+await probar("principal se preserva cuando legacy omite datos inválidos", async () => {
+  const listar = crearServicioDescubrimientoMeses({
+    listarNuevos: async () => [
+      { mes: "2026-09", turnos: ["noche", "tarde"] },
+      { mes: "2026-10", turnos: ["noche"] }
+    ],
+    listarLegacyTarde: async () => proyectarMesesEstadoMensualLegacy([
+      { mes: "inválido" },
+      { mes: null },
+      { mes: "2026-08" }
+    ])
+  });
+  assert.deepEqual(await listar(), [
+    { mes: "2026-10", turnos: ["noche"] },
+    { mes: "2026-09", turnos: ["noche", "tarde"] },
+    { mes: "2026-08", turnos: ["tarde"] }
+  ]);
+});
 await probar("error de una fuente se propaga", async () => {
-  const listar = crearServicioDescubrimientoMeses({ listarNuevos: async () => { throw new Error("sin acceso"); }, listarLegacyTarde: async () => [] });
-  await assert.rejects(listar(), /sin acceso/);
+  const error = Object.assign(new Error("permission denied for table estado_por_turno_mes"), {
+    code: "42501",
+    details: "Permiso insuficiente.",
+    hint: "Revisar privilegios.",
+    status: 401
+  });
+  const listar = crearServicioDescubrimientoMeses({ listarNuevos: async () => { throw error; }, listarLegacyTarde: async () => ({ meses: [], omitidos: [] }) });
+  await assert.rejects(listar(), (recibido) => recibido === error);
+});
+await probar("un error real de consulta legacy no se oculta", async () => {
+  const error = Object.assign(new Error("schema cache"), { code: "PGRST205" });
+  const listar = crearServicioDescubrimientoMeses({
+    listarNuevos: async () => [{ mes: "2026-09", turnos: ["noche"] }],
+    listarLegacyTarde: async () => { throw error; }
+  });
+  await assert.rejects(listar(), (recibido) => recibido === error);
 });
 await probar("existencia no se fusiona con editabilidad", async () => {
   const fuente = await readFile(new URL("../src/utils/descubrimientoMeses.js", import.meta.url), "utf8");

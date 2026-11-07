@@ -8,7 +8,8 @@ import {
 
 export const crearListaMesesNavegables = ({
   mesesExistentes = [],
-  mesReferencia
+  mesReferencia,
+  turno = ""
 } = {}) => {
   validarMes(mesReferencia, "mesReferencia");
   const anterior = obtenerMesAnterior(mesReferencia);
@@ -17,6 +18,7 @@ export const crearListaMesesNavegables = ({
 
   mesesExistentes.forEach((entrada) => {
     if (!entrada?.mes || entrada.mes > siguiente) return;
+    if (turno && !entrada?.turnos?.includes(turno)) return;
     porMes.set(entrada.mes, {
       mes: entrada.mes,
       turnos: [...new Set(Array.isArray(entrada.turnos) ? entrada.turnos : [])],

@@ -16,10 +16,20 @@ const fechaIsoLocal = (fecha) => {
   return [fecha.getFullYear(), String(fecha.getMonth() + 1).padStart(2, "0"), String(fecha.getDate()).padStart(2, "0")].join("-");
 };
 
+const ultimoDiaMes = (mes) => {
+  const [anio, numeroMes] = String(mes || "").split("-").map(Number);
+  if (!anio || !numeroMes) return "";
+  return `${mes}-${String(new Date(anio, numeroMes, 0).getDate()).padStart(2, "0")}`;
+};
+
 const detectarActividadExterna = ({ novedades, turno, mes, fechaReferencia, padronVigencias }) => {
   const desde = `${mes}-01`;
   const hoy = fechaIsoLocal(fechaReferencia);
-  const hasta = hoy.startsWith(`${mes}-`) ? hoy : desde;
+  const hasta = hoy.startsWith(`${mes}-`)
+    ? hoy
+    : mes < hoy.slice(0, 7)
+      ? ultimoDiaMes(mes)
+      : desde;
   return (Array.isArray(novedades) ? novedades : []).filter((novedad) =>
     novedad?.estado !== ESTADOS_NOVEDAD_PERSONAL.CANCELADA &&
     String(novedad?.fechaDesde || "") <= hasta &&
@@ -54,7 +64,11 @@ export const analizarRecuperacionMesActual = ({
     actividadDetectada: [],
     mesOrigen: obtenerMesAnterior(mes)
   };
-  if (clasificarPeriodoMes({ mes, mesReferencia }) !== CLASIFICACION_PERIODO_MES.ACTUAL) return base;
+  const clasificacionPeriodo = clasificarPeriodoMes({ mes, mesReferencia });
+  if (![
+    CLASIFICACION_PERIODO_MES.ACTUAL,
+    CLASIFICACION_PERIODO_MES.ANTERIOR_EDITABLE
+  ].includes(clasificacionPeriodo)) return base;
   if (!estadoDestino.permitido) {
     return { ...base, codigo: "ESTADO_MENSUAL_CON_CONTENIDO", motivos: estadoDestino.contenido };
   }
@@ -83,6 +97,12 @@ export const analizarRecuperacionMesActual = ({
   return {
     ...base,
     permitida: true,
-    codigo: estadoDestino.clasificacion === "inexistente" ? "MES_ACTUAL_INEXISTENTE" : "MES_ACTUAL_VACIO"
+    codigo: clasificacionPeriodo === CLASIFICACION_PERIODO_MES.ANTERIOR_EDITABLE
+      ? estadoDestino.clasificacion === "inexistente"
+        ? "MES_ANTERIOR_INEXISTENTE"
+        : "MES_ANTERIOR_VACIO"
+      : estadoDestino.clasificacion === "inexistente"
+        ? "MES_ACTUAL_INEXISTENTE"
+        : "MES_ACTUAL_VACIO"
   };
 };

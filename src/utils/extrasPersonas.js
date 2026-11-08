@@ -411,6 +411,35 @@ export const aplicarCoberturasDirectasExtras = ({
   return { asignaciones: resultado, coberturasAplicadas };
 };
 
+export const liberarVacantesDeCoberturasExtrasYaAsignadas = ({
+  asignaciones,
+  extras,
+  personal,
+  esPersonaDisponible = () => true
+} = {}) => {
+  let resultado = (Array.isArray(asignaciones) ? asignaciones : []).map(
+    (asignacion) => ({ ...asignacion })
+  );
+
+  (Array.isArray(extras) ? extras : []).filter(esExtraCobertura).forEach((extra) => {
+    const cubierta = resolverPersonaCubiertaExtra(extra, personal);
+    if (!cubierta || !esPersonaDisponible(cubierta)) return;
+    const extraYaAsignado = resultado.some((item) =>
+      personasCompartenIdentidad(item?.enfermero, extra)
+    );
+    if (!extraYaAsignado) return;
+
+    resultado = resultado.map((item) =>
+      item?.tipo === "sector" &&
+      personasCompartenIdentidad(item?.enfermero, cubierta)
+        ? { ...item, enfermero: null }
+        : item
+    );
+  });
+
+  return resultado;
+};
+
 export const obtenerOpcionesCoberturaExtra = ({
   asignaciones,
   extras,

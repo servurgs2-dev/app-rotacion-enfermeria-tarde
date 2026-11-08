@@ -1,6 +1,7 @@
 import {
   aplicarCoberturasDirectasExtras,
-  esExtraCobertura
+  esExtraCobertura,
+  liberarVacantesDeCoberturasExtrasYaAsignadas
 } from "./extrasPersonas.js";
 import { obtenerClaveIdentidadPersona } from "./identidadPersonas.js";
 import { aplicarPrioridadGeneralPorSectorId } from "./prioridadesSectores.js";
@@ -55,6 +56,12 @@ export const resolverTurnantesYCoberturasOperativas = ({
       return { ...fila, enfermero: usar(fila.enfermero), reemplazo: false };
   });
 
+  sectores = liberarVacantesDeCoberturasExtrasYaAsignadas({
+    asignaciones: sectores,
+    extras,
+    personal,
+    esPersonaDisponible: disponiblesParaCobertura
+  });
   sectores = ajustarSectores(sectores);
   const refuerzos = lista(extras).filter(
     (extra) => extra && !esExtraCobertura(extra) && disponibles(extra)
